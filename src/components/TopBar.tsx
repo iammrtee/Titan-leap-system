@@ -34,7 +34,7 @@ export const TopBar: React.FC<TopBarProps> = ({ title, subtitle, badge }) => {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50" size={18} />
           <input 
             type="text" 
-            placeholder="Search assets..." 
+            placeholder="Search strategy assets..." 
             className="bg-surface-container-low border-none rounded-full py-2 pl-10 pr-4 text-sm w-64 focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-on-surface-variant/40"
           />
         </div>

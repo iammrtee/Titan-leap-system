@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'motion/react';
 export default function App() {
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
   const [darkMode, setDarkMode] = useState(false);
+  const [auditData, setAuditData] = useState<any>(null);
 
   useEffect(() => {
     if (darkMode) {
@@ -24,14 +25,19 @@ export default function App() {
     }
   }, [darkMode]);
 
+  const handleStartStrategy = (data: any) => {
+    setAuditData(data);
+    setActiveView('strategy');
+  };
+
   const renderView = () => {
     switch (activeView) {
       case 'dashboard':
         return <DashboardOverview />;
       case 'audit':
-        return <AuditView />;
+        return <AuditView onStartStrategy={handleStartStrategy} />;
       case 'strategy':
-        return <StrategyHub />;
+        return <StrategyHub auditData={auditData} />;
       case 'content':
         return <ContentManager />;
       case 'ads':
