@@ -16,7 +16,7 @@ export const generateContentScripts = async (handle: string, mode: string) => {
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
         responseMimeType: "application/json",
@@ -49,7 +49,7 @@ export const auditLandingPage = async (businessData: any) => {
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
         responseMimeType: "application/json",
@@ -73,7 +73,7 @@ export const generate30DayPlan = async (auditData: any) => {
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
         responseMimeType: "application/json",
@@ -84,5 +84,138 @@ export const generate30DayPlan = async (auditData: any) => {
   } catch (error) {
     console.error("AI Plan Error:", error);
     return null;
+  }
+};
+
+export const smartFillForm = async (url: string) => {
+  const prompt = `
+    Analyze the website: ${url}.
+    Extract business information for a growth audit.
+    Provide:
+    1. businessName
+    2. industry (Choose from: B2B SaaS, E-commerce, Coaching/Consulting, Agency, Local Business, Other)
+    3. primaryPlatform (Choose from: Instagram, TikTok, YouTube, LinkedIn, Twitter-X, Other)
+    4. mainOffer (Brief description)
+    5. differentiator (What makes them unique)
+    Format the output as a JSON object with these keys.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [{ parts: [{ text: prompt }] }],
+      config: {
+        responseMimeType: "application/json",
+      }
+    });
+
+    return JSON.parse(response.text || "{}");
+  } catch (error) {
+    console.error("Smart Fill Error:", error);
+    return null;
+  }
+};
+
+export const analyzeSocialTrends = async (platform: string) => {
+  const prompt = `
+    Analyze current social media trends for the platform: ${platform}.
+    Focus on the SaaS and digital marketing niche.
+    Provide:
+    1. 3 trending topics/keywords.
+    2. A brief strategy for each.
+    Format the output as a JSON array of objects with 'topic' and 'strategy' fields.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [{ parts: [{ text: prompt }] }],
+      config: {
+        responseMimeType: "application/json",
+      }
+    });
+
+    return JSON.parse(response.text || "[]");
+  } catch (error) {
+    console.error("Trend Analysis Error:", error);
+    return [];
+  }
+};
+
+export const refinePlan = async (currentPlan: any, feedback: string) => {
+  const prompt = `
+    Refine the following 30-day growth plan: ${JSON.stringify(currentPlan)}.
+    User feedback: "${feedback}".
+    Adjust the plan to better align with the feedback while maintaining high-impact growth strategies.
+    Format the output as a JSON object with 'weeks' (array of 4 objects, each with 'weekNumber' and 'days' (array of 7 strings)).
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [{ parts: [{ text: prompt }] }],
+      config: {
+        responseMimeType: "application/json",
+      }
+    });
+
+    return JSON.parse(response.text || "{}");
+  } catch (error) {
+    return null;
+  }
+};
+
+export const getPerformanceInsight = async (metrics: any) => {
+  const prompt = `
+    Analyze the following business performance metrics: ${JSON.stringify(metrics)}.
+    Provide a concise, high-impact growth insight (max 2 sentences).
+    Focus on identifying the biggest opportunity or a critical bottleneck.
+    Return the response as a plain string.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [{ parts: [{ text: prompt }] }],
+    });
+
+    return response.text || "No insights available at this time.";
+  } catch (error) {
+    console.error("Insight Error:", error);
+    return "Error generating insights.";
+  }
+};
+
+export const generateContentIdeas = async (industry: string, audience: string, trends: any[]) => {
+  const prompt = `
+    Act as a world-class content strategist.
+    Based on the following data:
+    - Industry: ${industry}
+    - Target Audience: ${audience}
+    - Current Trends: ${JSON.stringify(trends)}
+    
+    Generate 4 high-impact content ideas that would resonate with this audience and leverage current trends.
+    For each idea, provide:
+    1. A catchy title.
+    2. The best platform for it (Instagram, TikTok, Twitter, LinkedIn, or YouTube).
+    3. A brief description of the content.
+    4. Why it works (the "hook" or "angle").
+    
+    Format the output as a JSON array of objects with 'title', 'platform', 'description', and 'angle' fields.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [{ parts: [{ text: prompt }] }],
+      config: {
+        responseMimeType: "application/json",
+      }
+    });
+
+    return JSON.parse(response.text || "[]");
+  } catch (error) {
+    console.error("Content Ideas Error:", error);
+    return [];
   }
 };

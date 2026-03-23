@@ -90,7 +90,14 @@ export default function App() {
   const config = getViewConfig();
 
   return (
-    <div className="min-h-screen bg-surface transition-colors duration-500">
+    <div className="min-h-screen bg-surface transition-colors duration-700 relative overflow-hidden">
+      {/* Atmospheric Background Effects for Dark Mode */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 blur-[120px] rounded-full dark:opacity-20 opacity-0 transition-opacity duration-1000" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-secondary/5 blur-[120px] rounded-full dark:opacity-20 opacity-0 transition-opacity duration-1000" />
+        <div className="absolute top-[20%] right-[10%] w-[30%] h-[30%] bg-primary-container/5 blur-[100px] rounded-full dark:opacity-10 opacity-0 transition-opacity duration-1000" />
+      </div>
+
       <Sidebar 
         activeView={activeView} 
         onViewChange={setActiveView} 
@@ -98,21 +105,21 @@ export default function App() {
         onToggleDarkMode={() => setDarkMode(!darkMode)} 
       />
       
-      <main className="ml-64 min-h-screen flex flex-col">
+      <main className="ml-64 min-h-screen flex flex-col relative z-10">
         <TopBar 
           title={config.title} 
           subtitle={config.subtitle} 
           badge={config.badge} 
         />
         
-        <div className="p-8 max-w-7xl mx-auto w-full">
+        <div className="p-8 max-w-7xl mx-auto w-full flex-1">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeView}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3, ease: "easeInOut" }}
+              initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
+              transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
             >
               {renderView()}
             </motion.div>
@@ -122,12 +129,12 @@ export default function App() {
 
       {/* Contextual FAB */}
       <motion.button 
-        whileHover={{ scale: 1.1 }}
+        whileHover={{ scale: 1.1, rotate: 5 }}
         whileTap={{ scale: 0.9 }}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-primary-container text-on-primary rounded-full shadow-lg shadow-primary/20 flex items-center justify-center z-50 group"
+        className="fixed bottom-8 right-8 w-14 h-14 bg-primary text-on-primary rounded-2xl shadow-2xl shadow-primary/20 flex items-center justify-center z-50 group border border-white/10"
       >
         <div className="relative">
-          <span className="material-symbols-outlined text-[28px] group-hover:rotate-90 transition-transform duration-300">add</span>
+          <span className="material-symbols-outlined text-[28px] group-hover:rotate-90 transition-transform duration-500">add</span>
         </div>
       </motion.button>
     </div>

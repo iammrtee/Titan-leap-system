@@ -25,10 +25,12 @@ import {
   Rocket,
   Megaphone,
   FileText,
-  MousePointer2
+  MousePointer2,
+  HelpCircle
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { auditLandingPage } from '@/src/services/ai';
+import { auditLandingPage, smartFillForm } from '@/src/services/ai';
+import { Sparkles, Wand2, Loader2 } from 'lucide-react';
 
 interface FormData {
   // Section 1
@@ -114,7 +116,29 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM_DATA);
   const [expandedSections, setExpandedSections] = useState<number[]>([1]);
   const [isAuditing, setIsAuditing] = useState(false);
+  const [isSmartFilling, setIsSmartFilling] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
+
+  const handleSmartFill = async () => {
+    if (!formData.websiteUrl) {
+      alert("Please enter a website URL first.");
+      return;
+    }
+    setIsSmartFilling(true);
+    try {
+      const data = await smartFillForm(formData.websiteUrl);
+      if (data) {
+        setFormData(prev => ({
+          ...prev,
+          ...data
+        }));
+      }
+    } catch (error) {
+      console.error("Smart fill failed:", error);
+    } finally {
+      setIsSmartFilling(false);
+    }
+  };
 
   const toggleSection = (id: number) => {
     setExpandedSections(prev => 
@@ -180,35 +204,57 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
   };
 
   return (
-    <div className="max-w-[1600px] mx-auto p-8 space-y-12">
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
-        <div className="space-y-2">
-          <h1 className="text-6xl font-display font-black tracking-tight text-on-surface">Audit</h1>
-          <p className="text-lg text-on-surface-variant font-medium max-w-2xl">
+    <div className="max-w-[1600px] mx-auto p-12 space-y-16">
+      {/* Top Header - Consistent with rest of system */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 relative">
+        <div className="space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full border border-primary/10">
+            <Sparkles size={14} className="text-primary" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-primary">Growth Audit</span>
+          </div>
+          <h1 className="text-[38px] font-black tracking-tight text-on-surface">Revenue Leakage Audit</h1>
+          <p className="text-[17px] text-on-surface-variant font-sans font-normal max-w-2xl leading-relaxed">
             Tell us about your business — we'll show you exactly where you're leaving money on the table.
           </p>
         </div>
         
-        <div className="w-full md:w-80 space-y-3">
-          <div className="flex justify-between items-end">
-            <span className="text-[10px] font-black uppercase tracking-widest text-primary">Form Progress</span>
-            <span className="text-2xl font-display font-black text-primary">{progress}%</span>
+        <div className="flex items-center gap-4">
+          <div className="relative group">
+            <button 
+              onClick={handleSmartFill}
+              disabled={isSmartFilling || !formData.websiteUrl}
+              className="bg-primary text-on-primary px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 flex items-center gap-3 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100 group"
+            >
+              {isSmartFilling ? <Loader2 size={18} className="animate-spin" /> : <Wand2 size={18} className="group-hover:rotate-12 transition-transform" />}
+              {isSmartFilling ? 'Analyzing Site...' : 'Smart Fill with AI'}
+            </button>
+            {!formData.websiteUrl && (
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 bg-on-surface text-surface text-[10px] font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                Enter a website URL first
+              </div>
+            )}
           </div>
-          <div className="h-2 bg-surface-container-highest rounded-full overflow-hidden">
-            <motion.div 
-              className="h-full bg-primary"
-              initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
-              transition={{ duration: 0.5 }}
-            />
+          
+          {/* Floating Progress Card - Compact */}
+          <div className="bg-surface-container-low p-6 rounded-[24px] border border-outline-variant/10 shadow-xl flex flex-col gap-3 min-w-[280px] relative overflow-hidden group">
+            <div className="flex justify-between items-center relative z-10">
+              <span className="text-[10px] font-normal uppercase tracking-[0.2em] text-primary">Audit Progress: {progress}%</span>
+            </div>
+            <div className="h-2 bg-surface-container-highest rounded-full overflow-hidden relative z-10">
+              <motion.div 
+                className="h-full bg-primary shadow-[0_0_15px_rgba(var(--primary-rgb),0.5)]"
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.8, ease: "circOut" }}
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
         {/* Left Column - Intake Form */}
-        <div className="lg:col-span-5 space-y-6">
+        <div className="lg:col-span-5 space-y-10">
           <div className="space-y-4">
             {/* Section 1 */}
             <CollapsibleSection 
@@ -218,40 +264,40 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
               isComplete={isSectionComplete(1)}
               onToggle={() => toggleSection(1)}
             >
-              <div className="space-y-6 p-6">
-                <InputGroup label="Business Name">
+              <div className="space-y-8 p-8">
+                <InputGroup label="Business Name" tooltip="Your brand identity. We use this to personalize your report and analyze brand consistency across platforms.">
                   <input 
                     type="text" 
                     value={formData.businessName}
                     onChange={e => setFormData({...formData, businessName: e.target.value})}
-                    placeholder="e.g. Lumina Digital"
+                    placeholder="Lumina Digital"
                     className="audit-input"
                   />
                 </InputGroup>
-                <InputGroup label="Industry / Niche">
+                <InputGroup label="Industry" tooltip="Critical for benchmarking. Conversion rates and marketing costs vary wildly between niches; we need this for accurate gap analysis.">
                   <select 
                     value={formData.industry}
                     onChange={e => setFormData({...formData, industry: e.target.value})}
-                    className="audit-input"
+                    className="audit-input appearance-none"
                   >
                     <option value="">Select Industry</option>
                     {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
                   </select>
                 </InputGroup>
-                <InputGroup label="Business Website URL">
+                <InputGroup label="Business Website URL" tooltip="The foundation of your digital presence. Our AI scans your site to identify technical leaks and messaging inconsistencies.">
                   <input 
                     type="text" 
                     value={formData.websiteUrl}
                     onChange={e => setFormData({...formData, websiteUrl: e.target.value})}
-                    placeholder="https://yourbusiness.com"
+                    placeholder="https://lumina.digital"
                     className="audit-input"
                   />
                 </InputGroup>
-                <InputGroup label="How long have you been in business?">
+                <InputGroup label="Duration" tooltip="Business maturity dictates strategy. A startup needs different growth levers than an established 5-year brand.">
                   <select 
                     value={formData.businessDuration}
                     onChange={e => setFormData({...formData, businessDuration: e.target.value})}
-                    className="audit-input"
+                    className="audit-input appearance-none"
                   >
                     <option value="">Select Duration</option>
                     {DURATIONS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -269,7 +315,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
               onToggle={() => toggleSection(2)}
             >
               <div className="space-y-6 p-6">
-                <InputGroup label="Primary platform">
+                <InputGroup label="Primary platform" tooltip="Where your audience lives. We'll focus our engagement and content strategy recommendations here.">
                   <select 
                     value={formData.primaryPlatform}
                     onChange={e => setFormData({...formData, primaryPlatform: e.target.value})}
@@ -279,7 +325,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </InputGroup>
-                <InputGroup label="Social media handle(s)">
+                <InputGroup label="Social media handle(s)" tooltip="Your direct line to customers. We analyze your profile to see if your 'front door' is actually inviting people in.">
                   <div className="space-y-3">
                     {formData.socialHandles.map((handle, idx) => (
                       <div key={idx} className="flex gap-2">
@@ -312,7 +358,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     </button>
                   </div>
                 </InputGroup>
-                <InputGroup label="Average monthly reach or impressions">
+                <InputGroup label="Average monthly reach or impressions" tooltip="Your top-of-funnel volume. This tells us if your problem is 'not enough people' or 'not enough conversions'.">
                   <input 
                     type="number" 
                     value={formData.monthlyReach}
@@ -321,7 +367,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     className="audit-input"
                   />
                 </InputGroup>
-                <InputGroup label="Are you currently posting consistently?">
+                <InputGroup label="Are you currently posting consistently?" tooltip="The algorithm's favorite metric. Inconsistency is often the #1 reason for stagnant growth despite good content.">
                   <div className="flex bg-surface-container-highest rounded-xl p-1">
                     {['Yes', 'No', 'Sometimes'].map(opt => (
                       <button
@@ -349,7 +395,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
               onToggle={() => toggleSection(3)}
             >
               <div className="space-y-6 p-6">
-                <InputGroup label="What is your main product or service?">
+                <InputGroup label="What is your main product or service?" tooltip="The core of your business. We audit your messaging to ensure this value is crystal clear to cold traffic.">
                   <textarea 
                     value={formData.mainOffer}
                     onChange={e => setFormData({...formData, mainOffer: e.target.value})}
@@ -357,7 +403,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     className="audit-input min-h-[100px] resize-none"
                   />
                 </InputGroup>
-                <InputGroup label="What is the price point?">
+                <InputGroup label="What is the price point?" tooltip="Determines your sales cycle. A $50 product needs a different funnel than a $5,000 high-ticket service.">
                   <div className="flex gap-2">
                     <select 
                       value={formData.currency}
@@ -377,7 +423,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     />
                   </div>
                 </InputGroup>
-                <InputGroup label="Do you have an upsell or down-sell?">
+                <InputGroup label="Do you have an upsell or down-sell?" tooltip="The secret to profitability. Without these, you're likely over-paying for every customer you acquire.">
                   <div className="space-y-4">
                     <Toggle 
                       value={formData.hasUpsell} 
@@ -394,7 +440,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     )}
                   </div>
                 </InputGroup>
-                <InputGroup label="What makes your offer different from competitors?">
+                <InputGroup label="What makes your offer different from competitors?" tooltip="Your competitive edge. If this isn't obvious, you're competing on price alone—a race to the bottom.">
                   <textarea 
                     value={formData.differentiator}
                     onChange={e => setFormData({...formData, differentiator: e.target.value})}
@@ -402,7 +448,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     className="audit-input min-h-[100px] resize-none"
                   />
                 </InputGroup>
-                <InputGroup label="Current conversion rate if known (%)">
+                <InputGroup label="Current conversion rate if known (%)" tooltip="The most important number. Even a 1% increase can double your revenue without spending more on ads.">
                   <input 
                     type="number" 
                     value={formData.conversionRate}
@@ -424,7 +470,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
             >
               <div className="space-y-6 p-6">
                 <div className="grid grid-cols-2 gap-4">
-                  <InputGroup label="Current monthly revenue">
+                  <InputGroup label="Current monthly revenue" tooltip="Our starting point. We use this to calculate the exact dollar amount you're losing to inefficient systems.">
                     <input 
                       type="number" 
                       value={formData.currentRevenue}
@@ -433,7 +479,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                       className="audit-input"
                     />
                   </InputGroup>
-                  <InputGroup label="Target monthly revenue">
+                  <InputGroup label="Target monthly revenue" tooltip="Your North Star. We reverse-engineer the exact traffic and conversion numbers needed to hit this goal.">
                     <input 
                       type="number" 
                       value={formData.targetRevenue}
@@ -443,7 +489,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     />
                   </InputGroup>
                 </div>
-                <InputGroup label="Timeline to hit target">
+                <InputGroup label="Timeline to hit target" tooltip="Sets the pace. A 30-day goal requires aggressive scaling; a 1-year goal allows for deeper brand building.">
                   <select 
                     value={formData.timeline}
                     onChange={e => setFormData({...formData, timeline: e.target.value})}
@@ -453,7 +499,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     {TIMELINES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </InputGroup>
-                <InputGroup label="Biggest challenge right now">
+                <InputGroup label="Biggest challenge right now" tooltip="Your primary bottleneck. We prioritize solutions for this specific pain point in your final report.">
                   <div className="flex flex-wrap gap-2">
                     {CHALLENGES.map(c => (
                       <Chip 
@@ -482,7 +528,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
               onToggle={() => toggleSection(5)}
             >
               <div className="space-y-6 p-6">
-                <InputGroup label="Do you have a landing page?">
+                <InputGroup label="Do you have a landing page?" tooltip="Your 24/7 salesperson. If this page isn't optimized, you're wasting every dollar spent on traffic.">
                   <div className="space-y-4">
                     <Toggle 
                       value={formData.hasLandingPage} 
@@ -499,7 +545,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     )}
                   </div>
                 </InputGroup>
-                <InputGroup label="Do you have a thank you page?">
+                <InputGroup label="Do you have a thank you page?" tooltip="Prime real estate. This is the moment of highest intent—perfect for immediate upsells or community invites.">
                   <div className="space-y-4">
                     <Toggle 
                       value={formData.hasThankYouPage} 
@@ -516,7 +562,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     )}
                   </div>
                 </InputGroup>
-                <InputGroup label="Do you have an email sequence?">
+                <InputGroup label="Do you have an email sequence?" tooltip="Your automated revenue engine. 70% of sales happen in the follow-up; without this, you're leaving 70% on the table.">
                   <div className="flex bg-surface-container-highest rounded-xl p-1">
                     {['Yes', 'No', 'In progress'].map(opt => (
                       <button
@@ -532,7 +578,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     ))}
                   </div>
                 </InputGroup>
-                <InputGroup label="What tools are you currently using?">
+                <InputGroup label="What tools are you currently using?" tooltip="Your tech stack. We identify if your tools are helping you scale or holding you back with 'tech debt'.">
                   <div className="flex flex-wrap gap-2">
                     {TOOLS.map(t => (
                       <Chip 
@@ -561,7 +607,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
               onToggle={() => toggleSection(6)}
             >
               <div className="space-y-6 p-6">
-                <InputGroup label="Are you currently running paid ads?">
+                <InputGroup label="Are you currently running paid ads?" tooltip="The fuel for your fire. If your funnel is leaking, ads just accelerate the loss. We'll check your 'bucket' first.">
                   <div className="space-y-4">
                     <Toggle 
                       value={formData.runningAds} 
@@ -587,13 +633,13 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     )}
                   </div>
                 </InputGroup>
-                <InputGroup label="Do you have existing content scripts or copy?">
+                <InputGroup label="Do you have existing content scripts or copy?" tooltip="Your brand's voice. We audit your scripts to ensure they follow high-conversion psychological frameworks.">
                   <Toggle 
                     value={formData.hasScripts} 
                     onChange={v => setFormData({...formData, hasScripts: v})} 
                   />
                 </InputGroup>
-                <InputGroup label="What type of content do you post?">
+                <InputGroup label="What type of content do you post?" tooltip="Your engagement strategy. Different formats serve different stages of the customer journey (Awareness vs. Intent).">
                   <div className="flex flex-wrap gap-2">
                     {CONTENT_TYPES.map(t => (
                       <Chip 
@@ -614,11 +660,11 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
             </CollapsibleSection>
           </div>
 
-          <div className="pt-8 space-y-4">
+          <div className="pt-10 space-y-6">
             <button 
               onClick={runAudit}
               disabled={isAuditing}
-              className="w-full py-6 bg-[#00d1ff] text-on-surface font-black text-xl uppercase tracking-[0.2em] rounded-2xl shadow-[0_0_30px_rgba(0,209,255,0.3)] hover:shadow-[0_0_50px_rgba(0,209,255,0.5)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+              className="w-full py-8 bg-secondary text-on-secondary font-black text-xl uppercase tracking-[0.3em] rounded-3xl shadow-[0_20px_40px_rgba(250,204,21,0.2)] hover:shadow-[0_30px_60px_rgba(250,204,21,0.3)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-4 disabled:opacity-50"
             >
               {isAuditing ? (
                 <>
@@ -626,26 +672,26 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     animate={{ rotate: 360 }}
                     transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                   >
-                    <Zap size={24} />
+                    <Zap size={28} />
                   </motion.div>
-                  Analyzing...
+                  Engineering Report...
                 </>
               ) : (
                 <>
-                  <Zap size={24} fill="currentColor" />
+                  <Zap size={28} fill="currentColor" />
                   Run Audit
                 </>
               )}
             </button>
-            <p className="text-center text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">
-              Our AI will analyze your inputs and generate your revenue opportunity report
+            <p className="text-center text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant/40 max-w-xs mx-auto leading-relaxed">
+              By running this audit, you agree to our data processing terms. TitanLeap uses advanced algorithmic modeling to estimate revenue gaps based on provided metrics.
             </p>
           </div>
         </div>
 
         {/* Right Column - Audit Output */}
         <div className="lg:col-span-7">
-          <div className="bg-surface-container-low rounded-[40px] border border-outline-variant/10 shadow-2xl min-h-[800px] flex flex-col sticky top-8 overflow-hidden">
+          <div className="bg-surface-container-lowest rounded-[48px] border border-outline-variant/10 shadow-2xl min-h-[900px] flex flex-col sticky top-12 overflow-hidden">
             <AnimatePresence mode="wait">
               {!auditReport ? (
                 <motion.div 
@@ -653,114 +699,124 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="flex-1 flex flex-col items-center justify-center p-12 relative"
+                  className="flex-1 flex flex-col items-center justify-center p-20 relative"
                 >
-                  <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#00d1ff 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
-                  <div className="w-24 h-24 rounded-3xl bg-surface-container-highest flex items-center justify-center text-[#00d1ff]/20 mb-6">
-                    <BarChart3 size={48} />
+                  <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#00d1ff 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+                  <div className="w-32 h-32 rounded-[40px] bg-surface-container-low flex items-center justify-center text-[#00d1ff]/10 mb-8">
+                    <BarChart3 size={64} />
                   </div>
-                  <p className="text-xl font-display font-black text-[#00d1ff]/40 uppercase tracking-widest text-center">
-                    Your audit report will appear here
-                  </p>
+                  <div className="space-y-2 text-center">
+                    <p className="text-2xl font-display font-black text-on-surface tracking-tight">
+                      Ready for Analysis
+                    </p>
+                    <p className="text-sm font-medium text-on-surface-variant/40 max-w-xs mx-auto">
+                      Complete the intake form to generate your high-performance revenue roadmap.
+                    </p>
+                  </div>
                 </motion.div>
               ) : (
                 <motion.div 
                   key="report"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex-1 flex flex-col p-10 space-y-10"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex-1 flex flex-col p-12 space-y-12"
                 >
                   {/* Report Header */}
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-success">
-                        <CheckCircle2 size={12} />
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#00ff85]">
+                        <div className="w-2 h-2 rounded-full bg-[#00ff85] animate-pulse" />
                         Audit Generated
                       </div>
-                      <h2 className="text-3xl font-display font-black text-on-surface">
+                      <h2 className="text-4xl font-display font-black text-on-surface tracking-tight">
                         Audit Report — {auditReport.businessName}
                       </h2>
-                      <p className="text-xs font-medium text-on-surface-variant/60">
+                      <p className="text-xs font-bold text-on-surface-variant/40 uppercase tracking-widest">
                         Last updated: {auditReport.timestamp}
                       </p>
                     </div>
-                    <div className="flex gap-2">
-                      <button className="p-3 bg-surface-container-highest rounded-xl text-on-surface-variant hover:text-on-surface transition-colors">
+                    <div className="flex gap-3">
+                      <button className="w-12 h-12 bg-surface-container-low border border-outline-variant/10 rounded-2xl flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-all shadow-sm">
                         <Share2 size={20} />
                       </button>
-                      <button className="p-3 bg-surface-container-highest rounded-xl text-on-surface-variant hover:text-on-surface transition-colors">
+                      <button className="w-12 h-12 bg-surface-container-low border border-outline-variant/10 rounded-2xl flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-all shadow-sm">
                         <Download size={20} />
                       </button>
                     </div>
                   </div>
 
                   {/* Summary Card */}
-                  <div className="bg-primary rounded-[32px] p-10 text-white relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 blur-[100px] rounded-full -translate-y-1/2 translate-x-1/2" />
-                    <div className="relative z-10 space-y-6">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-white/60">Estimated Monthly Revenue Gap</p>
-                      <div className="flex items-baseline gap-4">
-                        <h3 className="text-7xl font-display font-black tracking-tighter text-[#00ff85]">
+                  <div className="bg-[#3b00b9] rounded-[40px] p-12 text-white relative overflow-hidden shadow-2xl shadow-primary/20">
+                    <div className="absolute top-0 right-0 w-96 h-96 bg-on-surface/5 blur-[120px] rounded-full -translate-y-1/2 translate-x-1/2" />
+                    <div className="relative z-10 space-y-8">
+                      <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">Estimated Monthly Revenue Gap</p>
+                      <div className="flex flex-col md:flex-row md:items-center gap-6">
+                        <h3 className="text-8xl font-display font-black tracking-tighter text-[#00ff85]">
                           ${auditReport.revenueGap.toLocaleString()}
-                          <span className="text-2xl text-white/40 ml-2">/mo</span>
+                          <span className="text-3xl text-white/30 ml-3 font-medium">/mo</span>
                         </h3>
-                        <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 flex items-center gap-2">
-                          <TrendingUp size={16} className="text-[#00ff85]" />
-                          <span className="text-xs font-black">24% Potential Increase</span>
+                        <div className="bg-on-surface/10 backdrop-blur-xl px-6 py-3 rounded-[24px] border border-white/10 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-[#00ff85]/20 flex items-center justify-center">
+                            <TrendingUp size={18} className="text-[#00ff85]" />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-black text-[#00ff85]">24%</span>
+                            <span className="text-[9px] font-bold uppercase tracking-widest text-white/60">Potential Increase</span>
+                          </div>
                         </div>
                       </div>
-                      <p className="text-sm font-medium text-white/80 max-w-md leading-relaxed">
+                      <p className="text-base font-medium text-white/70 max-w-xl leading-relaxed">
                         Our analysis shows high leakage in your middle-of-funnel conversion. Fixing these 3 critical items will bridge this gap within 45 days.
                       </p>
                     </div>
                   </div>
 
                   {/* Issue Cards */}
-                  <div className="space-y-6">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Critical Leakage Points</h4>
-                    <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-8">
+                    <h4 className="text-[11px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40">Critical Leakage Points</h4>
+                    <div className="grid grid-cols-1 gap-6">
                       {auditReport.issues.map((issue: any) => {
                         const Icon = getIconForArea(issue.area);
                         return (
-                          <div key={issue.id} className="bg-surface-container-lowest rounded-3xl p-6 border border-outline-variant/10 shadow-sm group hover:border-primary/20 transition-all">
-                            <div className="flex items-start gap-6">
+                          <div key={issue.id} className="bg-surface-container-lowest rounded-[32px] p-8 border border-outline-variant/10 shadow-sm group hover:border-primary/20 transition-all">
+                            <div className="flex items-start gap-8">
                               <div className={cn(
-                                "w-14 h-14 rounded-2xl flex items-center justify-center",
-                                issue.status === 'critical' ? "bg-error/10 text-error" : 
-                                issue.status === 'improve' ? "bg-warning/10 text-warning" : "bg-success/10 text-success"
+                                "w-16 h-16 rounded-[24px] flex items-center justify-center shadow-sm",
+                                issue.status === 'critical' ? "bg-error/5 text-error" : 
+                                issue.status === 'improve' ? "bg-warning/5 text-warning" : "bg-success/5 text-success"
                               )}>
-                                <Icon size={28} />
+                                <Icon size={32} />
                               </div>
-                              <div className="flex-1 space-y-4">
+                              <div className="flex-1 space-y-6">
                                 <div className="flex items-center justify-between">
-                                  <div className="space-y-0.5">
-                                    <h5 className="text-lg font-black text-on-surface">{issue.area}</h5>
-                                    <p className="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest">Technical Optimization</p>
+                                  <div className="space-y-1">
+                                    <h5 className="text-xl font-black text-on-surface tracking-tight">{issue.area}</h5>
+                                    <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-[0.2em]">Technical Optimization</p>
                                   </div>
                                   <span className={cn(
-                                    "px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest",
+                                    "px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest",
                                     issue.status === 'critical' ? "bg-error/10 text-error border border-error/20" : 
                                     issue.status === 'improve' ? "bg-warning/10 text-warning border border-warning/20" : "bg-success/10 text-success border border-success/20"
                                   )}>
                                     {issue.priority}
                                   </span>
                                 </div>
-                                <p className="text-sm font-medium text-on-surface-variant leading-relaxed">
+                                <p className="text-sm font-medium text-on-surface-variant/70 leading-relaxed">
                                   {issue.problem}
                                 </p>
-                                <div className="grid grid-cols-2 gap-4 pt-2">
-                                  <div className="bg-surface-container-low rounded-2xl p-4 border border-outline-variant/5">
-                                    <p className="text-[8px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-1">Rev Impact</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                                  <div className="bg-surface-container-low/50 rounded-2xl p-5 border border-outline-variant/5">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-2">Rev Impact</p>
                                     <p className={cn(
-                                      "text-lg font-black",
+                                      "text-xl font-black",
                                       issue.status === 'critical' ? "text-error" : "text-warning"
                                     )}>
-                                      +${issue.impact.toLocaleString()}/mo
+                                      -${issue.impact.toLocaleString()}/mo
                                     </p>
                                   </div>
-                                  <div className="bg-surface-container-low rounded-2xl p-4 border border-outline-variant/5">
-                                    <p className="text-[8px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-1">Action</p>
-                                    <p className="text-xs font-black text-on-surface">
+                                  <div className="bg-surface-container-low/50 rounded-2xl p-5 border border-outline-variant/5">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-2">Action</p>
+                                    <p className="text-sm font-black text-on-surface">
                                       {issue.action}
                                     </p>
                                   </div>
@@ -774,19 +830,19 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                   </div>
 
                   {/* Footer Actions */}
-                  <div className="mt-auto pt-10 border-t border-outline-variant/10 flex items-center gap-4">
-                    <button className="flex-1 py-4 bg-surface-container-highest rounded-2xl font-black text-[10px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-all">
+                  <div className="mt-auto pt-12 border-t border-outline-variant/10 flex items-center gap-6">
+                    <button className="flex-1 py-5 bg-surface-container-low border border-outline-variant/10 rounded-2xl font-black text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-all shadow-sm">
                       Export Report
                     </button>
-                    <button className="flex-1 py-4 bg-surface-container-highest rounded-2xl font-black text-[10px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-all">
+                    <button className="flex-1 py-5 bg-surface-container-low border border-outline-variant/10 rounded-2xl font-black text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-all shadow-sm">
                       Share with Client
                     </button>
                     <button 
                       onClick={() => onStartStrategy?.(auditReport)}
-                      className="flex-[1.5] py-4 bg-[#00ff85] text-on-surface font-black text-[10px] uppercase tracking-widest rounded-2xl shadow-[0_0_20px_rgba(0,255,133,0.3)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                      className="flex-[1.5] py-5 bg-[#00ff85] text-on-surface font-black text-[11px] uppercase tracking-[0.2em] rounded-2xl shadow-[0_20px_40px_rgba(0,255,133,0.2)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
                     >
                       Start Strategy
-                      <ArrowRight size={16} />
+                      <ArrowRight size={18} />
                     </button>
                   </div>
                 </motion.div>
@@ -801,32 +857,43 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
 
 // Helper Components
 const CollapsibleSection = ({ id, title, isOpen, isComplete, onToggle, children }: any) => (
-  <div className="bg-surface-container-low rounded-[32px] border border-outline-variant/10 shadow-sm overflow-hidden">
+  <div className={cn(
+    "rounded-[32px] border transition-all duration-500 overflow-hidden",
+    isOpen 
+      ? "bg-surface-container-low border-primary/20 shadow-xl shadow-primary/5" 
+      : "bg-surface-container-lowest border-outline-variant/10 shadow-sm"
+  )}>
     <button 
       onClick={onToggle}
-      className="w-full flex items-center justify-between p-6 hover:bg-surface-container-highest/50 transition-colors"
+      className="w-full flex items-center justify-between p-8 hover:bg-primary/5 transition-colors group"
     >
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-6">
         <div className={cn(
-          "w-2 h-2 rounded-full",
-          isComplete ? "bg-[#00ff85] shadow-[0_0_10px_rgba(0,255,133,0.5)]" : "bg-surface-container-highest"
+          "w-2.5 h-2.5 rounded-full transition-all duration-500",
+          isComplete ? "bg-[#00ff85] shadow-[0_0_10px_rgba(0,255,133,0.5)]" : 
+          isOpen ? "bg-primary shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]" : "bg-surface-container-highest"
         )} />
         <h3 className={cn(
-          "text-xs font-black uppercase tracking-[0.2em]",
-          isComplete ? "text-[#00ff85]" : "text-on-surface-variant"
+          "text-xs font-black uppercase tracking-[0.25em] transition-colors",
+          isOpen ? "text-primary" : "text-on-surface-variant/60 group-hover:text-on-surface"
         )}>
-          Section {id} — {title}
+          {title}
         </h3>
       </div>
-      {isOpen ? <ChevronUp size={20} className="text-on-surface-variant" /> : <ChevronDown size={20} className="text-on-surface-variant" />}
+      <div className={cn(
+        "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500",
+        isOpen ? "bg-primary/10 text-primary rotate-180" : "bg-surface-container-highest/50 text-on-surface-variant"
+      )}>
+        <ChevronDown size={20} />
+      </div>
     </button>
-    <AnimatePresence>
+    <AnimatePresence initial={false}>
       {isOpen && (
         <motion.div
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: 'auto', opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
         >
           <div className="border-t border-outline-variant/10">
             {children}
@@ -837,11 +904,22 @@ const CollapsibleSection = ({ id, title, isOpen, isComplete, onToggle, children 
   </div>
 );
 
-const InputGroup = ({ label, children }: any) => (
+const InputGroup = ({ label, children, tooltip }: any) => (
   <div className="space-y-2">
-    <label className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 ml-1">
-      {label}
-    </label>
+    <div className="flex items-center gap-2 ml-1">
+      <label className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">
+        {label}
+      </label>
+      {tooltip && (
+        <div className="group relative">
+          <HelpCircle size={12} className="text-on-surface-variant/40 hover:text-primary transition-colors cursor-help" />
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-4 bg-on-surface text-surface text-[11px] font-bold rounded-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 shadow-2xl z-50 leading-relaxed border border-white/10">
+            {tooltip}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-on-surface" />
+          </div>
+        </div>
+      )}
+    </div>
     {children}
   </div>
 );
@@ -855,7 +933,7 @@ const Toggle = ({ value, onChange }: { value: boolean, onChange: (v: boolean) =>
     )}
   >
     <motion.div 
-      className="w-4 h-4 bg-white rounded-full shadow-sm"
+      className="w-4 h-4 bg-on-primary rounded-full shadow-sm"
       animate={{ x: value ? 24 : 0 }}
       transition={{ type: "spring", stiffness: 500, damping: 30 }}
     />

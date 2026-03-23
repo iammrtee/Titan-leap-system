@@ -1,7 +1,8 @@
-import React from 'react';
-import { motion } from 'motion/react';
-import { Users, TrendingUp, DollarSign, Target, ArrowUpRight, CheckCircle2, Calendar, LayoutGrid, FileText, BarChart3, Clock, Zap, Sparkles, Search, Filter, ChevronRight, Share2, MoreHorizontal, Instagram, Linkedin, Twitter, Youtube, Play, RefreshCw, Mail, Cpu, LayoutDashboard } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Users, TrendingUp, DollarSign, Target, ArrowUpRight, CheckCircle2, Calendar, LayoutGrid, FileText, BarChart3, Clock, Zap, Sparkles, Search, Filter, ChevronRight, Share2, MoreHorizontal, Instagram, Linkedin, Twitter, Youtube, Play, RefreshCw, Mail, Cpu, LayoutDashboard, Loader2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { getPerformanceInsight } from '@/src/services/ai';
 
 const ClientMetric = ({ label, value, trend, icon: Icon, color }: any) => (
   <div className="bg-surface-container-low p-8 rounded-3xl border border-outline-variant/10 shadow-sm hover:shadow-md transition-all group">
@@ -17,6 +18,32 @@ const ClientMetric = ({ label, value, trend, icon: Icon, color }: any) => (
 );
 
 export const TeamsView: React.FC = () => {
+  const [insight, setInsight] = useState<string>('');
+  const [isLoadingInsight, setIsLoadingInsight] = useState(false);
+
+  const metrics = {
+    revenue: '$142,500',
+    leads: '2,450',
+    conversion: '5.8%',
+    growth: '+24.5%'
+  };
+
+  const fetchInsight = async () => {
+    setIsLoadingInsight(true);
+    try {
+      const text = await getPerformanceInsight(metrics);
+      setInsight(text);
+    } catch (error) {
+      console.error("Failed to fetch insight:", error);
+    } finally {
+      setIsLoadingInsight(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInsight();
+  }, []);
+
   return (
     <div className="space-y-10 max-w-6xl mx-auto">
       {/* Client Header */}
@@ -37,6 +64,41 @@ export const TeamsView: React.FC = () => {
           <button className="monolith-gradient text-white px-8 py-3 rounded-xl font-black text-sm shadow-lg shadow-primary/20 flex items-center gap-2 hover:scale-105 transition-all active:scale-95">
             <Clock size={18} />
             Schedule Audit
+          </button>
+        </div>
+      </div>
+
+      {/* AI Insight Banner */}
+      <div className="bg-secondary/5 border border-secondary/10 rounded-[32px] p-8 relative overflow-hidden group">
+        <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+          <Sparkles size={120} className="text-secondary" />
+        </div>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center gap-8">
+          <div className="w-16 h-16 rounded-2xl bg-secondary text-white flex items-center justify-center shadow-xl shadow-secondary/20 shrink-0">
+            <Zap size={32} fill="white" />
+          </div>
+          <div className="flex-1 space-y-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-black uppercase tracking-widest text-secondary">Gemini Performance Insight</h3>
+              <div className="px-2 py-0.5 bg-secondary/10 text-secondary rounded text-[8px] font-black uppercase tracking-widest">Live Analysis</div>
+            </div>
+            {isLoadingInsight ? (
+              <div className="flex items-center gap-3 py-2">
+                <Loader2 size={18} className="text-secondary animate-spin" />
+                <p className="text-sm font-medium text-on-surface-variant animate-pulse">Gemini is analyzing your growth velocity...</p>
+              </div>
+            ) : (
+              <p className="text-lg font-bold text-on-surface leading-tight max-w-3xl">
+                {insight || "No insights available at this time."}
+              </p>
+            )}
+          </div>
+          <button 
+            onClick={fetchInsight}
+            disabled={isLoadingInsight}
+            className="px-6 py-3 bg-white border border-secondary/20 rounded-xl text-secondary font-black text-[10px] uppercase tracking-widest hover:bg-secondary hover:text-white transition-all shadow-sm active:scale-95 disabled:opacity-50"
+          >
+            Refresh Analysis
           </button>
         </div>
       </div>

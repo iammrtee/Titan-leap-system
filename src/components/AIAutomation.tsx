@@ -1,21 +1,39 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Cpu, Plus, Play, Pause, Clock, Zap, CheckCircle2, AlertCircle, MoreHorizontal, Settings, Trash2, Power, RefreshCw, TrendingUp, Loader2 } from 'lucide-react';
+import { analyzeSocialTrends } from '@/src/services/ai';
+import { Cpu, Plus, Play, Pause, Clock, Zap, CheckCircle2, AlertCircle, MoreHorizontal, Settings, Trash2, Power, RefreshCw, TrendingUp, Loader2, Sparkles, X } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 
-const AutomationCard = ({ name, description, status: initialStatus, lastRun, icon: Icon, color }: any) => {
+const AutomationCard = ({ name, description, status: initialStatus, lastRun, icon: Icon, color, onAction }: any) => {
   const [status, setStatus] = useState(initialStatus);
   const [isTesting, setIsTesting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   const handleTest = () => {
+    if (onAction) {
+      onAction();
+      return;
+    }
+    setError(null);
     setIsTesting(true);
     setProgress(0);
+    
     const interval = setInterval(() => {
       setProgress(prev => {
         if (prev >= 100) {
           clearInterval(interval);
-          setTimeout(() => setIsTesting(false), 500);
+          
+          // Simulate a random failure (30% chance)
+          const failed = Math.random() < 0.3;
+          
+          setTimeout(() => {
+            setIsTesting(false);
+            if (failed) {
+              setError('Connection timeout: Failed to reach the automation endpoint. Please check your API configuration.');
+            }
+          }, 500);
+          
           return 100;
         }
         return prev + 5;
@@ -37,6 +55,33 @@ const AutomationCard = ({ name, description, status: initialStatus, lastRun, ico
             />
           </div>
           <p className="text-[10px] font-bold text-on-surface-variant/60 mt-2 uppercase tracking-widest">{progress}% Complete</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="absolute inset-0 bg-error/5 backdrop-blur-[4px] z-10 flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
+          <div className="w-12 h-12 rounded-full bg-error/20 text-error flex items-center justify-center mb-4">
+            <AlertCircle size={24} />
+          </div>
+          <p className="text-sm font-black text-on-surface mb-2">Automation Failed</p>
+          <p className="text-[11px] font-medium text-on-surface-variant leading-relaxed mb-6 max-w-[220px]">
+            {error}
+          </p>
+          <div className="flex gap-3">
+            <button 
+              onClick={() => setError(null)}
+              className="px-4 py-2 bg-surface-container-highest text-on-surface-variant rounded-xl text-[10px] font-black uppercase tracking-widest hover:text-on-surface transition-all"
+            >
+              Dismiss
+            </button>
+            <button 
+              onClick={handleTest}
+              className="px-6 py-2 bg-error text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-error/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+            >
+              <RefreshCw size={12} />
+              Retry
+            </button>
+          </div>
         </div>
       )}
 
@@ -90,6 +135,26 @@ const AutomationCard = ({ name, description, status: initialStatus, lastRun, ico
 };
 
 export const AIAutomation: React.FC = () => {
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [trends, setTrends] = useState<any[]>([]);
+  const [showTrendsModal, setShowTrendsModal] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+  const handleFetchTrends = async () => {
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    setShowTrendsModal(true);
+    try {
+      const data = await analyzeSocialTrends('Instagram & LinkedIn');
+      setTrends(data);
+    } catch (error) {
+      console.error("Failed to fetch trends:", error);
+      setAnalysisError("The AI engine encountered an unexpected error while scanning social signals. This usually happens due to API rate limits or network instability.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const automations = [
     {
       name: 'Competitor Hook Scraper',
@@ -122,6 +187,15 @@ export const AIAutomation: React.FC = () => {
       lastRun: '1 hour ago',
       icon: TrendingUp,
       color: 'bg-success-container/10 text-success'
+    },
+    {
+      name: 'Social Trend Monitor',
+      description: 'Monitors social media trends and competitor activity to suggest high-relevance content topics and keywords.',
+      status: 'Active',
+      lastRun: 'Just now',
+      icon: RefreshCw,
+      color: 'bg-primary/10 text-primary',
+      onAction: handleFetchTrends
     }
   ];
 
@@ -154,6 +228,92 @@ export const AIAutomation: React.FC = () => {
           </div>
         </button>
       </div>
+
+      {/* Trends Modal */}
+      <AnimatePresence>
+        {showTrendsModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-[40px] w-full max-w-2xl overflow-hidden shadow-2xl border border-outline-variant/10"
+            >
+              <div className="p-10 space-y-8">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                      <TrendingUp size={24} />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black text-on-surface tracking-tight">AI Trend Analysis</h3>
+                      <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">Powered by Gemini Pro</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setShowTrendsModal(false)}
+                    className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {isAnalyzing ? (
+                  <div className="py-20 flex flex-col items-center justify-center space-y-6 text-center">
+                    <Loader2 className="text-primary animate-spin" size={48} />
+                    <div className="space-y-2">
+                      <p className="text-lg font-black text-on-surface">Analyzing Global Signals...</p>
+                      <p className="text-xs font-medium text-on-surface-variant/60 max-w-xs">Gemini is scanning social media APIs and competitor activity for high-velocity trends.</p>
+                    </div>
+                  </div>
+                ) : analysisError ? (
+                  <div className="py-20 flex flex-col items-center justify-center space-y-6 text-center">
+                    <div className="w-16 h-16 rounded-full bg-error/10 text-error flex items-center justify-center">
+                      <AlertCircle size={32} />
+                    </div>
+                    <div className="space-y-2 px-10">
+                      <p className="text-lg font-black text-on-surface">Analysis Failed</p>
+                      <p className="text-xs font-medium text-on-surface-variant/60">{analysisError}</p>
+                    </div>
+                    <button 
+                      onClick={handleFetchTrends}
+                      className="px-8 py-3 bg-primary text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                    >
+                      <RefreshCw size={14} />
+                      Retry Analysis
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {trends.map((trend, i) => (
+                      <div key={i} className="bg-surface-container-low p-6 rounded-3xl border border-outline-variant/10 space-y-4 group hover:border-primary/20 transition-all">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl font-black text-primary/20">0{i+1}</span>
+                            <h4 className="text-lg font-black text-on-surface group-hover:text-primary transition-colors">{trend.topic}</h4>
+                          </div>
+                          <div className="px-3 py-1 bg-success-container/10 text-success rounded-full text-[9px] font-black uppercase tracking-widest">High Velocity</div>
+                        </div>
+                        <p className="text-sm font-medium text-on-surface-variant/70 leading-relaxed">
+                          <span className="text-primary font-black uppercase text-[10px] tracking-widest block mb-1">Strategy</span>
+                          {trend.strategy}
+                        </p>
+                      </div>
+                    ))}
+                    <button 
+                      onClick={() => setShowTrendsModal(false)}
+                      className="w-full py-5 bg-on-surface text-surface rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
+                    >
+                      <Sparkles size={18} />
+                      Sync to Content Calendar
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* System Health */}
       <div className="bg-surface-container-low rounded-3xl p-8 border border-outline-variant/10 shadow-sm">

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LayoutGrid, List, Filter, Plus, ChevronRight, Share2, MoreHorizontal, Instagram, Twitter, Linkedin, Youtube, Play, FileText, BarChart3, Clock, Search, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { LayoutGrid, List, Filter, Plus, ChevronRight, Share2, MoreHorizontal, Instagram, Twitter, Linkedin, Youtube, Play, FileText, BarChart3, Clock, Search, X, CheckCircle2, AlertCircle, Sparkles, Lightbulb, Target, Briefcase, Loader2, Zap } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { generateContentIdeas, analyzeSocialTrends } from '@/src/services/ai';
 
 type ContentStatus = 'Draft' | 'Scheduled' | 'Published';
 type Platform = 'Instagram' | 'TikTok' | 'Twitter' | 'LinkedIn' | 'YouTube';
@@ -84,6 +85,41 @@ export const ContentManager: React.FC = () => {
     campaign: 'Growth Accelerator'
   });
 
+  const [isIdeating, setIsIdeating] = useState(false);
+  const [aiIdeas, setAiIdeas] = useState<any[]>([]);
+  const [industry, setIndustry] = useState('B2B SaaS');
+  const [audience, setAudience] = useState('Marketing Managers');
+
+  const handleGenerateIdeas = async () => {
+    setIsIdeating(true);
+    try {
+      // First get trends (simulating integration with AIAutomation)
+      const trends = await analyzeSocialTrends('General SaaS');
+      const ideas = await generateContentIdeas(industry, audience, trends);
+      setAiIdeas(ideas);
+    } catch (error) {
+      console.error("Failed to generate ideas:", error);
+    } finally {
+      setIsIdeating(false);
+    }
+  };
+
+  const handleAddIdeaToContent = (idea: any) => {
+    const item: ContentItem = {
+      id: Math.random().toString(36).substr(2, 9),
+      title: idea.title,
+      platform: idea.platform as Platform,
+      status: 'Draft',
+      dueDate: 'Next Week',
+      author: 'Elena Vance',
+      hasScript: false,
+      campaign: 'AI Suggested'
+    };
+    setItems([item, ...items]);
+    // Remove from ideas list or mark as added
+    setAiIdeas(aiIdeas.filter(i => i.title !== idea.title));
+  };
+
   const handleAddItem = () => {
     if (!newItem.title) return;
     const item: ContentItem = {
@@ -103,6 +139,108 @@ export const ContentManager: React.FC = () => {
 
   return (
     <div className="space-y-8">
+      {/* AI Ideation Section */}
+      <div className="bg-surface-container-low rounded-[32px] p-8 border border-outline-variant/10 shadow-sm overflow-hidden relative group">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 blur-[80px] rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-1000" />
+        
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+          <div className="space-y-4 max-w-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                <Sparkles size={20} />
+              </div>
+              <h2 className="text-xl font-black text-on-surface tracking-tight">AI Content Ideator</h2>
+            </div>
+            <p className="text-sm font-medium text-on-surface-variant/70 leading-relaxed">
+              Leverage Gemini to generate high-impact content ideas tailored to your industry and audience, synced with real-time social signals.
+            </p>
+            
+            <div className="flex flex-wrap gap-4 pt-2">
+              <div className="flex items-center gap-2 bg-surface-container-highest/50 px-4 py-2 rounded-xl border border-outline-variant/10">
+                <Briefcase size={14} className="text-primary" />
+                <input 
+                  type="text" 
+                  value={industry}
+                  onChange={(e) => setIndustry(e.target.value)}
+                  className="bg-transparent border-none text-[11px] font-black uppercase tracking-widest focus:outline-none w-32"
+                  placeholder="INDUSTRY"
+                />
+              </div>
+              <div className="flex items-center gap-2 bg-surface-container-highest/50 px-4 py-2 rounded-xl border border-outline-variant/10">
+                <Target size={14} className="text-secondary" />
+                <input 
+                  type="text" 
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                  className="bg-transparent border-none text-[11px] font-black uppercase tracking-widest focus:outline-none w-40"
+                  placeholder="TARGET AUDIENCE"
+                />
+              </div>
+            </div>
+          </div>
+
+          <button 
+            onClick={handleGenerateIdeas}
+            disabled={isIdeating}
+            className="bg-on-surface text-surface px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 disabled:opacity-50"
+          >
+            {isIdeating ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} fill="currentColor" />}
+            {isIdeating ? "Analyzing Trends..." : "Generate Ideas"}
+          </button>
+        </div>
+
+        {/* AI Ideas Display */}
+        <AnimatePresence>
+          {aiIdeas.length > 0 && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mt-10 pt-10 border-t border-outline-variant/10"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {aiIdeas.map((idea, idx) => (
+                  <motion.div 
+                    key={idx}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                    className="bg-surface-container-lowest p-6 rounded-2xl border border-outline-variant/10 shadow-sm hover:border-primary/20 transition-all flex flex-col h-full"
+                  >
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-6 h-6 rounded-md bg-primary/10 text-primary flex items-center justify-center">
+                        {idea.platform === 'Instagram' && <Instagram size={12} />}
+                        {idea.platform === 'TikTok' && <Play size={12} />}
+                        {idea.platform === 'Twitter' && <Twitter size={12} />}
+                        {idea.platform === 'LinkedIn' && <Linkedin size={12} />}
+                        {idea.platform === 'YouTube' && <Youtube size={12} />}
+                      </div>
+                      <span className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">{idea.platform}</span>
+                    </div>
+                    
+                    <h4 className="text-sm font-black text-on-surface mb-2 leading-tight">{idea.title}</h4>
+                    <p className="text-[11px] text-on-surface-variant/70 leading-relaxed mb-4 flex-1">{idea.description}</p>
+                    
+                    <div className="bg-surface-container-low p-3 rounded-xl mb-4">
+                      <p className="text-[9px] font-black text-primary uppercase tracking-widest mb-1">The Angle</p>
+                      <p className="text-[10px] font-medium text-on-surface-variant leading-tight italic">"{idea.angle}"</p>
+                    </div>
+
+                    <button 
+                      onClick={() => handleAddIdeaToContent(idea)}
+                      className="w-full py-3 bg-surface-container-highest text-on-surface rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary hover:text-white transition-all flex items-center justify-center gap-2"
+                    >
+                      <Plus size={14} />
+                      Add to Drafts
+                    </button>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
       {/* Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">

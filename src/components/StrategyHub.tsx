@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anchor, Network, LineChart, Download, Clapperboard, Info, Bolt, Search, Users, TrendingUp, Calendar, Upload, Clock, CheckCircle2, List, LayoutGrid, Filter, Plus, ChevronRight, Share2, MoreHorizontal, Instagram, Twitter, Linkedin, Youtube, Play, Zap, Rocket, Loader2, Sparkles, AlertCircle, FileText, ExternalLink, MoreVertical, Target } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { generateContentScripts, generate30DayPlan } from '@/src/services/ai';
+import { generateContentScripts, generate30DayPlan, refinePlan } from '@/src/services/ai';
 
 type StrategyTab = 'competitor' | 'calendar' | 'autopost' | 'plan';
 
@@ -114,8 +114,42 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedScripts, setGeneratedScripts] = useState<any[]>([]);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [isRefiningPlan, setIsRefiningPlan] = useState(false);
+  const [refinementFeedback, setRefinementFeedback] = useState('');
+  const [showRefineInput, setShowRefineInput] = useState(false);
   const [thirtyDayPlan, setThirtyDayPlan] = useState<any>(null);
   
+  // Autopost State
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadedAssets, setUploadedAssets] = useState<string[]>([
+    'https://picsum.photos/seed/titan1/600/600',
+    'https://picsum.photos/seed/titan2/600/600'
+  ]);
+
+  const handleFileUpload = (e: React.DragEvent | React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    // Simulate upload
+    setIsUploading(true);
+    setUploadProgress(0);
+    
+    const interval = setInterval(() => {
+      setUploadProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setIsUploading(false);
+          const newAsset = `https://picsum.photos/seed/titan${Math.floor(Math.random() * 1000)}/600/600`;
+          setUploadedAssets(prevAssets => [newAsset, ...prevAssets]);
+          return 100;
+        }
+        return prev + 10;
+      });
+    }, 200);
+  };
+
   // Calendar State
   const [calendarItems, setCalendarItems] = useState<CalendarItem[]>(INITIAL_CALENDAR_ITEMS);
   const [selectedDate, setSelectedDate] = useState({ day: 24, month: 9, year: 2023 });
@@ -136,19 +170,22 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
 
   const handleAddContent = () => {
     if (!newItem.title) return;
+    
     const item: CalendarItem = {
       id: Math.random().toString(36).substr(2, 9),
+      platform: 'Instagram',
+      title: '',
+      description: '',
+      status: 'scheduled',
+      type: 'video',
+      time: '09:00 AM',
+      ...newItem,
+      // Ensure these are set from the current context
       day: selectedDate.day,
       month: selectedDate.month,
       year: selectedDate.year,
-      platform: newItem.platform as any,
-      title: newItem.title,
-      description: newItem.description || '',
-      status: newItem.status as any,
-      type: newItem.type as any,
-      time: newItem.time || '09:00 AM',
-      ...newItem
-    };
+    } as CalendarItem;
+
     setCalendarItems([...calendarItems, item]);
     setShowAddModal(false);
     setNewItem({
@@ -182,6 +219,23 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
       console.error("Failed to generate 30-day plan:", error);
     } finally {
       setIsGeneratingPlan(false);
+    }
+  };
+
+  const handleRefinePlan = async () => {
+    if (!thirtyDayPlan || !refinementFeedback) return;
+    setIsRefiningPlan(true);
+    try {
+      const refined = await refinePlan(thirtyDayPlan, refinementFeedback);
+      if (refined) {
+        setThirtyDayPlan(refined);
+        setRefinementFeedback('');
+        setShowRefineInput(false);
+      }
+    } catch (error) {
+      console.error("Failed to refine plan:", error);
+    } finally {
+      setIsRefiningPlan(false);
     }
   };
 
@@ -226,7 +280,7 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
                       onClick={() => setMode('general')}
                       className={cn(
                         "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
-                        mode === 'general' ? "bg-white text-primary shadow-sm" : "text-on-surface-variant/60 hover:text-on-surface"
+                        mode === 'general' ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant/60 hover:text-on-surface"
                       )}
                     >
                       General
@@ -235,7 +289,7 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
                       onClick={() => setMode('per-link')}
                       className={cn(
                         "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
-                        mode === 'per-link' ? "bg-white text-primary shadow-sm" : "text-on-surface-variant/60 hover:text-on-surface"
+                        mode === 'per-link' ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant/60 hover:text-on-surface"
                       )}
                     >
                       Per Link
@@ -321,7 +375,7 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
                 >
                   {isGenerating ? <Loader2 className="animate-spin" size={18} /> : <Clapperboard size={18} fill="white" />}
                   {isGenerating ? "AI Engineering Scripts..." : "Generate Top-Performing Scripts"}
-                  <span className="px-2 py-0.5 bg-white/20 rounded-md text-[10px]">30 Days</span>
+                  <span className="px-2 py-0.5 bg-on-surface/20 rounded-md text-[10px]">30 Days</span>
                 </button>
               </div>
             </div>
@@ -417,11 +471,60 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
                 <div className="space-y-8">
                   <div className="flex items-center justify-between">
                     <h3 className="text-3xl font-black tracking-tight text-on-surface">The 4-Week Roadmap</h3>
-                    <button className="flex items-center gap-2 text-primary font-black text-xs uppercase tracking-widest hover:underline">
-                      <Download size={16} />
-                      Export Full PDF
-                    </button>
+                    <div className="flex items-center gap-4">
+                      <button 
+                        onClick={() => setShowRefineInput(!showRefineInput)}
+                        className="flex items-center gap-2 text-secondary font-black text-xs uppercase tracking-widest hover:underline"
+                      >
+                        <Sparkles size={16} />
+                        Refine with Gemini
+                      </button>
+                      <button className="flex items-center gap-2 text-primary font-black text-xs uppercase tracking-widest hover:underline">
+                        <Download size={16} />
+                        Export Full PDF
+                      </button>
+                    </div>
                   </div>
+
+                  <AnimatePresence>
+                    {showRefineInput && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="bg-surface-container-low p-6 rounded-3xl border border-secondary/20 shadow-lg space-y-4">
+                          <div className="flex items-center gap-3 text-secondary">
+                            <Sparkles size={18} />
+                            <h4 className="text-sm font-black uppercase tracking-widest">AI Strategy Refinement</h4>
+                          </div>
+                          <textarea 
+                            value={refinementFeedback}
+                            onChange={(e) => setRefinementFeedback(e.target.value)}
+                            placeholder="e.g. 'Make it more focused on LinkedIn' or 'Include more video content ideas'..."
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-secondary/20 min-h-[100px] resize-none"
+                          />
+                          <div className="flex justify-end gap-3">
+                            <button 
+                              onClick={() => setShowRefineInput(false)}
+                              className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-on-surface-variant hover:text-on-surface"
+                            >
+                              Cancel
+                            </button>
+                            <button 
+                              onClick={handleRefinePlan}
+                              disabled={isRefiningPlan || !refinementFeedback}
+                              className="bg-secondary text-on-secondary px-8 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 disabled:opacity-50"
+                            >
+                              {isRefiningPlan ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} fill="currentColor" />}
+                              Refine Strategy
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {thirtyDayPlan.weeks?.map((week: any, idx: number) => (
@@ -571,10 +674,30 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
                           )}
                         >
                           <div className="flex items-center justify-between mb-3">
-                            <span className={cn(
-                              "text-sm font-black transition-colors",
-                              isSelected ? "text-primary" : "text-on-surface-variant/40 group-hover:text-on-surface"
-                            )}>{day}</span>
+                            <div className="flex items-center gap-2">
+                              <span className={cn(
+                                "text-sm font-black transition-colors",
+                                isSelected ? "text-primary" : "text-on-surface-variant/40 group-hover:text-on-surface"
+                              )}>{day}</span>
+                              {items.length > 0 && (
+                                <div className="flex gap-1">
+                                  {Array.from(new Set(items.map(i => i.platform))).slice(0, 3).map((p, idx) => (
+                                    <div 
+                                      key={idx} 
+                                      className={cn(
+                                        "w-1.5 h-1.5 rounded-full shadow-[0_0_5px_rgba(0,0,0,0.1)]",
+                                        p === 'LinkedIn' && "bg-indigo-400",
+                                        p === 'Twitter' && "bg-sky-400",
+                                        p === 'Instagram' && "bg-amber-400",
+                                        p === 'YouTube' && "bg-emerald-400",
+                                        p === 'TikTok' && "bg-rose-400"
+                                      )} 
+                                    />
+                                  ))}
+                                  {items.length > 3 && <div className="w-1 h-1 rounded-full bg-on-surface-variant/20" />}
+                                </div>
+                              )}
+                            </div>
                             {isToday && (
                               <span className="text-[8px] font-black uppercase tracking-widest text-primary bg-primary/10 px-2 py-0.5 rounded-full">Today</span>
                             )}
@@ -594,7 +717,7 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
                                 )}
                               >
                                 <div className="flex items-center justify-between">
-                                  <div className="w-6 h-6 rounded-lg bg-white/80 flex items-center justify-center shadow-sm">
+                                  <div className="w-6 h-6 rounded-lg bg-on-surface/80 flex items-center justify-center shadow-sm">
                                     {item.type === 'video' ? <Play size={10} fill="currentColor" /> : <FileText size={10} />}
                                   </div>
                                   <div className={cn(
@@ -626,9 +749,11 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
                               setSelectedDate({ day, month: 9, year: 2023 });
                               setShowAddModal(true);
                             }}
-                            className="absolute bottom-4 right-4 w-8 h-8 rounded-full bg-surface-container-low border border-outline-variant/10 flex items-center justify-center text-on-surface-variant/40 opacity-0 group-hover:opacity-100 hover:text-primary hover:border-primary/40 transition-all shadow-sm"
+                            className="absolute bottom-4 right-4 w-10 h-10 rounded-2xl bg-surface-container-lowest border border-outline-variant/10 flex flex-col items-center justify-center text-on-surface-variant/40 opacity-0 group-hover:opacity-100 hover:text-primary hover:border-primary/40 hover:shadow-lg hover:scale-110 transition-all shadow-sm z-10"
+                            title="Quick Add Content"
                           >
-                            <Plus size={16} />
+                            <Plus size={18} />
+                            <span className="text-[7px] font-black uppercase tracking-tighter">Add</span>
                           </button>
                         </div>
                       );
@@ -648,8 +773,17 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
                   >
                     <div className="bg-surface-container-low rounded-[40px] p-10 border border-outline-variant/10 shadow-xl shadow-black/5 space-y-10 sticky top-24">
                       <div className="flex items-center justify-between">
-                        <h4 className="text-xl font-black tracking-tight text-on-surface">October 2023</h4>
+                        <div className="space-y-1">
+                          <h4 className="text-xl font-black tracking-tight text-on-surface">October {selectedDate.day}, {selectedDate.year}</h4>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">Daily Content Schedule</p>
+                        </div>
                         <div className="flex gap-2">
+                          <button 
+                            onClick={() => setShowAddModal(true)}
+                            className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary/20 transition-all"
+                          >
+                            <Plus size={20} />
+                          </button>
                           <button 
                             onClick={() => setIsSidePanelOpen(false)}
                             className="w-10 h-10 rounded-full bg-surface-container-highest/50 flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors"
@@ -884,32 +1018,81 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
             {/* Asset Management */}
             <div className="lg:col-span-8 space-y-10">
-              <div className="bg-surface-container-lowest border-2 border-dashed border-outline-variant/20 rounded-[40px] aspect-[16/9] flex flex-col items-center justify-center gap-8 group hover:border-primary/40 transition-all cursor-pointer shadow-sm relative overflow-hidden">
-                <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="w-24 h-24 rounded-[32px] bg-surface-container-low flex items-center justify-center text-primary group-hover:scale-110 transition-all duration-500 shadow-lg shadow-primary/5">
-                  <Upload size={40} />
-                </div>
-                <div className="text-center space-y-3 relative z-10">
-                  <h4 className="text-3xl font-black text-on-surface tracking-tight">Drag and drop assets</h4>
-                  <p className="text-base font-medium text-on-surface-variant/60">Supports MP4, MOV, PNG, JPG (Max 500MB)</p>
-                </div>
-                <button className="bg-surface-container-low text-on-surface px-12 py-5 rounded-2xl font-black text-sm border border-outline-variant/10 hover:bg-surface-container transition-all shadow-sm active:scale-95 relative z-10">
-                  Browse Files
-                </button>
+              <div 
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleFileUpload}
+                className={cn(
+                  "bg-surface-container-lowest border-2 border-dashed rounded-[40px] aspect-[16/9] flex flex-col items-center justify-center gap-8 group transition-all cursor-pointer shadow-sm relative overflow-hidden",
+                  isDragging ? "border-primary bg-primary/5 scale-[0.99]" : "border-outline-variant/20 hover:border-primary/40"
+                )}
+              >
+                <input 
+                  type="file" 
+                  className="absolute inset-0 opacity-0 cursor-pointer z-20" 
+                  onChange={handleFileUpload}
+                  multiple
+                />
+                
+                {isUploading ? (
+                  <div className="w-full max-w-md space-y-6 px-10 relative z-10">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-black uppercase tracking-widest text-primary">Uploading Assets...</span>
+                      <span className="text-sm font-black text-primary">{uploadProgress}%</span>
+                    </div>
+                    <div className="h-3 w-full bg-surface-container-highest rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${uploadProgress}%` }}
+                        className="h-full bg-primary"
+                      />
+                    </div>
+                    <p className="text-center text-xs font-bold text-on-surface-variant/40 animate-pulse">Processing high-quality render...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className={cn(
+                      "w-24 h-24 rounded-[32px] flex items-center justify-center transition-all duration-500 shadow-lg shadow-primary/5",
+                      isDragging ? "bg-primary text-white scale-110" : "bg-surface-container-low text-primary group-hover:scale-110"
+                    )}>
+                      <Upload size={40} />
+                    </div>
+                    <div className="text-center space-y-3 relative z-10">
+                      <h4 className="text-3xl font-black text-on-surface tracking-tight">
+                        {isDragging ? "Drop to upload" : "Drag and drop assets"}
+                      </h4>
+                      <p className="text-base font-medium text-on-surface-variant/60">Supports MP4, MOV, PNG, JPG (Max 500MB)</p>
+                    </div>
+                    <button className="bg-surface-container-low text-on-surface px-12 py-5 rounded-2xl font-black text-sm border border-outline-variant/10 hover:bg-surface-container transition-all shadow-sm active:scale-95 relative z-10">
+                      Browse Files
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* Asset Gallery */}
               <div className="grid grid-cols-3 md:grid-cols-4 gap-8">
-                {[
-                  'https://picsum.photos/seed/titan1/600/600',
-                  'https://picsum.photos/seed/titan2/600/600'
-                ].map((img, i) => (
-                  <div key={i} className="aspect-square rounded-[32px] overflow-hidden border border-outline-variant/10 shadow-md group cursor-pointer relative">
+                {uploadedAssets.map((img, i) => (
+                  <motion.div 
+                    key={i} 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="aspect-square rounded-[32px] overflow-hidden border border-outline-variant/10 shadow-md group cursor-pointer relative"
+                  >
                     <img src={img} alt="Asset" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" referrerPolicy="no-referrer" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
+                    {i === 0 && !isUploading && uploadProgress === 100 && (
+                      <div className="absolute top-4 right-4 bg-emerald-500 text-white p-1.5 rounded-full shadow-lg">
+                        <CheckCircle2 size={14} />
+                      </div>
+                    )}
+                  </motion.div>
                 ))}
-                <button className="aspect-square rounded-[32px] border-2 border-dashed border-outline-variant/20 flex items-center justify-center text-on-surface-variant/40 hover:border-primary/40 hover:text-primary transition-all bg-surface-container-low/30 group">
+                <button 
+                  onClick={() => document.querySelector<HTMLInputElement>('input[type="file"]')?.click()}
+                  className="aspect-square rounded-[32px] border-2 border-dashed border-outline-variant/20 flex items-center justify-center text-on-surface-variant/40 hover:border-primary/40 hover:text-primary transition-all bg-surface-container-low/30 group"
+                >
                   <Plus size={40} className="group-hover:rotate-90 transition-transform duration-500" />
                 </button>
               </div>
@@ -970,7 +1153,7 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
                           className={cn(
                             "flex flex-col items-center justify-center gap-3 aspect-square rounded-[24px] border transition-all group relative overflow-hidden",
                             p.active 
-                              ? "bg-white border-primary text-primary shadow-lg shadow-primary/5" 
+                              ? "bg-surface-container-lowest border-primary text-primary shadow-lg shadow-primary/5" 
                               : "bg-surface-container-highest/30 border-outline-variant/10 text-on-surface-variant/30 hover:bg-surface-container-highest/50"
                           )}
                         >
@@ -983,7 +1166,7 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
                   </div>
 
                   <div className="pt-6 space-y-5">
-                    <button className="w-full bg-secondary-container text-on-secondary-fixed-variant py-6 rounded-2xl font-black text-xs uppercase tracking-[0.3em] shadow-2xl shadow-secondary/30 hover:scale-[1.02] hover:brightness-105 active:scale-95 transition-all">
+                    <button className="w-full bg-secondary-container text-on-secondary-container py-6 rounded-2xl font-black text-xs uppercase tracking-[0.3em] shadow-2xl shadow-secondary/30 hover:scale-[1.02] hover:brightness-105 active:scale-95 transition-all">
                       Schedule / Publish
                     </button>
                     <p className="text-[10px] font-black text-on-surface-variant/30 uppercase tracking-[0.2em] text-center">Estimated Reach: 45.2k Impressions</p>
@@ -993,11 +1176,11 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
 
               {/* Efficiency Card */}
               <div className="bg-primary rounded-[40px] p-10 text-white shadow-2xl shadow-primary/30 space-y-6 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 blur-[80px] rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-1000" />
+                <div className="absolute top-0 right-0 w-48 h-48 bg-on-surface/10 blur-[80px] rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-1000" />
                 <div className="relative z-10 space-y-2">
                   <h5 className="text-[11px] font-black uppercase tracking-[0.3em] text-white/60">Autopost Efficiency</h5>
                   <p className="text-5xl font-black tracking-tighter">94.8%</p>
-                  <div className="flex items-center gap-3 text-[11px] font-black text-white/90 bg-white/10 w-fit px-4 py-2 rounded-full border border-white/10">
+                  <div className="flex items-center gap-3 text-[11px] font-black text-white/90 bg-on-surface/10 w-fit px-4 py-2 rounded-full border border-white/10">
                     <TrendingUp size={14} />
                     <span className="uppercase tracking-widest">+12% VS LAST MONTH</span>
                   </div>

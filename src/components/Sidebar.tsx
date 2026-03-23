@@ -94,7 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, dark
             {darkMode ? 'Light Mode' : 'Dark Mode'}
           </button>
 
-          <button className="w-full py-4 px-4 bg-secondary-container text-on-secondary-fixed-variant font-black rounded-2xl text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl shadow-secondary/20 hover:brightness-105 transition-all active:scale-95">
+          <button className="w-full py-4 px-4 bg-secondary-container text-on-secondary-container font-black rounded-2xl text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl shadow-secondary/20 hover:brightness-105 transition-all active:scale-95">
             <Bolt size={18} fill="currentColor" />
             Upgrade Plan
           </button>
