@@ -9,6 +9,7 @@ const AutomationCard = ({ name, description, status: initialStatus, lastRun, ico
   const [isTesting, setIsTesting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   const handleTest = () => {
     if (onAction) {
@@ -24,13 +25,24 @@ const AutomationCard = ({ name, description, status: initialStatus, lastRun, ico
         if (prev >= 100) {
           clearInterval(interval);
           
-          // Simulate a random failure (30% chance)
-          const failed = Math.random() < 0.3;
+          // Simulate a random failure (30% chance, but decreases with retries)
+          const failureRate = Math.max(0.05, 0.3 - (retryCount * 0.1));
+          const failed = Math.random() < failureRate;
           
           setTimeout(() => {
             setIsTesting(false);
             if (failed) {
-              setError('Connection timeout: Failed to reach the automation endpoint. Please check your API configuration.');
+              const errors = [
+                'Connection timeout: Failed to reach the automation endpoint. Please check your API configuration.',
+                'Invalid Data: The automation received malformed input from the source trigger.',
+                'Rate Limit Exceeded: Too many requests sent to the third-party service in a short period.',
+                'Authentication Error: The API key for this service has expired or is invalid.'
+              ];
+              setError(errors[Math.floor(Math.random() * errors.length)]);
+              setRetryCount(prev => prev + 1);
+            } else {
+              setRetryCount(0);
+              setStatus('Active');
             }
           }, 500);
           

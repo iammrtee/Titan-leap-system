@@ -14,17 +14,21 @@ import {
   Bolt,
   Rocket,
   Moon,
-  Sun
+  Sun,
+  Filter,
+  X
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 
-export type ViewType = 'dashboard' | 'audit' | 'strategy' | 'content' | 'ads' | 'sales' | 'emails' | 'ai' | 'teams';
+export type ViewType = 'dashboard' | 'audit' | 'strategy' | 'content' | 'ads' | 'sales' | 'funnel' | 'emails' | 'ai' | 'teams';
 
 interface SidebarProps {
   activeView: ViewType;
   onViewChange: (view: ViewType) => void;
   darkMode: boolean;
   onToggleDarkMode: () => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 const navItems = [
@@ -34,36 +38,55 @@ const navItems = [
   { id: 'content', label: 'Content', icon: FileText },
   { id: 'ads', label: 'Ads', icon: Megaphone },
   { id: 'sales', label: 'Sales', icon: DollarSign },
+  { id: 'funnel', label: 'Funnels', icon: Filter },
   { id: 'emails', label: 'Emails', icon: Mail },
   { id: 'ai', label: 'AI Automation', icon: Cpu },
   { id: 'teams', label: 'Teams', icon: Users },
 ] as const;
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, darkMode, onToggleDarkMode }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, darkMode, onToggleDarkMode, isOpen, onClose }) => {
   return (
-    <aside className="h-screen w-64 fixed left-0 top-0 flex flex-col bg-surface-container-low border-r-0 z-50 overflow-y-auto no-scrollbar">
-      <div className="flex flex-col h-full py-6">
-        {/* Brand */}
-        <div className="px-8 mb-10">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg monolith-gradient flex items-center justify-center text-white shadow-lg shadow-primary/20">
-              <Rocket size={18} fill="white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-black text-primary tracking-tighter leading-none">TitanLeap</h1>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-on-surface-variant/60 font-bold mt-1">Growth System</p>
-            </div>
-          </div>
-        </div>
+    <>
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
+          onClick={onClose}
+        />
+      )}
 
-        {/* Navigation */}
-        <nav className="flex-1 space-y-1">
-          {navItems.map((item) => {
-            const isActive = activeView === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => onViewChange(item.id)}
+      <aside className={cn(
+        "h-screen w-64 fixed left-0 top-0 flex flex-col bg-surface-container-low border-r-0 z-50 overflow-y-auto no-scrollbar transition-transform duration-300 ease-in-out md:translate-x-0",
+        isOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <div className="flex flex-col h-full py-6">
+          {/* Brand */}
+          <div className="px-8 mb-10 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg monolith-gradient flex items-center justify-center text-white shadow-lg shadow-primary/20">
+                <Rocket size={18} fill="white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-black text-primary tracking-tighter leading-none">TitanLeap</h1>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-on-surface-variant/60 font-bold mt-1">Growth System</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="md:hidden text-on-surface-variant hover:text-on-surface">
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 space-y-1">
+            {navItems.map((item) => {
+              const isActive = activeView === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    onViewChange(item.id);
+                    onClose();
+                  }}
                 className={cn(
                   "w-full flex items-center gap-4 px-8 py-3 transition-all duration-300 ease-in-out group",
                   isActive 
@@ -112,5 +135,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, dark
         </div>
       </div>
     </aside>
+    </>
   );
 };

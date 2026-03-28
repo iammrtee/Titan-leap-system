@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ChevronDown, 
@@ -26,11 +26,15 @@ import {
   Megaphone,
   FileText,
   MousePointer2,
-  HelpCircle
+  HelpCircle,
+  Trash2
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { auditLandingPage, smartFillForm } from '@/src/services/ai';
-import { Sparkles, Wand2, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { Sparkles, Wand2, Loader2, FileDown, Printer } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface FormData {
   // Section 1
@@ -54,6 +58,7 @@ interface FormData {
   // Section 4
   currentRevenue: string;
   targetRevenue: string;
+  pricingPageUrl: string;
   timeline: string;
   challenges: string[];
   // Section 5
@@ -89,6 +94,7 @@ const INITIAL_FORM_DATA: FormData = {
   conversionRate: '',
   currentRevenue: '',
   targetRevenue: '',
+  pricingPageUrl: '',
   timeline: '',
   challenges: [],
   hasLandingPage: false,
@@ -117,7 +123,54 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
   const [expandedSections, setExpandedSections] = useState<number[]>([1]);
   const [isAuditing, setIsAuditing] = useState(false);
   const [isSmartFilling, setIsSmartFilling] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
+  const reportRef = React.useRef<HTMLDivElement>(null);
+
+  // Persistence: Load saved data on mount
+  useEffect(() => {
+    const savedFormData = localStorage.getItem('titanleap_audit_form');
+    const savedAuditReport = localStorage.getItem('titanleap_audit_report');
+    
+    if (savedFormData) {
+      try {
+        setFormData(JSON.parse(savedFormData));
+      } catch (e) {
+        console.error("Failed to parse saved form data", e);
+      }
+    }
+    
+    if (savedAuditReport) {
+      try {
+        setAuditReport(JSON.parse(savedAuditReport));
+      } catch (e) {
+        console.error("Failed to parse saved audit report", e);
+      }
+    }
+  }, []);
+
+  // Persistence: Save data on change
+  useEffect(() => {
+    localStorage.setItem('titanleap_audit_form', JSON.stringify(formData));
+  }, [formData]);
+
+  useEffect(() => {
+    if (auditReport) {
+      localStorage.setItem('titanleap_audit_report', JSON.stringify(auditReport));
+    } else {
+      localStorage.removeItem('titanleap_audit_report');
+    }
+  }, [auditReport]);
+
+  const handleClearAudit = () => {
+    if (window.confirm("Are you sure you want to clear all audit data? This cannot be undone.")) {
+      setFormData(INITIAL_FORM_DATA);
+      setAuditReport(null);
+      localStorage.removeItem('titanleap_audit_form');
+      localStorage.removeItem('titanleap_audit_report');
+      toast.success("Audit data cleared");
+    }
+  };
 
   const handleSmartFill = async () => {
     if (!formData.websiteUrl) {
@@ -128,9 +181,19 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
     try {
       const data = await smartFillForm(formData.websiteUrl);
       if (data) {
+        // Sanitize numerical strings to ensure they work with type="number" inputs
+        const sanitizeNumber = (val: any) => {
+          if (!val) return '';
+          const cleaned = String(val).replace(/[^0-9.]/g, '');
+          return cleaned;
+        };
+
         setFormData(prev => ({
           ...prev,
-          ...data
+          ...data,
+          pricePoint: sanitizeNumber(data.pricePoint),
+          currentRevenue: sanitizeNumber(data.currentRevenue),
+          targetRevenue: sanitizeNumber(data.targetRevenue),
         }));
       }
     } catch (error) {
@@ -176,20 +239,101 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
   };
 
   const runAudit = async () => {
+    // Validation check
+    if (!formData.businessName.trim() || !formData.websiteUrl.trim()) {
+      toast.error("Required Fields Missing", {
+        description: "Please provide at least a Business Name and Website URL to run the audit."
+      });
+      return;
+    }
+
     setIsAuditing(true);
+    const auditToast = toast.loading("Engineering Audit...", {
+      description: "Analyzing your funnel, offer, and market position."
+    });
+
     try {
       const result = await auditLandingPage(formData);
       if (result) {
         setAuditReport({
           ...result,
+          ...formData, // Include all form data
           businessName: formData.businessName || 'Your Business',
           timestamp: new Date().toLocaleString(),
         });
+        toast.success("Audit Complete!", {
+          id: auditToast,
+          description: "Your algorithmic growth report is ready."
+        });
+      } else {
+        throw new Error("Empty result from AI");
       }
     } catch (error) {
       console.error("Audit failed:", error);
+      toast.error("Audit Failed", {
+        id: auditToast,
+        description: "There was an error generating your report. Please try again."
+      });
     } finally {
       setIsAuditing(false);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!auditReport || !reportRef.current) return;
+    
+    setIsExporting(true);
+    try {
+      // Ensure we are at the top of the page for clean capture
+      const originalScrollY = window.scrollY;
+      window.scrollTo(0, 0);
+
+      // Small delay to ensure any layout shifts are settled
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: false, // Changed to false as it can conflict with useCORS
+        logging: true, // Enable logging for debugging
+        backgroundColor: '#f5f5f0',
+        onclone: (clonedDoc) => {
+          const el = clonedDoc.getElementById('pdf-report-container');
+          if (el) {
+            el.style.position = 'fixed';
+            el.style.top = '0';
+            el.style.left = '0';
+            el.style.visibility = 'visible';
+            el.style.opacity = '1';
+            el.style.zIndex = '9999';
+          }
+        }
+      });
+      
+      // Restore scroll position
+      window.scrollTo(0, originalScrollY);
+
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      
+      // Calculate dimensions to fit A4 if possible, or use canvas size
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height],
+        hotfixes: ['px_scaling']
+      });
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
+      
+      const fileName = `TitanLeap_FunnelsPlus_${formData.businessName.trim().replace(/\s+/g, '_') || 'Report'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+      
+      toast.success("PDF Generated Successfully");
+    } catch (error) {
+      console.error("PDF Export failed:", error);
+      toast.error("Failed to generate PDF. Please try again.");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -204,26 +348,26 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
   };
 
   return (
-    <div className="max-w-[1600px] mx-auto p-12 space-y-16">
+    <div className="max-w-[1600px] mx-auto p-4 md:p-12 space-y-8 md:space-y-16">
       {/* Top Header - Consistent with rest of system */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 relative">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-8 relative">
         <div className="space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full border border-primary/10">
             <Sparkles size={14} className="text-primary" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-primary">Growth Audit</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-primary">Audit</span>
           </div>
-          <h1 className="text-[38px] font-black tracking-tight text-on-surface">Revenue Leakage Audit</h1>
-          <p className="text-[17px] text-on-surface-variant font-sans font-normal max-w-2xl leading-relaxed">
+          <h1 className="text-3xl md:text-[38px] font-black tracking-tight text-on-surface">Revenue Leakage Analysis</h1>
+          <p className="text-sm md:text-[17px] text-on-surface-variant font-sans font-normal max-w-2xl leading-relaxed">
             Tell us about your business — we'll show you exactly where you're leaving money on the table.
           </p>
         </div>
         
-        <div className="flex items-center gap-4">
-          <div className="relative group">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
+          <div className="relative group w-full sm:w-auto">
             <button 
               onClick={handleSmartFill}
               disabled={isSmartFilling || !formData.websiteUrl}
-              className="bg-primary text-on-primary px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 flex items-center gap-3 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100 group"
+              className="w-full sm:w-auto bg-secondary text-on-secondary px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-secondary/20 flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100 group"
             >
               {isSmartFilling ? <Loader2 size={18} className="animate-spin" /> : <Wand2 size={18} className="group-hover:rotate-12 transition-transform" />}
               {isSmartFilling ? 'Analyzing Site...' : 'Smart Fill with AI'}
@@ -236,7 +380,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
           </div>
           
           {/* Floating Progress Card - Compact */}
-          <div className="bg-surface-container-low p-6 rounded-[24px] border border-outline-variant/10 shadow-xl flex flex-col gap-3 min-w-[280px] relative overflow-hidden group">
+          <div className="w-full sm:w-auto bg-surface-container-low p-6 rounded-[24px] border border-outline-variant/10 shadow-xl flex flex-col gap-3 min-w-[280px] relative overflow-hidden group">
             <div className="flex justify-between items-center relative z-10">
               <span className="text-[10px] font-normal uppercase tracking-[0.2em] text-primary">Audit Progress: {progress}%</span>
             </div>
@@ -252,9 +396,19 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-16 items-start">
         {/* Left Column - Intake Form */}
-        <div className="lg:col-span-5 space-y-10">
+        <div className="lg:col-span-5 space-y-8 md:space-y-10">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant/40">Audit Intake</h2>
+            <button 
+              onClick={handleClearAudit}
+              className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 hover:text-destructive transition-colors"
+            >
+              <Trash2 size={14} />
+              Clear Data
+            </button>
+          </div>
           <div className="space-y-4">
             {/* Section 1 */}
             <CollapsibleSection 
@@ -423,6 +577,15 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     />
                   </div>
                 </InputGroup>
+                <InputGroup label="Pricing Page URL" tooltip="The page where your offers and pricing are listed. We audit this for clarity and conversion triggers.">
+                  <input 
+                    type="text" 
+                    value={formData.pricingPageUrl}
+                    onChange={e => setFormData({...formData, pricingPageUrl: e.target.value})}
+                    placeholder="https://lumina.digital/pricing"
+                    className="audit-input"
+                  />
+                </InputGroup>
                 <InputGroup label="Do you have an upsell or down-sell?" tooltip="The secret to profitability. Without these, you're likely over-paying for every customer you acquire.">
                   <div className="space-y-4">
                     <Toggle 
@@ -480,13 +643,22 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     />
                   </InputGroup>
                   <InputGroup label="Target monthly revenue" tooltip="Your North Star. We reverse-engineer the exact traffic and conversion numbers needed to hit this goal.">
-                    <input 
-                      type="number" 
-                      value={formData.targetRevenue}
-                      onChange={e => setFormData({...formData, targetRevenue: e.target.value})}
-                      placeholder="20000"
-                      className="audit-input"
-                    />
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        value={formData.targetRevenue}
+                        onChange={e => setFormData({...formData, targetRevenue: e.target.value})}
+                        placeholder="20000"
+                        className="audit-input pr-24"
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-primary/10 rounded-lg border border-primary/10 flex items-center gap-1.5 group/goal">
+                        <Target size={10} className="text-primary" />
+                        <span className="text-[8px] font-black uppercase tracking-widest text-primary">5-10 Clients</span>
+                        <div className="absolute bottom-full right-0 mb-2 w-48 p-3 bg-on-surface text-surface text-[9px] font-bold rounded-xl opacity-0 group-hover/goal:opacity-100 pointer-events-none transition-all shadow-xl z-50 border border-white/10">
+                          Calculated based on your price point assuming a goal of 5-10 new clients per month.
+                        </div>
+                      </div>
+                    </div>
                   </InputGroup>
                 </div>
                 <InputGroup label="Timeline to hit target" tooltip="Sets the pace. A 30-day goal requires aggressive scaling; a 1-year goal allows for deeper brand building.">
@@ -664,8 +836,9 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
             <button 
               onClick={runAudit}
               disabled={isAuditing}
-              className="w-full py-8 bg-secondary text-on-secondary font-black text-xl uppercase tracking-[0.3em] rounded-3xl shadow-[0_20px_40px_rgba(250,204,21,0.2)] hover:shadow-[0_30px_60px_rgba(250,204,21,0.3)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-4 disabled:opacity-50"
+              className="w-full py-8 bg-primary text-on-primary font-black text-xl uppercase tracking-[0.3em] rounded-[32px] shadow-[0_20px_60px_rgba(71,0,175,0.3)] hover:shadow-[0_30px_80px_rgba(71,0,175,0.5)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-4 disabled:opacity-50 relative overflow-hidden group"
             >
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
               {isAuditing ? (
                 <>
                   <motion.div 
@@ -726,7 +899,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#00ff85]">
                         <div className="w-2 h-2 rounded-full bg-[#00ff85] animate-pulse" />
-                        Audit Generated
+                        Analysis Generated
                       </div>
                       <h2 className="text-4xl font-display font-black text-on-surface tracking-tight">
                         Audit Report — {auditReport.businessName}
@@ -765,6 +938,19 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                           </div>
                         </div>
                       </div>
+                      
+                      {/* Social Links Found */}
+                      {formData.socialHandles.some(h => h.trim() !== '') && (
+                        <div className="pt-4 border-t border-white/10 flex flex-wrap gap-4">
+                          {formData.socialHandles.filter(h => h.trim() !== '').map((handle, i) => (
+                            <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/60">
+                              <Globe size={12} />
+                              {handle}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       <p className="text-base font-medium text-white/70 max-w-xl leading-relaxed">
                         Our analysis shows high leakage in your middle-of-funnel conversion. Fixing these 3 critical items will bridge this gap within 45 days.
                       </p>
@@ -831,8 +1017,13 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
 
                   {/* Footer Actions */}
                   <div className="mt-auto pt-12 border-t border-outline-variant/10 flex items-center gap-6">
-                    <button className="flex-1 py-5 bg-surface-container-low border border-outline-variant/10 rounded-2xl font-black text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-all shadow-sm">
-                      Export Report
+                    <button 
+                      onClick={handleExportPDF}
+                      disabled={isExporting}
+                      className="flex-1 py-5 bg-surface-container-low border border-outline-variant/10 rounded-2xl font-black text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-all shadow-sm flex items-center justify-center gap-2"
+                    >
+                      {isExporting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                      {isExporting ? 'Generating...' : 'Export Report'}
                     </button>
                     <button className="flex-1 py-5 bg-surface-container-low border border-outline-variant/10 rounded-2xl font-black text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-all shadow-sm">
                       Share with Client
@@ -848,6 +1039,130 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                 </motion.div>
               )}
             </AnimatePresence>
+          </div>
+        </div>
+      </div>
+
+      {/* Hidden PDF Template */}
+      <div id="pdf-report-container" style={{ position: 'absolute', left: '-9999px', top: 0, opacity: 0, pointerEvents: 'none' }}>
+        <div 
+          ref={reportRef}
+          className="w-[800px] bg-[#f5f5f0] p-16 space-y-12 font-serif"
+          style={{ minHeight: '1131px' }} // A4 aspect ratio approx
+        >
+          {/* Header */}
+          <div className="flex justify-between items-end border-b-2 border-on-surface pb-8">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-on-primary">
+                  <Zap size={24} fill="currentColor" />
+                </div>
+                <span className="text-2xl font-black uppercase tracking-tighter">TitanLeap</span>
+              </div>
+              <h1 className="text-5xl font-black tracking-tight text-on-surface">Audit Report</h1>
+            </div>
+            <div className="text-right space-y-1">
+              <p className="text-xs font-black uppercase tracking-widest text-on-surface-variant">Confidential Analysis</p>
+              <p className="text-sm font-bold">{new Date().toLocaleDateString()}</p>
+            </div>
+          </div>
+
+          {/* Business Info */}
+          <div className="grid grid-cols-2 gap-12">
+            <div className="space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Client</p>
+              <p className="text-2xl font-black">{formData.businessName || 'Untitled Business'}</p>
+              <p className="text-sm text-on-surface-variant">{formData.websiteUrl}</p>
+            </div>
+            <div className="space-y-2 text-right">
+              <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Industry</p>
+              <p className="text-xl font-bold">{formData.industry || 'Not Specified'}</p>
+            </div>
+          </div>
+
+          {/* Revenue Gap Section */}
+          <div className="bg-[#3b00b9] rounded-[40px] p-12 text-white relative overflow-hidden">
+            <div className="relative z-10 space-y-6">
+              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">Estimated Monthly Revenue Gap</p>
+              <h2 className="text-7xl font-black tracking-tighter text-[#00ff85]">
+                ${auditReport?.revenueGap?.toLocaleString() || '0'}
+                <span className="text-2xl text-white/30 ml-3 font-medium">/mo</span>
+              </h2>
+              
+              {/* Social Links in PDF */}
+              {formData.socialHandles.some(h => h.trim() !== '') && (
+                <div className="pt-4 border-t border-white/10 flex flex-wrap gap-4">
+                  {formData.socialHandles.filter(h => h.trim() !== '').map((handle, i) => (
+                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/60">
+                      {handle}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-lg font-medium text-white/70 max-w-xl leading-relaxed">
+                This figure represents the immediate growth opportunity identified through our algorithmic analysis of your current funnel efficiency and market benchmarks.
+              </p>
+            </div>
+          </div>
+
+          {/* Pricing & Offer Details */}
+          <div className="grid grid-cols-2 gap-8 bg-surface-container-low p-8 rounded-3xl border border-outline-variant/10">
+            <div className="space-y-2">
+              <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Primary Offer</p>
+              <p className="text-lg font-black text-on-surface">{formData.mainOffer || 'N/A'}</p>
+              <p className="text-xs text-on-surface-variant italic">"{formData.differentiator}"</p>
+            </div>
+            <div className="space-y-2 text-right">
+              <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Price Point</p>
+              <p className="text-2xl font-black text-primary">{formData.currency} {formData.pricePoint}</p>
+              <p className="text-[10px] font-bold text-on-surface-variant/60">Pricing Page: {formData.pricingPageUrl || 'N/A'}</p>
+            </div>
+          </div>
+
+          {/* Key Findings */}
+          <div className="space-y-8">
+            <h3 className="text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant/40 border-b border-outline-variant/10 pb-4">Critical Leakage Points</h3>
+            <div className="space-y-8">
+              {auditReport?.issues?.map((issue: any, idx: number) => (
+                <div key={idx} className="grid grid-cols-12 gap-8 items-start">
+                  <div className="col-span-1 text-4xl font-black text-on-surface-variant/20 italic">
+                    0{idx + 1}
+                  </div>
+                  <div className="col-span-11 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h4 className="text-2xl font-black text-on-surface">{issue.area}</h4>
+                      <span className="px-4 py-1 bg-error/10 text-error rounded-full text-[10px] font-black uppercase tracking-widest">
+                        {issue.priority}
+                      </span>
+                    </div>
+                    <p className="text-lg font-medium text-on-surface-variant leading-relaxed">
+                      {issue.problem}
+                    </p>
+                    <div className="grid grid-cols-2 gap-8 pt-4">
+                      <div className="space-y-1">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Revenue Impact</p>
+                        <p className="text-xl font-black text-error">-${issue.impact?.toLocaleString()}/mo</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Strategic Action</p>
+                        <p className="text-base font-black text-on-surface">{issue.action}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="pt-12 border-t border-outline-variant/10 flex justify-between items-center">
+            <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">
+              Generated by TitanLeap AI Growth Engine
+            </p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">
+              titanleap.ai
+            </p>
           </div>
         </div>
       </div>

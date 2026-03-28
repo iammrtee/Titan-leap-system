@@ -59,17 +59,17 @@ export const DashboardOverview: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <section className="flex justify-between items-end">
+      <section className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 md:gap-0">
         <div className="space-y-1">
-          <h3 className="text-4xl font-extrabold text-on-surface tracking-tight">Overview</h3>
-          <p className="text-on-surface-variant font-medium">Real-time performance metrics for your enterprise ecosystem.</p>
+          <h3 className="text-3xl md:text-4xl font-extrabold text-on-surface tracking-tight">Overview</h3>
+          <p className="text-sm md:text-base text-on-surface-variant font-medium">Real-time performance metrics for your enterprise ecosystem.</p>
         </div>
-        <div className="flex gap-3">
-          <button className="bg-surface-container-high text-primary px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-surface-container-highest transition-colors active:scale-95">
+        <div className="flex flex-wrap gap-3 w-full md:w-auto">
+          <button className="flex-1 md:flex-none justify-center bg-surface-container-high text-primary px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-surface-container-highest transition-colors active:scale-95">
             <ArrowUpRight size={16} />
             Export Report
           </button>
-          <button className="bg-primary-container text-on-primary px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-primary/20">
+          <button className="flex-1 md:flex-none justify-center bg-primary-container text-on-primary px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-primary/20">
             <Zap size={16} fill="currentColor" />
             New Campaign
           </button>
@@ -81,19 +81,19 @@ export const DashboardOverview: React.FC = () => {
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="md:col-span-2 relative overflow-hidden bg-surface-container-lowest rounded-xl p-8 shadow-ambient flex flex-col justify-between min-h-[240px]"
+          className="md:col-span-2 relative overflow-hidden bg-surface-container-lowest rounded-xl p-6 md:p-8 shadow-ambient flex flex-col justify-between min-h-[240px]"
         >
-          <div className="absolute top-0 right-0 p-8">
+          <div className="absolute top-0 right-0 p-4 md:p-8">
             <div className="flex bg-surface-container-low p-1 rounded-lg">
-              <button className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/40 hover:text-on-surface transition-colors">7d</button>
-              <button className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider bg-surface-container-lowest shadow-sm rounded-md text-primary">30d</button>
-              <button className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/40 hover:text-on-surface transition-colors">1yr</button>
+              <button className="px-2 md:px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/40 hover:text-on-surface transition-colors">7d</button>
+              <button className="px-2 md:px-3 py-1 text-[10px] font-bold uppercase tracking-wider bg-surface-container-lowest shadow-sm rounded-md text-primary">30d</button>
+              <button className="px-2 md:px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/40 hover:text-on-surface transition-colors">1yr</button>
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1 mt-12 md:mt-0">
             <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-on-surface-variant/60">Total Revenue</span>
-            <div className="flex items-baseline gap-2">
-              <h4 className="text-6xl font-black text-primary tracking-tighter">$142,840</h4>
+            <div className="flex flex-wrap items-baseline gap-2">
+              <h4 className="text-4xl md:text-6xl font-black text-primary tracking-tighter">$142,840</h4>
               <div className="bg-secondary-container px-2 py-1 rounded-md flex items-center gap-1">
                 <TrendingUp size={14} className="font-bold text-on-secondary-fixed-variant" />
                 <span className="text-[10px] font-bold text-on-secondary-fixed-variant">+12.4%</span>

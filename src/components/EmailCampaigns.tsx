@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, Target, FileText, Layout, Plus, MoreHorizontal, Download, Upload, Trash2, Flag, CheckCircle2, AlertCircle, TrendingUp, Zap, Sparkles, Search, Filter, ChevronRight, Share2, Clock, Instagram, Twitter, Linkedin, Youtube, Play, BarChart3, PieChart, RefreshCw, Users, X, Eye, Send } from 'lucide-react';
+import { Mail, Target, FileText, Layout, Plus, MoreHorizontal, Download, Upload, Trash2, Flag, CheckCircle2, AlertCircle, TrendingUp, Zap, Sparkles, Search, Filter, ChevronRight, Share2, Clock, Instagram, Twitter, Linkedin, Youtube, Play, BarChart3, PieChart, RefreshCw, Users, X, Eye, Send, ShieldCheck, MessageSquare, AlertTriangle, ArrowRight, Loader2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { auditMarketingFunnel } from '@/src/services/ai';
+import { toast } from 'sonner';
 
-type EmailTab = 'strategy' | 'scripts' | 'design';
+type EmailTab = 'strategy' | 'scripts' | 'design' | 'audit';
 
 const EmailScriptCard = ({ campaign, subject, body, status, color, onPreview }: any) => (
   <div className="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/10 shadow-sm hover:shadow-md transition-all group">
@@ -80,6 +82,152 @@ const EmailDesignCard = ({ campaign, previewUrl, status, onPreview }: any) => (
     </div>
   </div>
 );
+
+const EmailAuditView = () => {
+  const [isAuditing, setIsAuditing] = useState(false);
+  const [auditResult, setAuditResult] = useState<any>(null);
+  const [emailData, setEmailData] = useState('');
+
+  const handleAudit = async () => {
+    if (!emailData) {
+      toast.error("Please provide email sequence data for analysis.");
+      return;
+    }
+
+    setIsAuditing(true);
+    try {
+      const result = await auditMarketingFunnel({ type: 'email_sequence', content: emailData });
+      if (result) {
+        setAuditResult(result);
+        toast.success("Email audit complete!");
+      } else {
+        toast.error("Failed to audit email sequence.");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("An error occurred during the audit.");
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="bg-surface-container-low rounded-[40px] p-10 border border-outline-variant/10 shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 blur-[120px] rounded-full -translate-y-1/2 translate-x-1/2" />
+        
+        <div className="flex items-center gap-5 mb-10 relative z-10">
+          <div className="w-16 h-16 rounded-3xl bg-primary/10 flex items-center justify-center text-primary shadow-inner">
+            <ShieldCheck size={32} />
+          </div>
+          <div>
+            <h3 className="text-3xl font-black text-on-surface tracking-tight">Email Sequence Audit</h3>
+            <p className="text-sm font-medium text-on-surface-variant/40">Analyze your sequence for psychological triggers and conversion leaks</p>
+          </div>
+        </div>
+
+        <div className="space-y-6 relative z-10">
+          <div className="space-y-2">
+            <label className="text-[11px] font-black uppercase tracking-[0.2em] text-on-surface-variant/60 ml-1">
+              Paste Email Sequence Content
+            </label>
+            <textarea 
+              rows={8}
+              value={emailData}
+              onChange={(e) => setEmailData(e.target.value)}
+              placeholder="Paste your subject lines and body copy here for a full conversion audit..."
+              className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-3xl p-6 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all resize-none text-on-surface placeholder:text-on-surface-variant/20"
+            />
+          </div>
+          
+          <button 
+            onClick={handleAudit}
+            disabled={isAuditing}
+            className="w-full bg-primary text-on-primary py-6 rounded-3xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-primary/20 hover:scale-[1.01] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-4"
+          >
+            {isAuditing ? <Loader2 size={24} className="animate-spin" /> : <Sparkles size={24} />}
+            {isAuditing ? 'Analyzing Sequence...' : 'Run Conversion Audit'}
+          </button>
+        </div>
+      </div>
+
+      <AnimatePresence mode="wait">
+        {auditResult && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="grid grid-cols-1 lg:grid-cols-12 gap-8"
+          >
+            {/* Verdict & Stages */}
+            <div className="lg:col-span-8 space-y-8">
+              <div className="bg-surface-container-low rounded-[40px] p-10 border border-outline-variant/10 shadow-xl">
+                <div className="flex items-center gap-4 mb-8">
+                  <div className="w-12 h-12 rounded-2xl bg-warning/10 text-warning flex items-center justify-center">
+                    <AlertTriangle size={24} />
+                  </div>
+                  <h4 className="text-2xl font-black text-on-surface tracking-tight">The Verdict</h4>
+                </div>
+                <p className="text-lg font-medium text-on-surface-variant leading-relaxed italic border-l-4 border-primary pl-6 py-2">
+                  "{auditResult.verdict}"
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {auditResult.stages.map((stage: any, idx: number) => (
+                  <div key={idx} className="bg-surface-container-low rounded-[32px] p-8 border border-outline-variant/10 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex items-center justify-between mb-6">
+                      <h5 className="text-[11px] font-black uppercase tracking-[0.2em] text-on-surface-variant/60">{stage.name}</h5>
+                      <div className={cn(
+                        "w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm",
+                        stage.score >= 8 ? "bg-success/10 text-success" : stage.score >= 5 ? "bg-warning/10 text-warning" : "bg-error/10 text-error"
+                      )}>
+                        {stage.score}/10
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <p className="text-sm font-medium text-on-surface leading-relaxed">{stage.analysis}</p>
+                      <div className="pt-4 border-t border-outline-variant/5">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-error mb-1">Revenue Leak</p>
+                        <p className="text-xs font-bold text-on-surface-variant">{stage.moneyLeak}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Top Fixes */}
+            <div className="lg:col-span-4 space-y-8">
+              <div className="bg-surface-container-highest/20 rounded-[40px] p-10 border border-outline-variant/10 shadow-sm">
+                <div className="flex items-center gap-4 mb-8">
+                  <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                    <Zap size={24} />
+                  </div>
+                  <h4 className="text-xl font-black text-on-surface tracking-tight">Top 3 Fixes</h4>
+                </div>
+                <div className="space-y-6">
+                  {auditResult.topFixes.map((fix: any, idx: number) => (
+                    <div key={idx} className="space-y-3 p-6 bg-surface-container-lowest rounded-3xl border border-outline-variant/5">
+                      <div className="flex items-center justify-between">
+                        <h6 className="text-sm font-black text-primary">{fix.title}</h6>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-success">{fix.expectedRoi} ROI</span>
+                      </div>
+                      <p className="text-xs font-medium text-on-surface-variant leading-relaxed">{fix.action}</p>
+                    </div>
+                  ))}
+                </div>
+                <button className="w-full mt-8 py-5 bg-primary text-on-primary rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 flex items-center justify-center gap-3 hover:brightness-110 transition-all">
+                  Apply All Fixes
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 export const EmailCampaigns: React.FC = () => {
   const [activeTab, setActiveTab] = useState<EmailTab>('strategy');
@@ -233,6 +381,8 @@ export const EmailCampaigns: React.FC = () => {
             </div>
           </div>
         );
+      case 'audit':
+        return <EmailAuditView />;
     }
   };
 
@@ -245,6 +395,7 @@ export const EmailCampaigns: React.FC = () => {
             { id: 'strategy', label: 'Strategy', icon: Target },
             { id: 'scripts', label: 'Scripts', icon: FileText },
             { id: 'design', label: 'Design', icon: Layout },
+            { id: 'audit', label: 'Email Audit', icon: ShieldCheck },
           ].map((tab) => (
             <button
               key={tab.id}

@@ -1,69 +1,56 @@
 import React from 'react';
-import { Search, Bell, Settings } from 'lucide-react';
+import { Search, Bell, HelpCircle, Menu } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 
 interface TopBarProps {
   title: string;
   subtitle?: string;
   badge?: string | number;
+  onToggleMobileMenu?: () => void;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ title, subtitle, badge }) => {
+export const TopBar: React.FC<TopBarProps> = ({ title, subtitle, badge, onToggleMobileMenu }) => {
   return (
-    <header className="w-full sticky top-0 z-40 bg-surface/80 backdrop-blur-xl shadow-ambient h-16 flex items-center justify-between px-8">
-      <div className="flex items-center gap-4">
-        <h2 className="text-xl font-bold text-on-surface tracking-tighter">{title}</h2>
-        {subtitle && (
-          <>
-            <div className="h-6 w-[1px] bg-outline-variant/30 mx-2" />
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-on-surface-variant">{subtitle}</span>
-              {badge !== undefined && (
-                <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-[10px] font-bold">
-                  {badge}
-                </span>
-              )}
-            </div>
-          </>
+    <header className="w-full sticky top-0 z-40 bg-surface/60 backdrop-blur-2xl border-b border-outline-variant/5 h-16 flex items-center justify-between px-4 md:px-8">
+      <div className="flex items-center gap-4 md:gap-6">
+        {onToggleMobileMenu && (
+          <button 
+            onClick={onToggleMobileMenu}
+            className="p-2 -ml-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-lg md:hidden transition-colors"
+          >
+            <Menu size={20} />
+          </button>
         )}
+        <h1 className="text-lg md:text-xl font-bold text-primary tracking-tight truncate">FunnelMonolith</h1>
       </div>
 
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-8">
         {/* Search */}
-        <div className="relative hidden lg:block">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50" size={18} />
+        <div className="relative hidden xl:block group">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={14} />
           <input 
             type="text" 
-            placeholder="Search strategy assets..." 
-            className="bg-surface-container-low border-none rounded-full py-2 pl-10 pr-4 text-sm w-64 focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-on-surface-variant/40"
+            placeholder="Search architecture..." 
+            className="bg-surface-container-low/50 border border-outline-variant/10 rounded-md py-1.5 pl-9 pr-4 text-xs w-64 focus:w-80 focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-low transition-all placeholder:text-on-surface-variant/40 font-medium"
           />
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-4">
-          <button className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors relative active:scale-95">
-            <Bell size={20} />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-secondary-container rounded-full border-2 border-surface" />
+          <button className="text-on-surface-variant/60 hover:text-on-surface transition-colors relative">
+            <Bell size={18} />
           </button>
-          <button className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors active:scale-95">
-            <Settings size={20} />
+          <button className="text-on-surface-variant/60 hover:text-on-surface transition-colors">
+            <HelpCircle size={18} />
           </button>
           
-          <div className="h-8 w-[1px] bg-outline-variant/30 mx-2" />
-          
-          <div className="flex items-center gap-3 cursor-pointer group">
-            <div className="text-right hidden sm:block">
-              <p className="text-xs font-bold text-on-surface leading-none">Alex Sterling</p>
-              <p className="text-[10px] text-on-surface-variant uppercase tracking-wider font-bold mt-1">Admin</p>
-            </div>
-            <div className="w-8 h-8 rounded-full border border-outline-variant/20 overflow-hidden ring-2 ring-primary/5 group-hover:ring-primary/20 transition-all">
-              <img 
-                src="https://picsum.photos/seed/alex/100/100" 
-                alt="User profile" 
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            </div>
+          <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/10 ml-2">
+            <img 
+              src="https://picsum.photos/seed/alex/100/100" 
+              alt="User profile" 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
           </div>
         </div>
       </div>

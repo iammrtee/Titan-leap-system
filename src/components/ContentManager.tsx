@@ -16,14 +16,15 @@ interface ContentItem {
   author: string;
   hasScript: boolean;
   campaign: string;
+  description?: string;
 }
 
-const ContentCard = ({ item }: any) => (
+const ContentCard: React.FC<{ item: ContentItem; onScheduleClick?: (item: ContentItem) => void }> = ({ item, onScheduleClick }) => (
   <motion.div 
     layout
     initial={{ opacity: 0, scale: 0.9 }}
     animate={{ opacity: 1, scale: 1 }}
-    className="bg-surface-container-low p-5 rounded-2xl border border-outline-variant/10 shadow-sm hover:shadow-md transition-all group cursor-pointer"
+    className="bg-surface-container-low p-5 rounded-2xl border border-outline-variant/10 shadow-sm hover:shadow-md transition-all group cursor-pointer relative"
   >
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-2">
@@ -64,12 +65,31 @@ const ContentCard = ({ item }: any) => (
         </div>
       )}
     </div>
+    
+    {item.status === 'Draft' && onScheduleClick && (
+      <div className="mt-4 pt-4 border-t border-outline-variant/5">
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            onScheduleClick(item);
+          }}
+          className="w-full py-2 bg-primary/10 text-primary rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary hover:text-white transition-all flex items-center justify-center gap-2"
+        >
+          <Clock size={14} />
+          Add to Calendar
+        </button>
+      </div>
+    )}
   </motion.div>
 );
 
 export const ContentManager: React.FC = () => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [itemToSchedule, setItemToSchedule] = useState<ContentItem | null>(null);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('09:00 AM');
   const [items, setItems] = useState<ContentItem[]>([
     { id: '1', title: 'The 3-step framework to scale your SaaS', platform: 'Instagram', status: 'Draft', dueDate: 'Mar 24', author: 'Elena Vance', hasScript: true, campaign: 'Growth Accelerator' },
     { id: '2', title: 'Why your growth is stalled (and how to fix it)', platform: 'TikTok', status: 'Scheduled', dueDate: 'Mar 25', author: 'Marcus Thorne', hasScript: true, campaign: 'Growth Accelerator' },
@@ -108,6 +128,7 @@ export const ContentManager: React.FC = () => {
     const item: ContentItem = {
       id: Math.random().toString(36).substr(2, 9),
       title: idea.title,
+      description: idea.description,
       platform: idea.platform as Platform,
       status: 'Draft',
       dueDate: 'Next Week',
@@ -118,6 +139,47 @@ export const ContentManager: React.FC = () => {
     setItems([item, ...items]);
     // Remove from ideas list or mark as added
     setAiIdeas(aiIdeas.filter(i => i.title !== idea.title));
+  };
+
+  const handleScheduleItem = () => {
+    if (!itemToSchedule || !scheduleDate) return;
+
+    const [yearStr, monthStr, dayStr] = scheduleDate.split('-');
+    const day = parseInt(dayStr, 10);
+    const month = parseInt(monthStr, 10) - 1; // 0-indexed
+    const year = parseInt(yearStr, 10);
+
+    const newCalendarItem = {
+      id: Math.random().toString(36).substr(2, 9),
+      day,
+      month,
+      year,
+      platform: itemToSchedule.platform,
+      title: itemToSchedule.title,
+      description: itemToSchedule.description || '',
+      status: 'scheduled',
+      type: 'post',
+      time: scheduleTime
+    };
+
+    // Get existing calendar items
+    const existingItemsStr = localStorage.getItem('titanleap_calendar_items');
+    const existingItems = existingItemsStr ? JSON.parse(existingItemsStr) : [];
+    
+    // Add new item
+    const updatedCalendarItems = [...existingItems, newCalendarItem];
+    localStorage.setItem('titanleap_calendar_items', JSON.stringify(updatedCalendarItems));
+
+    // Update item status in ContentManager
+    setItems(items.map(i => 
+      i.id === itemToSchedule.id 
+        ? { ...i, status: 'Scheduled', dueDate: scheduleDate } 
+        : i
+    ));
+
+    setIsScheduleModalOpen(false);
+    setItemToSchedule(null);
+    setScheduleDate('');
   };
 
   const handleAddItem = () => {
@@ -303,7 +365,14 @@ export const ContentManager: React.FC = () => {
               </div>
               <div className="space-y-4 min-h-[400px] bg-surface-container-lowest/30 rounded-3xl p-4 border border-dashed border-outline-variant/20">
                 {items.filter(i => i.status === status).map((item) => (
-                  <ContentCard key={item.id} item={item} />
+                  <ContentCard 
+                    key={item.id} 
+                    item={item} 
+                    onScheduleClick={(item) => {
+                      setItemToSchedule(item);
+                      setIsScheduleModalOpen(true);
+                    }}
+                  />
                 ))}
               </div>
             </div>
@@ -355,9 +424,23 @@ export const ContentManager: React.FC = () => {
                     <span className="text-xs font-bold text-on-surface-variant">{item.dueDate}</span>
                   </td>
                   <td className="py-4 px-6 text-right">
-                    <button className="text-on-surface-variant/40 hover:text-on-surface">
-                      <MoreHorizontal size={18} />
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      {item.status === 'Draft' && (
+                        <button 
+                          onClick={() => {
+                            setItemToSchedule(item);
+                            setIsScheduleModalOpen(true);
+                          }}
+                          className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                          title="Add to Calendar"
+                        >
+                          <Clock size={16} />
+                        </button>
+                      )}
+                      <button className="text-on-surface-variant/40 hover:text-on-surface p-2">
+                        <MoreHorizontal size={18} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -446,6 +529,72 @@ export const ContentManager: React.FC = () => {
                 >
                   <Plus size={18} />
                   Create Content Piece
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Schedule Modal */}
+      <AnimatePresence>
+        {isScheduleModalOpen && itemToSchedule && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsScheduleModalOpen(false)}
+              className="absolute inset-0 bg-on-surface/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md bg-surface-container-low rounded-3xl shadow-2xl border border-outline-variant/10 p-8"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-2xl font-black tracking-tight text-on-surface">Schedule Content</h3>
+                <button onClick={() => setIsScheduleModalOpen(false)} className="p-2 hover:bg-surface-container rounded-full transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="mb-6 p-4 bg-surface-container-lowest rounded-2xl border border-outline-variant/10">
+                <p className="text-sm font-bold text-on-surface mb-1">{itemToSchedule.title}</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">{itemToSchedule.platform}</span>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 ml-1">Date</label>
+                  <input 
+                    type="date" 
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                    className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-2xl px-4 py-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 ml-1">Time</label>
+                  <input 
+                    type="time" 
+                    value={scheduleTime}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                    className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-2xl px-4 py-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                  />
+                </div>
+
+                <button 
+                  onClick={handleScheduleItem}
+                  disabled={!scheduleDate}
+                  className="w-full monolith-gradient text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-primary/30 flex items-center justify-center gap-2 hover:scale-[1.02] transition-all active:scale-95 mt-4 disabled:opacity-50 disabled:hover:scale-100"
+                >
+                  <Clock size={18} />
+                  Add to Calendar
                 </button>
               </div>
             </motion.div>
