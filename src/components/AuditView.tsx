@@ -32,9 +32,10 @@ import {
 import { cn } from '@/src/lib/utils';
 import { auditLandingPage, smartFillForm } from '@/src/services/ai';
 import { toast } from 'sonner';
-import { Sparkles, Wand2, Loader2, FileDown, Printer } from 'lucide-react';
+import { Sparkles, Wand2, Loader2, FileDown, Printer, RefreshCw } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import { Logo } from './Logo';
 
 interface FormData {
   // Section 1
@@ -125,6 +126,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
   const [isSmartFilling, setIsSmartFilling] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'intake' | 'result'>('intake');
   const reportRef = React.useRef<HTMLDivElement>(null);
 
   // Persistence: Load saved data on mount
@@ -253,7 +255,10 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
     });
 
     try {
-      const result = await auditLandingPage(formData);
+      const [result] = await Promise.all([
+        auditLandingPage(formData),
+        new Promise(resolve => setTimeout(resolve, 3000))
+      ]);
       if (result) {
         setAuditReport({
           ...result,
@@ -265,6 +270,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
           id: auditToast,
           description: "Your algorithmic growth report is ready."
         });
+        setActiveTab('result');
       } else {
         throw new Error("Empty result from AI");
       }
@@ -291,36 +297,69 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
       // Small delay to ensure any layout shifts are settled
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      const canvas = await html2canvas(reportRef.current, {
+      const container = reportRef.current;
+      if (!container) throw new Error("PDF container not found");
+      
+      // Temporarily move into viewport to ensure html2canvas can render it
+      const parent = container.parentElement;
+      let originalLeft = '';
+      let originalTop = '';
+      let originalZIndex = '';
+      
+      if (parent) {
+        originalLeft = parent.style.left;
+        originalTop = parent.style.top;
+        originalZIndex = parent.style.zIndex;
+        
+        parent.style.left = '0';
+        parent.style.top = `${window.scrollY}px`;
+        parent.style.zIndex = '-1000';
+      }
+      
+      // Wait a frame for layout
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      if (container.scrollWidth === 0 || container.scrollHeight === 0) {
+        // Restore before throwing
+        if (parent) {
+          parent.style.left = originalLeft;
+          parent.style.top = originalTop;
+          parent.style.zIndex = originalZIndex;
+        }
+        throw new Error("PDF container has 0 width or height");
+      }
+
+      const canvas = await html2canvas(container, {
         scale: 2,
         useCORS: true,
-        allowTaint: false, // Changed to false as it can conflict with useCORS
-        logging: true, // Enable logging for debugging
+        allowTaint: false,
+        logging: true,
         backgroundColor: '#f5f5f0',
-        onclone: (clonedDoc) => {
-          const el = clonedDoc.getElementById('pdf-report-container');
-          if (el) {
-            el.style.position = 'fixed';
-            el.style.top = '0';
-            el.style.left = '0';
-            el.style.visibility = 'visible';
-            el.style.opacity = '1';
-            el.style.zIndex = '9999';
-          }
-        }
+        windowWidth: container.scrollWidth,
+        windowHeight: container.scrollHeight
       });
+      
+      // Restore position
+      if (parent) {
+        parent.style.left = originalLeft;
+        parent.style.top = originalTop;
+        parent.style.zIndex = originalZIndex;
+      }
       
       // Restore scroll position
       window.scrollTo(0, originalScrollY);
 
       const imgData = canvas.toDataURL('image/png', 1.0);
       
+      if (canvas.width === 0 || canvas.height === 0) {
+        throw new Error("Canvas dimensions are zero");
+      }
+
       // Calculate dimensions to fit A4 if possible, or use canvas size
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
         unit: 'px',
-        format: [canvas.width, canvas.height],
-        hotfixes: ['px_scaling']
+        format: [canvas.width, canvas.height]
       });
       
       pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
@@ -331,7 +370,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
       toast.success("PDF Generated Successfully");
     } catch (error) {
       console.error("PDF Export failed:", error);
-      toast.error("Failed to generate PDF. Please try again.");
+      toast.error(`Failed to generate PDF: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsExporting(false);
     }
@@ -396,9 +435,48 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-16 items-start">
-        {/* Left Column - Intake Form */}
-        <div className="lg:col-span-5 space-y-8 md:space-y-10">
+      {/* Mini Tab Navigation */}
+      <div className="flex items-center justify-between mb-8 md:mb-12">
+        <div className="flex items-center gap-2 p-1.5 bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-x-auto no-scrollbar w-full lg:w-auto">
+          <button
+            onClick={() => setActiveTab('intake')}
+            className={cn(
+              "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0",
+              activeTab === 'intake' 
+                ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10" 
+                : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container"
+            )}
+          >
+            <FileText size={16} />
+            Audit Intake
+          </button>
+          <button
+            onClick={() => setActiveTab('result')}
+            disabled={!auditReport}
+            className={cn(
+              "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0",
+              activeTab === 'result' 
+                ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10" 
+                : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container",
+              !auditReport && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            <Sparkles size={16} />
+            Audit Result
+          </button>
+        </div>
+      </div>
+
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.2 }}
+        >
+          {activeTab === 'intake' ? (
+            <div className="max-w-3xl mx-auto space-y-8 md:space-y-10">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant/40">Audit Intake</h2>
             <button 
@@ -861,40 +939,12 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
             </p>
           </div>
         </div>
-
-        {/* Right Column - Audit Output */}
-        <div className="lg:col-span-7">
-          <div className="bg-surface-container-lowest rounded-[48px] border border-outline-variant/10 shadow-2xl min-h-[900px] flex flex-col sticky top-12 overflow-hidden">
-            <AnimatePresence mode="wait">
-              {!auditReport ? (
-                <motion.div 
-                  key="placeholder"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex-1 flex flex-col items-center justify-center p-20 relative"
-                >
-                  <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#00d1ff 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
-                  <div className="w-32 h-32 rounded-[40px] bg-surface-container-low flex items-center justify-center text-[#00d1ff]/10 mb-8">
-                    <BarChart3 size={64} />
-                  </div>
-                  <div className="space-y-2 text-center">
-                    <p className="text-2xl font-display font-black text-on-surface tracking-tight">
-                      Ready for Analysis
-                    </p>
-                    <p className="text-sm font-medium text-on-surface-variant/40 max-w-xs mx-auto">
-                      Complete the intake form to generate your high-performance revenue roadmap.
-                    </p>
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div 
-                  key="report"
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="flex-1 flex flex-col p-12 space-y-12"
-                >
-                  {/* Report Header */}
+        ) : (
+          <div className="max-w-5xl mx-auto w-full">
+              <div className="bg-surface-container-lowest rounded-[48px] border border-outline-variant/10 shadow-2xl min-h-[900px] flex flex-col overflow-hidden">
+                {auditReport && (
+                  <div className="flex-1 flex flex-col p-6 md:p-12 space-y-12">
+                    {/* Report Header */}
                   <div className="flex items-start justify-between">
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#00ff85]">
@@ -1016,7 +1066,15 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                   </div>
 
                   {/* Footer Actions */}
-                  <div className="mt-auto pt-12 border-t border-outline-variant/10 flex items-center gap-6">
+                  <div className="mt-auto pt-12 border-t border-outline-variant/10 flex items-center gap-4">
+                    <button 
+                      onClick={runAudit}
+                      disabled={isAuditing}
+                      className="flex-1 py-5 bg-surface-container-low border border-outline-variant/10 rounded-2xl font-black text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-all shadow-sm flex items-center justify-center gap-2"
+                    >
+                      {isAuditing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                      {isAuditing ? 'Regenerating...' : 'Regenerate'}
+                    </button>
                     <button 
                       onClick={handleExportPDF}
                       disabled={isExporting}
@@ -1024,9 +1082,6 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                     >
                       {isExporting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
                       {isExporting ? 'Generating...' : 'Export Report'}
-                    </button>
-                    <button className="flex-1 py-5 bg-surface-container-low border border-outline-variant/10 rounded-2xl font-black text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-all shadow-sm">
-                      Share with Client
                     </button>
                     <button 
                       onClick={() => onStartStrategy?.(auditReport)}
@@ -1036,15 +1091,16 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                       <ArrowRight size={18} />
                     </button>
                   </div>
-                </motion.div>
+                </div>
               )}
-            </AnimatePresence>
           </div>
         </div>
-      </div>
+      )}
+    </motion.div>
+    </AnimatePresence>
 
       {/* Hidden PDF Template */}
-      <div id="pdf-report-container" style={{ position: 'absolute', left: '-9999px', top: 0, opacity: 0, pointerEvents: 'none' }}>
+      <div id="pdf-report-container" style={{ position: 'absolute', top: 0, left: '-9999px', width: '800px', zIndex: -100 }}>
         <div 
           ref={reportRef}
           className="w-[800px] bg-[#f5f5f0] p-16 space-y-12 font-serif"
@@ -1054,9 +1110,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
           <div className="flex justify-between items-end border-b-2 border-on-surface pb-8">
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-on-primary">
-                  <Zap size={24} fill="currentColor" />
-                </div>
+                <Logo className="w-10 h-10 rounded-full" />
                 <span className="text-2xl font-black uppercase tracking-tighter">TitanLeap</span>
               </div>
               <h1 className="text-5xl font-black tracking-tight text-on-surface">Audit Report</h1>

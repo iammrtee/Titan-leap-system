@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, Target, FileText, Layout, Plus, MoreHorizontal, Download, Upload, Trash2, Flag, CheckCircle2, AlertCircle, TrendingUp, Zap, Sparkles, Search, Filter, ChevronRight, Share2, Clock, Instagram, Twitter, Linkedin, Youtube, Play, BarChart3, PieChart, RefreshCw, Users, X, Eye, Send, ShieldCheck, MessageSquare, AlertTriangle, ArrowRight, Loader2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
@@ -427,9 +428,10 @@ export const EmailCampaigns: React.FC = () => {
       </AnimatePresence>
 
       {/* Email Preview Modal */}
-      <AnimatePresence>
-        {previewEmail && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {previewEmail && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -518,7 +520,9 @@ export const EmailCampaigns: React.FC = () => {
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+      )}
     </div>
   );
 };

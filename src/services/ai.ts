@@ -2,6 +2,51 @@ import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+const generateContentWithRetry = async (params: any, maxRetries = 3) => {
+  let retryCount = 0;
+  while (retryCount <= maxRetries) {
+    try {
+      return await ai.models.generateContent(params);
+    } catch (error: any) {
+      const errorString = typeof error === 'object' ? JSON.stringify(error) : String(error);
+      const errorMessage = error?.message || error?.error?.message || errorString;
+      const errorStatus = error?.status || error?.code || error?.error?.code || error?.error?.status;
+      
+      const isOverloaded = 
+        errorStatus === 503 || 
+        errorStatus === 429 || 
+        errorStatus === 'UNAVAILABLE' ||
+        errorMessage.includes('503') || 
+        errorMessage.includes('429') || 
+        errorMessage.includes('high demand') ||
+        errorMessage.includes('UNAVAILABLE') ||
+        errorString.includes('503') ||
+        errorString.includes('high demand');
+      
+      if (isOverloaded && retryCount < maxRetries) {
+        retryCount++;
+        const delay = 1000 * Math.pow(2, retryCount); // 2s, 4s, 8s
+        console.warn(`Gemini API overloaded. Retrying in ${delay}ms... (Attempt ${retryCount} of ${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw error;
+      }
+    }
+  }
+  throw new Error("Max retries reached");
+};
+
+const parseJSON = (text: string | undefined, fallback: any = {}) => {
+  if (!text) return fallback;
+  try {
+    const cleaned = text.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
+    return JSON.parse(cleaned);
+  } catch (e) {
+    console.error("Failed to parse JSON:", text);
+    return fallback;
+  }
+};
+
 export const generateNotionContent = async (userPrompt: string) => {
   const prompt = `
     You are an expert content strategist. The user wants to generate a content calendar based on this prompt: "${userPrompt}".
@@ -22,7 +67,7 @@ export const generateNotionContent = async (userPrompt: string) => {
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
@@ -30,7 +75,7 @@ export const generateNotionContent = async (userPrompt: string) => {
       }
     });
 
-    return JSON.parse(response.text || "[]");
+    return parseJSON(response.text, []);
   } catch (error) {
     console.error("AI Generation Error:", error);
     return [];
@@ -81,7 +126,7 @@ export const generateContentScripts = async (handle: string, mode: string) => {
     `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
@@ -90,7 +135,7 @@ export const generateContentScripts = async (handle: string, mode: string) => {
       }
     });
 
-    const data = JSON.parse(response.text || "{}");
+    const data = parseJSON(response.text, {});
     // Ensure we return a consistent structure for the UI
     if (isPerLink) {
       const scriptData = data.scripts?.[0] || data;
@@ -126,7 +171,7 @@ export const auditLandingPage = async (businessData: any) => {
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
@@ -134,7 +179,7 @@ export const auditLandingPage = async (businessData: any) => {
       }
     });
 
-    return JSON.parse(response.text || "{}");
+    return parseJSON(response.text, {});
   } catch (error) {
     console.error("AI Audit Error:", error);
     return null;
@@ -250,7 +295,7 @@ export const generate30DayPlan = async (auditData: any) => {
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3-flash-preview", // Use flash to avoid rate limits
       contents: [{ parts: [{ text: prompt }] }],
       config: {
@@ -258,7 +303,7 @@ export const generate30DayPlan = async (auditData: any) => {
       }
     });
 
-    return JSON.parse(response.text || "{}");
+    return parseJSON(response.text, {});
   } catch (error) {
     console.error("AI Plan Error:", error);
     throw error;
@@ -294,7 +339,7 @@ export const smartFillForm = async (url: string) => {
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
@@ -303,7 +348,7 @@ export const smartFillForm = async (url: string) => {
       }
     });
 
-    return JSON.parse(response.text || "{}");
+    return parseJSON(response.text, {});
   } catch (error) {
     console.error("Smart Fill Error:", error);
     return null;
@@ -321,7 +366,7 @@ export const analyzeSocialTrends = async (platform: string) => {
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
@@ -329,7 +374,7 @@ export const analyzeSocialTrends = async (platform: string) => {
       }
     });
 
-    return JSON.parse(response.text || "[]");
+    return parseJSON(response.text, []);
   } catch (error) {
     console.error("Trend Analysis Error:", error);
     return [];
@@ -375,7 +420,7 @@ export const refinePlan = async (currentPlan: any, feedback: string) => {
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
@@ -383,7 +428,7 @@ export const refinePlan = async (currentPlan: any, feedback: string) => {
       }
     });
 
-    return JSON.parse(response.text || "{}");
+    return parseJSON(response.text, {});
   } catch (error) {
     console.error("AI Refine Plan Error:", error);
     throw error;
@@ -399,7 +444,7 @@ export const getPerformanceInsight = async (metrics: any) => {
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
     });
@@ -430,7 +475,7 @@ export const generateContentIdeas = async (industry: string, audience: string, t
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
@@ -438,7 +483,7 @@ export const generateContentIdeas = async (industry: string, audience: string, t
       }
     });
 
-    return JSON.parse(response.text || "[]");
+    return parseJSON(response.text, []);
   } catch (error) {
     console.error("Content Ideas Error:", error);
     return [];
@@ -505,7 +550,7 @@ export const auditMarketingFunnel = async (funnelData: any) => {
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
@@ -514,7 +559,7 @@ export const auditMarketingFunnel = async (funnelData: any) => {
       }
     });
 
-    return JSON.parse(response.text || "{}");
+    return parseJSON(response.text, {});
   } catch (error) {
     console.error("Funnel Audit Error:", error);
     return null;
@@ -603,34 +648,23 @@ export const analyzeCompetitorFunnel = async (competitorUrl: string) => {
     Be specific at all times. Never give generic observations. If a signal is unclear, say what you can infer and why.
   `;
 
-  let retryCount = 0;
-  const maxRetries = 2;
-
-  while (retryCount <= maxRetries) {
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{ parts: [{ text: prompt }] }],
-        config: {
-          responseMimeType: "application/json",
-          tools: [{ googleSearch: {} }],
-        }
-      });
-
-      if (!response.text) {
-        throw new Error("Empty response from AI");
+  try {
+    const response = await generateContentWithRetry({
+      model: "gemini-3-flash-preview",
+      contents: [{ parts: [{ text: prompt }] }],
+      config: {
+        responseMimeType: "application/json",
+        tools: [{ googleSearch: {} }],
       }
+    });
 
-      return JSON.parse(response.text);
-    } catch (error) {
-      console.error(`Competitor Analysis Attempt ${retryCount + 1} failed:`, error);
-      retryCount++;
-      if (retryCount > maxRetries) {
-        return null;
-      }
-      // Wait before retrying (exponential backoff)
-      await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
+    if (!response.text) {
+      throw new Error("Empty response from AI");
     }
+
+    return parseJSON(response.text);
+  } catch (error) {
+    console.error("Competitor Analysis Error:", error);
+    return null;
   }
-  return null;
 };

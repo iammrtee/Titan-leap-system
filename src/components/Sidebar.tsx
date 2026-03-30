@@ -1,9 +1,10 @@
 import React from 'react';
+import { Logo } from './Logo';
 import { 
   LayoutDashboard, 
   Search, 
   TrendingUp, 
-  FileText, 
+  ImagePlay, 
   Megaphone, 
   DollarSign, 
   Mail, 
@@ -35,7 +36,7 @@ const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'audit', label: 'Audit', icon: Search },
   { id: 'strategy', label: 'Strategy', icon: TrendingUp },
-  { id: 'content', label: 'Content', icon: FileText },
+  { id: 'content', label: 'Creatives', icon: ImagePlay },
   { id: 'ads', label: 'Ads', icon: Megaphone },
   { id: 'sales', label: 'Sales', icon: DollarSign },
   { id: 'funnel', label: 'Funnels', icon: Filter },
@@ -63,9 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, dark
           {/* Brand */}
           <div className="px-8 mb-10 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg monolith-gradient flex items-center justify-center text-white shadow-lg shadow-primary/20">
-                <Rocket size={18} fill="white" />
-              </div>
+              <Logo className="w-10 h-10 shadow-lg shadow-primary/20 rounded-full" />
               <div>
                 <h1 className="text-xl font-black text-primary tracking-tighter leading-none">TitanLeap</h1>
                 <p className="text-[10px] uppercase tracking-[0.2em] text-on-surface-variant/60 font-bold mt-1">Growth System</p>

@@ -11,8 +11,9 @@ import { FunnelHub } from './components/FunnelHub';
 import { EmailCampaigns } from './components/EmailCampaigns';
 import { AIAutomation } from './components/AIAutomation';
 import { TeamsView } from './components/TeamsView';
+import { Logo } from './components/Logo';
 import { motion, AnimatePresence } from 'motion/react';
-import { Instagram, Twitter, Linkedin, Youtube, Github, Globe } from 'lucide-react';
+import { Instagram, Twitter, Linkedin, Youtube, Github, Globe, Plus } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { cn } from './lib/utils';
 
@@ -21,6 +22,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [auditData, setAuditData] = useState<any>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [forceRegenerateTimestamp, setForceRegenerateTimestamp] = useState<number>(0);
 
   // Persistence: Load saved state on mount
   useEffect(() => {
@@ -55,6 +57,7 @@ export default function App() {
 
   const handleStartStrategy = (data: any) => {
     setAuditData(data);
+    setForceRegenerateTimestamp(Date.now());
     setActiveView('strategy');
   };
 
@@ -65,7 +68,7 @@ export default function App() {
       case 'audit':
         return <AuditView onStartStrategy={handleStartStrategy} />;
       case 'strategy':
-        return <StrategyHub auditData={auditData} />;
+        return <StrategyHub auditData={auditData} forceRegenerateTimestamp={forceRegenerateTimestamp} />;
       case 'content':
         return <ContentManager />;
       case 'ads':
@@ -92,7 +95,7 @@ export default function App() {
     }
   };
 
-  const getViewConfig = () => {
+  const getViewConfig = (): { title: string; subtitle?: string; badge?: string } => {
     switch (activeView) {
       case 'dashboard':
         return { title: 'Monolith Dash', subtitle: 'Dashboard Overview' };
@@ -101,7 +104,7 @@ export default function App() {
       case 'strategy':
         return { title: 'Strategy Hub', subtitle: 'Intelligent Framework' };
       case 'content':
-        return { title: 'Content Manager', subtitle: 'Active Projects', badge: 24 };
+        return { title: 'Content Production', subtitle: 'Content auto-routed from calendar → Video Editor & Designer queues' };
       case 'ads':
         return { title: 'Ads Manager', subtitle: 'Campaign Scaling' };
       case 'sales':
@@ -141,7 +144,7 @@ export default function App() {
       
       <Toaster position="top-right" richColors />
       
-      <main className="md:ml-64 min-h-screen flex flex-col relative z-10">
+      <main className="md:ml-64 min-h-screen flex flex-col relative">
         <TopBar 
           title={config.title} 
           subtitle={config.subtitle} 
@@ -170,9 +173,7 @@ export default function App() {
         <footer className="p-12 border-t border-outline-variant/10 bg-surface-container-lowest/30 backdrop-blur-sm">
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-on-primary">
-                <span className="material-symbols-outlined text-[20px]">bolt</span>
-              </div>
+              <Logo className="w-8 h-8 rounded-full" />
               <span className="text-lg font-black uppercase tracking-tighter text-on-surface">TitanLeap</span>
             </div>
             
@@ -184,7 +185,7 @@ export default function App() {
               <a href="#" className="text-on-surface-variant/40 hover:text-primary transition-colors"><Github size={20} /></a>
             </div>
 
-            <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">
+            <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 md:pr-20">
               © 2026 TitanLeap AI. All Rights Reserved.
             </div>
           </div>
@@ -198,7 +199,7 @@ export default function App() {
         className="fixed bottom-8 right-8 w-14 h-14 bg-primary text-on-primary rounded-2xl shadow-2xl shadow-primary/20 flex items-center justify-center z-50 group border border-white/10"
       >
         <div className="relative">
-          <span className="material-symbols-outlined text-[28px] group-hover:rotate-90 transition-transform duration-500">add</span>
+          <Plus size={28} className="group-hover:rotate-90 transition-transform duration-500" />
         </div>
       </motion.button>
     </div>

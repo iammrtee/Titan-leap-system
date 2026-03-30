@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Anchor, Network, LineChart, Download, Clapperboard, Info, Bolt, Search, Users, TrendingUp, Calendar, Upload, Clock, CheckCircle2, List, LayoutGrid, Filter, Plus, ChevronRight, Share2, MoreHorizontal, Instagram, Twitter, Linkedin, Youtube, Play, Zap, Rocket, Loader2, Sparkles, AlertCircle, FileText, ExternalLink, MoreVertical, Target } from 'lucide-react';
+import { Anchor, Network, LineChart, Download, Clapperboard, Info, Bolt, Search, Users, TrendingUp, Calendar, Upload, Clock, CheckCircle2, List, LayoutGrid, Filter, Plus, ChevronRight, Share2, MoreHorizontal, Instagram, Twitter, Linkedin, Youtube, Play, Zap, Rocket, Loader2, Sparkles, AlertCircle, FileText, ExternalLink, MoreVertical, Target, RefreshCw } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent } from '@/src/services/ai';
 import { toast } from 'sonner';
@@ -117,7 +118,7 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December"
 ];
 
-export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
+export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?: number }> = ({ auditData, forceRegenerateTimestamp }) => {
   const [activeTab, setActiveTab] = useState<StrategyTab>(auditData ? 'plan' : 'calendar');
   const [mode, setMode] = useState<'general' | 'per-link'>('general');
   const [handle, setHandle] = useState('');
@@ -306,24 +307,40 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
     }
   };
 
+  const [generationState, setGenerationState] = useState<'idle' | 'crafting' | 'building' | 'completed'>('idle');
+
   const handleGeneratePlan = async () => {
-    if (!auditData) return;
+    if (!auditData || isGeneratingPlan) return;
     setIsGeneratingPlan(true);
+    setGenerationState('crafting');
     try {
+      // Simulate the "crafting strategy" phase
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      setGenerationState('building');
+      
       const plan = await generate30DayPlan(auditData);
+      
       if (plan) {
+        setGenerationState('completed');
         setThirtyDayPlan(plan);
+        // Keep the completed state visible for a moment before resetting
+        setTimeout(() => {
+          setGenerationState('idle');
+          setIsGeneratingPlan(false);
+        }, 2000);
       } else {
         toast.error("Failed to generate plan. Please try again.");
+        setGenerationState('idle');
+        setIsGeneratingPlan(false);
       }
     } catch (error: any) {
       console.error("Failed to generate 30-day plan:", error);
       if (error?.message?.includes("429") || error?.message?.includes("RESOURCE_EXHAUSTED")) {
         toast.error("Rate limit exceeded. Please wait a moment and try again.");
       } else {
-        toast.error("An error occurred while generating the plan.");
+        toast.error(`Error generating plan: ${error?.message || 'Unknown error'}`);
       }
-    } finally {
+      setGenerationState('idle');
       setIsGeneratingPlan(false);
     }
   };
@@ -492,6 +509,13 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
       handleGeneratePlan();
     }
   }, [auditData, activeTab, thirtyDayPlan, isGeneratingPlan]);
+
+  useEffect(() => {
+    if (forceRegenerateTimestamp && forceRegenerateTimestamp > 0) {
+      setActiveTab('plan');
+      handleGeneratePlan();
+    }
+  }, [forceRegenerateTimestamp]);
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -756,6 +780,49 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
                   <h3 className="text-2xl md:text-3xl font-black tracking-tight text-on-surface">30-Day Viral Strategy</h3>
                   <div className="flex flex-wrap items-center gap-3 md:gap-4">
+                    <button 
+                      onClick={handleGeneratePlan}
+                      disabled={isGeneratingPlan}
+                      className={cn(
+                        "flex items-center justify-center rounded-full bg-surface-container-low border border-outline-variant/20 transition-all disabled:opacity-100 overflow-hidden",
+                        isGeneratingPlan ? "h-8 px-4 w-auto" : "w-8 h-8 text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
+                      )}
+                      title="Regenerate Plan"
+                    >
+                      <AnimatePresence mode="wait">
+                        {isGeneratingPlan ? (
+                          <motion.div
+                            key="generating"
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary"
+                          >
+                            <Zap size={12} fill="currentColor" className="animate-pulse" />
+                            <motion.span
+                              key={generationState}
+                              initial={{ opacity: 0, y: 5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -5 }}
+                              className="w-32 text-left"
+                            >
+                              {generationState === 'crafting' && 'Crafting Strategy...'}
+                              {generationState === 'building' && 'Building Content Plan...'}
+                              {generationState === 'completed' && 'Completed Boss 🫡'}
+                            </motion.span>
+                          </motion.div>
+                        ) : (
+                          <motion.div
+                            key="idle"
+                            initial={{ opacity: 0, rotate: -90 }}
+                            animate={{ opacity: 1, rotate: 0 }}
+                            exit={{ opacity: 0, rotate: 90 }}
+                          >
+                            <Zap size={16} />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </button>
                     <button 
                       onClick={() => setShowRefineInput(!showRefineInput)}
                       className="flex items-center gap-2 text-secondary font-black text-[10px] md:text-xs uppercase tracking-widest hover:underline"
@@ -1380,9 +1447,10 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
             </div>
 
             {/* Add Content Modal */}
-            <AnimatePresence>
-              {showAddModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6">
+            {typeof document !== 'undefined' && createPortal(
+              <AnimatePresence>
+                {showAddModal && (
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6">
                   <motion.div 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -1533,12 +1601,15 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
                   </motion.div>
                 </div>
               )}
-            </AnimatePresence>
+              </AnimatePresence>,
+              document.body
+            )}
 
             {/* Regen for Notion Modal */}
-            <AnimatePresence>
-              {showRegenModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6">
+            {typeof document !== 'undefined' && createPortal(
+              <AnimatePresence>
+                {showRegenModal && (
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6">
                   <motion.div 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -1609,7 +1680,9 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
                   </motion.div>
                 </div>
               )}
-            </AnimatePresence>
+              </AnimatePresence>,
+              document.body
+            )}
           </div>
         );
       case 'autopost':
@@ -1792,7 +1865,50 @@ export const StrategyHub: React.FC<{ auditData?: any }> = ({ auditData }) => {
   };
 
   return (
-    <div className="space-y-6 md:space-y-10">
+    <div className="space-y-6 md:space-y-10 relative">
+      {createPortal(
+        <AnimatePresence>
+          {isGeneratingPlan && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-surface/95 backdrop-blur-md"
+            >
+              <div className="relative flex items-center justify-center w-32 h-32 mb-8">
+                {/* Spinner */}
+                <svg className="absolute inset-0 w-full h-full animate-[spin_3s_linear_infinite]" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" strokeWidth="2" className="text-outline-variant/20" />
+                  <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" strokeWidth="4" strokeDasharray="60 200" strokeLinecap="round" className="text-primary" />
+                </svg>
+                {/* Sparkle Icon */}
+                <Sparkles className="w-10 h-10 text-primary" />
+              </div>
+              <div className="h-12 relative flex items-center justify-center overflow-hidden mb-4 w-full">
+                <AnimatePresence mode="wait">
+                  <motion.h2 
+                    key={generationState}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 1 }}
+                    className="text-3xl md:text-4xl font-black tracking-tight text-on-surface text-center absolute"
+                  >
+                    {generationState === 'crafting' && 'Crafting Strategy...'}
+                    {generationState === 'building' && 'Building Content Plan...'}
+                    {generationState === 'completed' && 'Completed Boss 🫡'}
+                  </motion.h2>
+                </AnimatePresence>
+              </div>
+              <p className="text-on-surface-variant/60 max-w-md text-center text-sm font-medium">
+                TitanLeap AI is scanning social signals, ad libraries, and landing page structures...
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
       {/* Header with Tabs */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 md:gap-6">
         <div className="space-y-1 md:space-y-2">

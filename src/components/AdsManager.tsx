@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Megaphone, TrendingUp, DollarSign, Target, ArrowUpRight, MoreHorizontal, Rocket, Zap, CheckCircle2, AlertCircle, LayoutGrid, List, Filter, Plus, ChevronRight, Share2, Clock, Upload, Instagram, Twitter, Linkedin, Youtube, Play, FileText, BarChart3, Sparkles, Download, X, Eye } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { Logo } from './Logo';
 
 type AdsTab = 'strategy' | 'scripts' | 'performance';
 
@@ -295,9 +297,10 @@ export const AdsManager: React.FC = () => {
       </AnimatePresence>
 
       {/* Script Preview Modal */}
-      <AnimatePresence>
-        {previewScript && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {previewScript && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -326,9 +329,7 @@ export const AdsManager: React.FC = () => {
               <div className="p-8">
                 <div className="bg-white rounded-2xl border border-outline-variant/20 shadow-inner p-6 space-y-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant">
-                      <Rocket size={20} />
-                    </div>
+                    <Logo className="w-10 h-10 rounded-full" />
                     <div>
                       <p className="text-sm font-black text-on-surface">TitanLeap Growth OS</p>
                       <p className="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest">Sponsored</p>
@@ -368,7 +369,9 @@ export const AdsManager: React.FC = () => {
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+      )}
     </div>
   );
 };

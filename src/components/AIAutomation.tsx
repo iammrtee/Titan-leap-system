@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { analyzeSocialTrends } from '@/src/services/ai';
 import { Cpu, Plus, Play, Pause, Clock, Zap, CheckCircle2, AlertCircle, MoreHorizontal, Settings, Trash2, Power, RefreshCw, TrendingUp, Loader2, Sparkles, X } from 'lucide-react';
@@ -242,9 +243,10 @@ export const AIAutomation: React.FC = () => {
       </div>
 
       {/* Trends Modal */}
-      <AnimatePresence>
-        {showTrendsModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showTrendsModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -325,7 +327,9 @@ export const AIAutomation: React.FC = () => {
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* System Health */}
       <div className="bg-surface-container-low rounded-3xl p-8 border border-outline-variant/10 shadow-sm">
