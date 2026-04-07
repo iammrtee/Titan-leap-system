@@ -118,7 +118,7 @@ export default function App() {
       case 'teams':
         return { title: 'Client Portal', subtitle: 'Account Summary' };
       default:
-        return { title: activeView.charAt(0).toUpperCase() + activeView.slice(1) };
+        return { title: 'Unknown View' };
     }
   };
 

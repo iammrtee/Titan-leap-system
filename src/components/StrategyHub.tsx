@@ -300,8 +300,9 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     try {
       const result = await generateContentScripts(handle, mode);
       setAuditResult(result);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to generate scripts:", error);
+      toast.error(`Error generating scripts: ${error?.message || 'Please try again.'}`);
     } finally {
       setIsGenerating(false);
     }
@@ -335,10 +336,26 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       }
     } catch (error: any) {
       console.error("Failed to generate 30-day plan:", error);
-      if (error?.message?.includes("429") || error?.message?.includes("RESOURCE_EXHAUSTED")) {
+      
+      // Extract the actual error message from the JSON string if possible
+      let errorMessage = error?.message || 'Unknown error';
+      try {
+        if (errorMessage.startsWith('{')) {
+          const parsed = JSON.parse(errorMessage);
+          if (parsed.error && parsed.error.message) {
+            errorMessage = parsed.error.message;
+          }
+        }
+      } catch (e) {
+        // Ignore parsing errors
+      }
+
+      if (errorMessage.includes("429") || errorMessage.includes("RESOURCE_EXHAUSTED")) {
         toast.error("Rate limit exceeded. Please wait a moment and try again.");
+      } else if (errorMessage.includes("502") || errorMessage.includes("Bad Gateway")) {
+        toast.error("The AI service is temporarily unavailable (502 Bad Gateway). Please try again in a few minutes.");
       } else {
-        toast.error(`Error generating plan: ${error?.message || 'Unknown error'}`);
+        toast.error(`Error generating plan: ${errorMessage}`);
       }
       setGenerationState('idle');
       setIsGeneratingPlan(false);
@@ -495,20 +512,13 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
           description: "Could not generate content from your prompt."
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Regen error:", error);
-      toast.error("An error occurred during generation.");
+      toast.error(`An error occurred during generation: ${error?.message || 'Please try again.'}`);
     } finally {
       setIsRegenerating(false);
     }
   };
-
-  useEffect(() => {
-    const isPlanEmpty = !thirtyDayPlan || !thirtyDayPlan.calendar || thirtyDayPlan.calendar.length === 0;
-    if (auditData && isPlanEmpty && activeTab === 'plan' && !isGeneratingPlan) {
-      handleGeneratePlan();
-    }
-  }, [auditData, activeTab, thirtyDayPlan, isGeneratingPlan]);
 
   useEffect(() => {
     if (forceRegenerateTimestamp && forceRegenerateTimestamp > 0) {
@@ -689,6 +699,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                   {isGenerating ? <Loader2 className="animate-spin shrink-0 w-4 h-4 md:w-[18px] md:h-[18px]" /> : <Clapperboard className="shrink-0 w-4 h-4 md:w-[18px] md:h-[18px]" fill="white" />}
                   <span className="truncate">{isGenerating ? "AI Engineering Scripts..." : (mode === 'per-link' ? "Deep Audit Content Link" : "Generate Top-Performing Scripts")}</span>
                   <span className="px-1.5 md:px-2 py-0.5 bg-on-surface/20 rounded-md text-[8px] md:text-[10px] shrink-0">{mode === 'per-link' ? "Deep Scrape" : "30 Days"}</span>
+                  <span className="px-1.5 md:px-2 py-0.5 bg-white/20 text-white rounded-md text-[8px] md:text-[10px] font-black uppercase tracking-widest shrink-0">Pro</span>
                 </button>
               </div>
             </div>
@@ -784,8 +795,10 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                       onClick={handleGeneratePlan}
                       disabled={isGeneratingPlan}
                       className={cn(
-                        "flex items-center justify-center rounded-full bg-surface-container-low border border-outline-variant/20 transition-all disabled:opacity-100 overflow-hidden",
-                        isGeneratingPlan ? "h-8 px-4 w-auto" : "w-8 h-8 text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
+                        "flex items-center justify-center rounded-full bg-surface-container-low border border-outline-variant/20 transition-all disabled:opacity-100 overflow-hidden group",
+                        isGeneratingPlan 
+                          ? "h-8 px-4 w-auto" 
+                          : "w-8 h-8 text-on-surface-variant hover:text-primary hover:bg-primary/5 hover:border-primary/30 hover:scale-110 hover:shadow-md hover:shadow-primary/10 active:scale-95"
                       )}
                       title="Regenerate Plan"
                     >
@@ -818,7 +831,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                             animate={{ opacity: 1, rotate: 0 }}
                             exit={{ opacity: 0, rotate: 90 }}
                           >
-                            <Zap size={16} />
+                            <Zap size={16} className="transition-all duration-300 group-hover:scale-110 group-hover:rotate-12 group-hover:fill-primary/20" />
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -870,6 +883,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                           >
                             {isRefiningPlan ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} fill="currentColor" />}
                             Refine Strategy
+                            <span className="px-1.5 py-0.5 bg-white/20 text-white rounded-md text-[8px] font-black uppercase tracking-widest shrink-0">Pro</span>
                           </button>
                         </div>
                       </div>
@@ -982,9 +996,10 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                   {auditData && (
                     <button 
                       onClick={handleGeneratePlan}
-                      className="w-full sm:w-auto bg-primary text-white px-6 md:px-8 py-3 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest hover:scale-105 transition-all mt-4"
+                      className="w-full sm:w-auto bg-primary text-white px-6 md:px-8 py-3 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest hover:scale-105 transition-all mt-4 flex items-center justify-center gap-2 mx-auto"
                     >
                       Generate Roadmap
+                      <span className="px-1.5 py-0.5 bg-white/20 text-white rounded-md text-[8px] font-black uppercase tracking-widest shrink-0">Ultra</span>
                     </button>
                   )}
                 </div>
@@ -1672,6 +1687,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                             <>
                               <Sparkles size={16} />
                               Generate Content
+                              <span className="px-1.5 py-0.5 bg-black/20 text-black rounded-md text-[8px] font-black uppercase tracking-widest shrink-0">Pro</span>
                             </>
                           )}
                         </button>

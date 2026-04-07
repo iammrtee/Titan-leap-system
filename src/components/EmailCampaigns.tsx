@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, Target, FileText, Layout, Plus, MoreHorizontal, Download, Upload, Trash2, Flag, CheckCircle2, AlertCircle, TrendingUp, Zap, Sparkles, Search, Filter, ChevronRight, Share2, Clock, Instagram, Twitter, Linkedin, Youtube, Play, BarChart3, PieChart, RefreshCw, Users, X, Eye, Send, ShieldCheck, MessageSquare, AlertTriangle, ArrowRight, Loader2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { auditMarketingFunnel } from '@/src/services/ai';
+import { auditEmailSequence } from '@/src/services/ai';
 import { toast } from 'sonner';
 
 type EmailTab = 'strategy' | 'scripts' | 'design' | 'audit';
@@ -97,7 +97,7 @@ const EmailAuditView = () => {
 
     setIsAuditing(true);
     try {
-      const result = await auditMarketingFunnel({ type: 'email_sequence', content: emailData });
+      const result = await auditEmailSequence({ type: 'email_sequence', content: emailData });
       if (result) {
         setAuditResult(result);
         toast.success("Email audit complete!");
@@ -187,6 +187,39 @@ const EmailAuditView = () => {
                     </div>
                     <div className="space-y-4">
                       <p className="text-sm font-medium text-on-surface leading-relaxed">{stage.analysis}</p>
+                      
+                      {stage.bottlenecks && stage.bottlenecks.length > 0 && (
+                        <div className="pt-2">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-error mb-2 flex items-center gap-1">
+                            <AlertCircle size={10} /> Bottlenecks
+                          </p>
+                          <ul className="space-y-1">
+                            {stage.bottlenecks.map((bottleneck: string, i: number) => (
+                              <li key={i} className="text-xs font-medium text-on-surface-variant/80 flex items-start gap-2">
+                                <span className="w-1 h-1 rounded-full bg-error mt-1.5 shrink-0" />
+                                {bottleneck}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {stage.contentIdeas && stage.contentIdeas.length > 0 && (
+                        <div className="pt-2">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-primary mb-2 flex items-center gap-1">
+                            <Sparkles size={10} /> Content Ideas
+                          </p>
+                          <ul className="space-y-1">
+                            {stage.contentIdeas.map((idea: string, i: number) => (
+                              <li key={i} className="text-xs font-medium text-on-surface-variant/80 flex items-start gap-2">
+                                <span className="w-1 h-1 rounded-full bg-primary mt-1.5 shrink-0" />
+                                {idea}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
                       <div className="pt-4 border-t border-outline-variant/5">
                         <p className="text-[9px] font-black uppercase tracking-widest text-error mb-1">Revenue Leak</p>
                         <p className="text-xs font-bold text-on-surface-variant">{stage.moneyLeak}</p>

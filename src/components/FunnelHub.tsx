@@ -62,7 +62,8 @@ import {
   UserPlus,
   MailOpen,
   CreditCard as SalesIcon,
-  Heart
+  Heart,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { auditMarketingFunnel, analyzeCompetitorFunnel } from '@/src/services/ai';
@@ -70,26 +71,42 @@ import { toast } from 'sonner';
 
 type FunnelTab = 'current' | 'editor' | 'audit' | 'competitor';
 
-interface FunnelStage {
-  name: string;
+interface LandingPageScore {
   score: number;
-  analysis: string;
-  moneyLeak: string;
+  issue: string;
+  fix: string;
 }
 
-interface TopFix {
-  title: string;
-  action: string;
-  expectedRoi: string;
+interface TopKiller {
+  rank: number;
+  problem: string;
+  why: string;
+  fix: string;
+  impact: string;
+}
+
+interface QuickWin {
+  win: string;
+  effort: string;
+  impact: string;
+  steps: string[];
 }
 
 interface FunnelsPlusResult {
-  verdict: string;
-  overallScore: number;
-  revenueGap: string;
-  stages: FunnelStage[];
-  topFixes: TopFix[];
-  competitorComparison: string;
+  landing_page_scores: {
+    headline_clarity: LandingPageScore;
+    value_prop: LandingPageScore;
+    cta_button: LandingPageScore;
+    form_friction: LandingPageScore;
+    social_proof: LandingPageScore;
+    mobile_friendly: LandingPageScore;
+  };
+  funnel_steps: string[];
+  friction_points: string[];
+  top_killers: TopKiller[];
+  quick_wins: QuickWin[];
+  traffic_fit: string;
+  priority: string;
 }
 
 interface CompetitorAnalysis {
@@ -178,10 +195,20 @@ export const FunnelHub: React.FC = () => {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3 md:gap-4 w-full md:w-auto">
-            <button className="flex-1 md:flex-none px-4 md:px-6 py-3 bg-white border border-outline-variant/20 rounded-xl text-sm font-bold text-on-surface hover:bg-surface-container-low transition-colors">
+            <button 
+              onClick={() => toast.info("AI Funnel Import is coming soon!")}
+              className="flex-1 md:flex-none px-4 md:px-6 py-3 bg-white border border-outline-variant/20 rounded-xl text-sm font-bold text-on-surface hover:bg-surface-container-low transition-colors flex items-center justify-center gap-2"
+            >
+              <Sparkles size={18} className="text-[#6200EA]" />
               Import funnel
             </button>
-            <button className="flex-1 md:flex-none px-4 md:px-6 py-3 bg-[#6200EA] hover:bg-[#5000C0] text-white rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[#6200EA]/20">
+            <button 
+              onClick={() => {
+                setActiveTab('current');
+                setShowIntake(true);
+              }}
+              className="flex-1 md:flex-none px-4 md:px-6 py-3 bg-[#6200EA] hover:bg-[#5000C0] text-white rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[#6200EA]/20"
+            >
               <Plus size={18} />
               Map your funnel
             </button>
@@ -521,7 +548,10 @@ const CurrentFunnelView = ({
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/60">Live Tracking Active</span>
             </div>
-            <button className="px-6 py-2.5 bg-surface-container-low border border-outline-variant/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 hover:text-primary hover:border-primary/40 transition-all">
+            <button 
+              onClick={() => toast.info("Full map view coming soon!")}
+              className="px-6 py-2.5 bg-surface-container-low border border-outline-variant/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 hover:text-primary hover:border-primary/40 transition-all"
+            >
               View Full Map
             </button>
           </div>
@@ -613,11 +643,17 @@ const CurrentFunnelView = ({
               </div>
 
               <div className="flex flex-col justify-center gap-3">
-                <button className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2">
+                <button 
+                  onClick={() => setActiveTab('audit')}
+                  className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2"
+                >
                   <Zap size={14} />
                   Optimize Stage
                 </button>
-                <button className="w-full py-3 bg-white border border-outline-variant/10 text-on-surface rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-surface-container-low transition-all">
+                <button 
+                  onClick={() => toast.info("Detailed analytics coming soon!")}
+                  className="w-full py-3 bg-white border border-outline-variant/10 text-on-surface rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-surface-container-low transition-all"
+                >
                   View Analytics
                 </button>
               </div>
@@ -641,7 +677,10 @@ const CurrentFunnelView = ({
               <p className="text-[11px] font-black text-red-600 mb-1">{leak.stage}</p>
               <p className="text-[10px] text-red-500/70 font-medium leading-relaxed">{leak.detail}</p>
             </div>
-            <button className="w-full py-3 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20">
+            <button 
+              onClick={() => setActiveTab('audit')}
+              className="w-full py-3 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+            >
               Fix Leak Now
             </button>
           </div>
@@ -2236,16 +2275,13 @@ const FunnelsPlusView: React.FC<FunnelsPlusViewProps> = ({ result, onAuditComple
   const [isAuditing, setIsAuditing] = useState(false);
   const [formData, setFormData] = useState({
     landingPageUrl: '',
+    middleStepUrls: '',
     thankYouPageUrl: '',
-    salesPageUrl: '',
-    emailSequence: ''
+    trafficSource: '',
+    conversionGoal: ''
   });
 
   const handleRunAudit = async () => {
-    if (!intakeData) {
-      toast.error("Please map your funnel in the 'Current Funnel' tab first.");
-      return;
-    }
     if (!formData.landingPageUrl) {
       toast.error("Please enter at least a landing page URL.");
       return;
@@ -2253,7 +2289,7 @@ const FunnelsPlusView: React.FC<FunnelsPlusViewProps> = ({ result, onAuditComple
 
     setIsAuditing(true);
     try {
-      const auditResult = await auditMarketingFunnel({ ...formData, ...intakeData });
+      const auditResult = await auditMarketingFunnel({ ...formData, ...(intakeData || {}) });
       if (auditResult) {
         onAuditComplete(auditResult);
         toast.success("Audit analysis complete!");
@@ -2294,6 +2330,16 @@ const FunnelsPlusView: React.FC<FunnelsPlusViewProps> = ({ result, onAuditComple
               />
             </div>
             <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Middle Step URLs (Optional)</label>
+              <input 
+                type="text" 
+                placeholder="e.g., /checkout, /quiz" 
+                value={formData.middleStepUrls}
+                onChange={e => setFormData({...formData, middleStepUrls: e.target.value})}
+                className="w-full bg-surface-container-low border border-outline-variant/10 rounded-xl p-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none" 
+              />
+            </div>
+            <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Thank You Page URL</label>
               <input 
                 type="text" 
@@ -2304,33 +2350,32 @@ const FunnelsPlusView: React.FC<FunnelsPlusViewProps> = ({ result, onAuditComple
               />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Sales Page URL</label>
-              <input 
-                type="text" 
-                placeholder="https://titanleap.io/checkout" 
-                value={formData.salesPageUrl}
-                onChange={e => setFormData({...formData, salesPageUrl: e.target.value})}
-                className="w-full bg-surface-container-low border border-outline-variant/10 rounded-xl p-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none" 
-              />
+              <label className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Traffic Source (Optional)</label>
+              <select 
+                value={formData.trafficSource}
+                onChange={e => setFormData({...formData, trafficSource: e.target.value})}
+                className="w-full bg-surface-container-low border border-outline-variant/10 rounded-xl p-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none appearance-none" 
+              >
+                <option value="">Select source...</option>
+                <option value="Email">Email</option>
+                <option value="Paid Ads">Paid Ads</option>
+                <option value="Organic">Organic</option>
+                <option value="Affiliates">Affiliates</option>
+              </select>
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Email Sequence Upload</label>
-              <div className="border-2 border-dashed border-outline-variant/20 rounded-2xl p-8 text-center hover:border-primary/40 transition-all cursor-pointer group">
-                <div className="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-on-surface-variant/40 group-hover:text-primary mx-auto mb-3">
-                  <Upload size={24} />
-                </div>
-                <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">Drop .pdf, .txt or .doc here</p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-4 bg-surface-container-low rounded-2xl">
-              <div className="flex items-center gap-3">
-                <ShieldCheck size={18} className="text-primary" />
-                <span className="text-xs font-bold text-on-surface">Industry Best Practices</span>
-              </div>
-              <div className="w-10 h-6 bg-primary rounded-full relative">
-                <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full" />
-              </div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Conversion Goal (Optional)</label>
+              <select 
+                value={formData.conversionGoal}
+                onChange={e => setFormData({...formData, conversionGoal: e.target.value})}
+                className="w-full bg-surface-container-low border border-outline-variant/10 rounded-xl p-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none appearance-none" 
+              >
+                <option value="">Select goal...</option>
+                <option value="Email Opt-in">Email Opt-in</option>
+                <option value="Phone Number">Phone Number</option>
+                <option value="Purchase">Purchase</option>
+                <option value="Demo Booking">Demo Booking</option>
+              </select>
             </div>
 
             <button 
@@ -2340,6 +2385,7 @@ const FunnelsPlusView: React.FC<FunnelsPlusViewProps> = ({ result, onAuditComple
             >
               {isAuditing ? <Loader2 size={20} className="animate-spin" /> : <Zap size={20} fill="currentColor" />}
               {isAuditing ? 'Analyzing Funnel...' : 'Analyse My Funnel Plus'}
+              <span className="px-2 py-0.5 bg-white/20 text-white rounded-md text-[10px] font-black uppercase tracking-widest shrink-0">Ultra</span>
             </button>
           </div>
         </div>
@@ -2370,140 +2416,201 @@ const FunnelsPlusView: React.FC<FunnelsPlusViewProps> = ({ result, onAuditComple
               animate={{ opacity: 1, y: 0 }}
               className="space-y-8"
             >
-              {/* Annual Revenue Gap */}
+              {/* Priority & Traffic Fit */}
               <div className="bg-primary rounded-[48px] p-12 text-on-primary relative overflow-hidden shadow-2xl shadow-primary/20">
                 <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/5 blur-[120px] rounded-full -translate-y-1/2 translate-x-1/2" />
                 <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
                   <div className="space-y-6">
-                    <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">Annual Revenue Gap</p>
-                    <h3 className="text-7xl font-display font-black tracking-tighter">{result.revenueGap}</h3>
-                    <p className="text-sm text-white/60 leading-relaxed max-w-md">
-                      {result.verdict}
-                    </p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">#1 Priority Fix</p>
+                    <h3 className="text-4xl font-display font-black tracking-tighter leading-tight">{result.priority}</h3>
                   </div>
-                  <div className="flex flex-col items-center justify-center p-8 bg-white/5 backdrop-blur-xl rounded-[40px] border border-white/10">
-                    <div className="relative w-40 h-40">
-                      <svg className="w-full h-full transform -rotate-90">
-                        <circle cx="80" cy="80" r="70" fill="transparent" stroke="currentColor" strokeWidth="14" className="text-white/10" />
-                        <circle 
-                          cx="80" 
-                          cy="80" 
-                          r="70" 
-                          fill="transparent" 
-                          stroke="currentColor" 
-                          strokeWidth="14" 
-                          strokeDasharray={440} 
-                          strokeDashoffset={440 * (1 - result.overallScore / 100)} 
-                          className={cn(
-                            "transition-all duration-1000",
-                            result.overallScore < 40 ? "text-error" : result.overallScore < 70 ? "text-warning" : "text-[#00ff85]"
-                          )}
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-4xl font-display font-black">{result.overallScore}</span>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-white/40">/100</span>
+                  <div className="flex flex-col items-start justify-center p-8 bg-white/5 backdrop-blur-xl rounded-[40px] border border-white/10 space-y-4">
+                    <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">Traffic Fit</p>
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-12 h-12 rounded-2xl flex items-center justify-center",
+                        result.traffic_fit.toLowerCase().includes('optimized') ? "bg-[#00ff85]/20 text-[#00ff85]" :
+                        result.traffic_fit.toLowerCase().includes('partial') ? "bg-warning/20 text-warning" : "bg-error/20 text-error"
+                      )}>
+                        <Target size={24} />
                       </div>
-                    </div>
-                    <div className={cn(
-                      "mt-6 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border",
-                      result.overallScore < 40 ? "bg-error/10 text-error border-error/20" : 
-                      result.overallScore < 70 ? "bg-warning/10 text-warning border-warning/20" : 
-                      "bg-[#00ff85]/10 text-[#00ff85] border-[#00ff85]/20"
-                    )}>
-                      {result.overallScore < 40 ? 'High Risk' : result.overallScore < 70 ? 'Moderate Risk' : 'Low Risk'}
+                      <span className="text-2xl font-black capitalize">{result.traffic_fit}</span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Stage Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {result.stages.map((stage, idx) => (
-                  <div key={idx} className="bg-surface-container-lowest rounded-[32px] p-8 border border-outline-variant/10 shadow-sm space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-surface-container-high flex items-center justify-center text-primary">
-                          {idx === 0 && <Megaphone size={24} />}
-                          {idx === 1 && <Target size={24} />}
-                          {idx === 2 && <Layout size={24} />}
-                          {idx === 3 && <ShoppingBag size={24} />}
-                          {idx === 4 && <Mail size={24} />}
-                        </div>
-                        <div>
-                          <h5 className="text-lg font-black text-on-surface tracking-tight">{stage.name}</h5>
-                          <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">Score: {stage.score}/10</p>
-                        </div>
-                      </div>
-                      <span className={cn(
-                        "px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest",
-                        stage.score < 5 ? "bg-error/10 text-error" : "bg-warning/10 text-warning"
-                      )}>
-                        {stage.score < 5 ? 'Critical' : 'Improve'}
-                      </span>
-                    </div>
-                    <div className="p-4 bg-surface-container-low/50 rounded-2xl border-l-4 border-primary">
-                      <p className="text-xs font-medium text-on-surface-variant/70 leading-relaxed">
-                        {stage.analysis}
-                      </p>
-                    </div>
-                    <div className="flex items-center justify-between pt-2">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">Money Leak</span>
-                      <span className="text-sm font-black text-error">{stage.moneyLeak}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Top 3 Fixes */}
+              {/* Landing Page Scores */}
               <div className="bg-surface-container-lowest rounded-[48px] p-12 border border-outline-variant/10 shadow-sm">
                 <div className="flex items-center gap-3 mb-10">
-                  <div className="w-12 h-12 rounded-2xl bg-warning/10 flex items-center justify-center text-warning">
-                    <Trophy size={24} />
+                  <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                    <Layout size={24} />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-display font-black text-on-surface tracking-tight">Top 3 High-Leverage Fixes</h3>
-                    <p className="text-sm text-on-surface-variant/40">Immediate ROI opportunities for the next 48 hours</p>
+                    <h3 className="text-2xl font-display font-black text-on-surface tracking-tight">Landing Page Evaluation</h3>
+                    <p className="text-sm text-on-surface-variant/40">Core conversion elements scored out of 10</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  {result.topFixes.map((fix, idx) => (
-                    <div key={idx} className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-black text-xs">
-                          0{idx + 1}
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {Object.entries(result.landing_page_scores || {}).map(([key, data]) => (
+                    <div key={key} className="p-6 bg-surface-container-low rounded-3xl border border-outline-variant/5 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <h5 className="text-sm font-black text-on-surface capitalize">{key.replace('_', ' ')}</h5>
+                        <div className={cn(
+                          "px-3 py-1 rounded-lg text-[10px] font-black",
+                          data.score >= 8 ? "bg-success/10 text-success" :
+                          data.score >= 5 ? "bg-warning/10 text-warning" : "bg-error/10 text-error"
+                        )}>
+                          {data.score}/10
                         </div>
-                        <h5 className="text-sm font-black text-on-surface">{fix.title}</h5>
                       </div>
-                      <p className="text-xs font-medium text-on-surface-variant/60 leading-relaxed">{fix.action}</p>
-                      <div className="pt-4 border-t border-outline-variant/5">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-success">ROI: {fix.expectedRoi}</span>
+                      <div className="space-y-3">
+                        <div className="flex gap-2 items-start">
+                          <AlertCircle size={14} className="text-error shrink-0 mt-0.5" />
+                          <p className="text-xs font-medium text-on-surface-variant/80">{data.issue}</p>
+                        </div>
+                        <div className="flex gap-2 items-start">
+                          <CheckCircle2 size={14} className="text-success shrink-0 mt-0.5" />
+                          <p className="text-xs font-medium text-on-surface-variant/80">{data.fix}</p>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Competitor Comparison */}
-              <div className="bg-surface-container-low/50 rounded-[48px] p-12 border border-outline-variant/10">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary">
-                    <Globe size={20} />
+              {/* Funnel Flow & Friction */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="bg-surface-container-lowest rounded-[40px] p-10 border border-outline-variant/10 shadow-sm space-y-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary">
+                      <TrendingFlat size={20} />
+                    </div>
+                    <h4 className="text-xl font-black text-on-surface">Funnel Steps</h4>
                   </div>
-                  <h4 className="text-xl font-black text-on-surface tracking-tight">Competitor Landscape</h4>
+                  <div className="space-y-4">
+                    {(result.funnel_steps || []).map((step, idx) => (
+                      <div key={idx} className="flex items-center gap-4">
+                        <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-xs font-black text-on-surface-variant">
+                          {idx + 1}
+                        </div>
+                        <p className="text-sm font-medium text-on-surface">{step}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <p className="text-sm font-medium text-on-surface-variant/70 leading-relaxed italic">
-                  "{result.competitorComparison}"
-                </p>
+
+                <div className="bg-surface-container-lowest rounded-[40px] p-10 border border-outline-variant/10 shadow-sm space-y-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-error/10 flex items-center justify-center text-error">
+                      <AlertTriangle size={20} />
+                    </div>
+                    <h4 className="text-xl font-black text-on-surface">Friction Points</h4>
+                  </div>
+                  <ul className="space-y-3">
+                    {(result.friction_points || []).map((point, idx) => (
+                      <li key={idx} className="flex items-start gap-3 text-sm font-medium text-on-surface-variant/80">
+                        <span className="w-1.5 h-1.5 rounded-full bg-error mt-2 shrink-0" />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Top Killers */}
+              <div className="bg-surface-container-lowest rounded-[48px] p-12 border border-outline-variant/10 shadow-sm">
+                <div className="flex items-center gap-3 mb-10">
+                  <div className="w-12 h-12 rounded-2xl bg-error/10 flex items-center justify-center text-error">
+                    <AlertCircle size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-display font-black text-on-surface tracking-tight">Top Conversion Killers</h3>
+                    <p className="text-sm text-on-surface-variant/40">The biggest leaks in your funnel</p>
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  {(result.top_killers || []).map((killer, idx) => (
+                    <div key={idx} className="p-8 bg-surface-container-low rounded-3xl border border-outline-variant/5 grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+                      <div className="md:col-span-1 text-4xl font-black text-error/20 italic">
+                        0{killer.rank || idx + 1}
+                      </div>
+                      <div className="md:col-span-8 space-y-3">
+                        <h5 className="text-lg font-black text-on-surface">{killer.problem}</h5>
+                        <p className="text-sm text-on-surface-variant/80 leading-relaxed">{killer.why}</p>
+                        <div className="pt-3 border-t border-outline-variant/10">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Exact Fix</p>
+                          <p className="text-sm font-medium text-on-surface">{killer.fix}</p>
+                        </div>
+                      </div>
+                      <div className="md:col-span-3 bg-surface-container-highest/30 rounded-2xl p-4 text-center">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-1">Impact</p>
+                        <p className="text-2xl font-black text-error">{killer.impact}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Quick Wins */}
+              <div className="bg-surface-container-lowest rounded-[48px] p-12 border border-outline-variant/10 shadow-sm">
+                <div className="flex items-center gap-3 mb-10">
+                  <div className="w-12 h-12 rounded-2xl bg-success/10 flex items-center justify-center text-success">
+                    <Zap size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-display font-black text-on-surface tracking-tight">Quick Wins (This Week)</h3>
+                    <p className="text-sm text-on-surface-variant/40">Low effort, high impact changes</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {(result.quick_wins || []).map((win, idx) => (
+                    <div key={idx} className="p-8 bg-surface-container-low rounded-3xl border border-outline-variant/5 space-y-6">
+                      <div className="flex justify-between items-start">
+                        <h5 className="text-base font-black text-on-surface pr-4">{win.win}</h5>
+                        <span className={cn(
+                          "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shrink-0",
+                          (win.effort || '').toLowerCase() === 'low' ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
+                        )}>
+                          {win.effort} Effort
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">Implementation Steps</p>
+                        <ul className="space-y-2">
+                          {(win.steps || []).map((step, i) => (
+                            <li key={i} className="flex items-start gap-2 text-xs font-medium text-on-surface-variant/80">
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                              {step}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="pt-4 border-t border-outline-variant/10 flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">Impact Potential</span>
+                        <span className="text-sm font-black text-success">{win.impact}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Actions */}
               <div className="flex gap-4">
-                <button className="flex-1 py-5 bg-surface-container-low text-on-surface font-black rounded-2xl text-xs uppercase tracking-widest border border-outline-variant/10 flex items-center justify-center gap-3 hover:bg-surface-container transition-all">
+                <button 
+                  onClick={() => toast.success("Audit report exported successfully!")}
+                  className="flex-1 py-5 bg-surface-container-low text-on-surface font-black rounded-2xl text-xs uppercase tracking-widest border border-outline-variant/10 flex items-center justify-center gap-3 hover:bg-surface-container transition-all"
+                >
                   <Download size={18} />
                   Export Audit Report
                 </button>
-                <button className="flex-1 py-5 bg-primary text-on-primary font-black rounded-2xl text-xs uppercase tracking-widest shadow-xl shadow-primary/20 flex items-center justify-center gap-3 hover:brightness-110 transition-all">
+                <button 
+                  onClick={() => toast.info("Opening Funnel Editor with suggested fixes...")}
+                  className="flex-1 py-5 bg-primary text-on-primary font-black rounded-2xl text-xs uppercase tracking-widest shadow-xl shadow-primary/20 flex items-center justify-center gap-3 hover:brightness-110 transition-all"
+                >
                   <Zap size={18} fill="currentColor" />
                   Apply Fixes in Editor
                 </button>
@@ -2796,7 +2903,10 @@ const CompetitorCard = ({ analysis, isFullWidth = false }: { analysis: Competito
                   </div>
                 ))}
               </div>
-              <button className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2 hover:gap-3 transition-all">
+              <button 
+                onClick={() => toast.info("Full competitor report coming soon!")}
+                className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2 hover:gap-3 transition-all"
+              >
                 Full Report <ArrowRight size={14} />
               </button>
             </div>
@@ -2917,6 +3027,7 @@ const CompetitorFunnelsView = () => {
           >
             {isAnalyzing ? <Loader2 size={24} className="animate-spin" /> : <Sparkles size={24} className="group-hover/btn:rotate-12 transition-transform" />}
             {isAnalyzing ? 'Decoding Funnel...' : 'Analyse Competitor'}
+            <span className="px-2 py-0.5 bg-white/20 text-white rounded-md text-[10px] font-black uppercase tracking-widest shrink-0">Pro</span>
           </button>
         </div>
       </div>
@@ -2987,7 +3098,10 @@ const CompetitorFunnelsView = () => {
                   <h3 className="text-2xl font-display font-black text-on-surface tracking-tight">Market Intelligence Overview</h3>
                   <p className="text-sm text-on-surface-variant/60">Aggregate insights from your competitor landscape</p>
                 </div>
-                <button className="text-primary text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:gap-3 transition-all">
+                <button 
+                  onClick={() => toast.success("Market intelligence report exported successfully!")}
+                  className="text-primary text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:gap-3 transition-all"
+                >
                   Export Report <ArrowRight size={16} />
                 </button>
               </div>

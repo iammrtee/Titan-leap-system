@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { TITANLEAP_SYSTEM_PROMPT } from '../prompt';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -14,13 +15,18 @@ const generateContentWithRetry = async (params: any, maxRetries = 3) => {
       
       const isOverloaded = 
         errorStatus === 503 || 
+        errorStatus === 502 ||
         errorStatus === 429 || 
         errorStatus === 'UNAVAILABLE' ||
         errorMessage.includes('503') || 
+        errorMessage.includes('502') ||
         errorMessage.includes('429') || 
+        errorMessage.includes('Bad Gateway') ||
         errorMessage.includes('high demand') ||
         errorMessage.includes('UNAVAILABLE') ||
         errorString.includes('503') ||
+        errorString.includes('502') ||
+        errorString.includes('Bad Gateway') ||
         errorString.includes('high demand');
       
       if (isOverloaded && retryCount < maxRetries) {
@@ -78,7 +84,7 @@ export const generateNotionContent = async (userPrompt: string) => {
     return parseJSON(response.text, []);
   } catch (error) {
     console.error("AI Generation Error:", error);
-    return [];
+    throw error;
   }
 };
 
@@ -132,6 +138,7 @@ export const generateContentScripts = async (handle: string, mode: string) => {
       config: {
         responseMimeType: "application/json",
         tools: [{ googleSearch: {} }, { urlContext: {} }],
+        toolConfig: { includeServerSideToolInvocations: true }
       }
     });
 
@@ -149,25 +156,104 @@ export const generateContentScripts = async (handle: string, mode: string) => {
     return data;
   } catch (error) {
     console.error("AI Generation Error:", error);
-    return { scripts: [], overallStrategy: '', audienceInsights: '', trendingTopics: [] };
+    throw error;
   }
 };
 
-export const auditLandingPage = async (businessData: any) => {
+export const auditLandingPage = async (formData: any) => {
   const prompt = `
-    Act as a world-class growth auditor. 
-    Analyze the following business data: ${JSON.stringify(businessData)}.
-    Provide a comprehensive growth audit including:
-    1. Estimated monthly revenue gap (a dollar amount).
-    2. 3-4 specific leakage points (issues).
-    For each issue, provide:
-    - Area (e.g., Landing Page, Offer, Email Sequence, Ads)
-    - Problem description
-    - Revenue impact (a dollar amount)
-    - Actionable recommendation
-    - Priority (Critical, Improve, or Optimise)
-    - Status (critical, improve, or optimise)
-    Format the output as JSON with 'revenueGap' (number), and 'issues' (array of objects with 'id', 'area', 'problem', 'impact' (number), 'action', 'priority', 'status').
+═══════════════════════════════════════════════════════════════
+FORM SUBMISSION DATA
+═══════════════════════════════════════════════════════════════
+
+BUSINESS BASICS:
+Business Name: ${formData.businessName}
+Industry: ${formData.industry}
+Website URL: ${formData.websiteUrl}
+Duration: ${formData.businessDuration}
+
+SOCIAL MEDIA:
+Primary Platform: ${formData.primaryPlatform}
+Social Handle(s): ${formData.socialHandles?.join(', ')}
+Average Monthly Reach: ${formData.monthlyReach}
+Posting Consistency: ${formData.postingConsistently}
+
+OFFER:
+Main Product/Service: ${formData.mainOffer}
+Price Point: ${formData.currency} ${formData.pricePoint}
+Pricing Page URL: ${formData.pricingPageUrl}
+Upsell/Downsell: ${formData.hasUpsell ? 'Yes - ' + formData.upsellDetails : 'No'}
+Competitive Difference: ${formData.differentiator}
+Current Conversion Rate: ${formData.conversionRate}%
+
+REVENUE & GOALS:
+Current Monthly Revenue: $${formData.currentRevenue}
+Target Monthly Revenue: $${formData.targetRevenue}
+Timeline to Target: ${formData.timeline}
+Biggest Challenge: ${formData.challenges?.join(', ')}
+
+FUNNEL:
+Landing Page: ${formData.hasLandingPage ? formData.landingPageUrl : 'No'}
+Thank You Page: ${formData.hasThankYouPage ? formData.thankYouPageUrl : 'No'}
+Email Sequence: ${formData.emailSequence}
+Tools Used: ${formData.tools?.join(', ')}
+
+CONTENT & ADS:
+Running Paid Ads: ${formData.runningAds ? 'Yes - ' + formData.adPlatform + ' ($' + formData.adSpend + '/mo)' : 'No'}
+Existing Content Scripts: ${formData.hasScripts ? 'Yes' : 'No'}
+Content Types: ${formData.contentTypes?.join(', ')}
+
+═══════════════════════════════════════════════════════════════
+
+Generate a comprehensive growth audit based on the TitanLeap monetization framework.
+You MUST output valid JSON matching this exact structure:
+{
+  "revenueGap": number (estimated monthly revenue gap in dollars),
+  "executiveOffer": {
+    "tldr": string (One-sentence diagnosis -> fix -> outcome),
+    "recommendedPackage": string (e.g., "Launch Accelerator", "Scaling System")
+  },
+  "issues": [
+    {
+      "id": string (unique identifier),
+      "area": string (e.g., "Landing Page", "Offer", "Email Sequence", "Ads"),
+      "problem": string (detailed description of the leakage point),
+      "impact": number (estimated revenue impact in dollars),
+      "action": string (actionable recommendation to fix it),
+      "priority": string ("Critical", "Improve", or "Optimise"),
+      "status": string ("critical", "improve", or "optimise"),
+      "implementationTime": string (e.g., "2 weeks"),
+      "effortLevel": string ("Low", "Medium", "High"),
+      "whyItMatters": string (Quantify the loss),
+      "serviceHint": string (Optional hint at your service)
+    }
+  ],
+  "quickWin": {
+    "title": string (e.g., "30-DAY QUICK WIN (Creative + Ads Only)"),
+    "description": string,
+    "whatWeDo": [string],
+    "whatYouDo": [string],
+    "expectedOutcome": [string],
+    "timeline": string,
+    "cost": string,
+    "roi": string
+  },
+  "caseStudy": {
+    "company": string,
+    "startingPoint": string,
+    "theFix": [string],
+    "results": [string],
+    "keyInsight": string
+  },
+  "implementationTiers": [
+    {
+      "name": string,
+      "price": string,
+      "description": string,
+      "features": [string]
+    }
+  ]
+}
   `;
 
   try {
@@ -175,14 +261,16 @@ export const auditLandingPage = async (businessData: any) => {
       model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
+        systemInstruction: TITANLEAP_SYSTEM_PROMPT,
+        temperature: 0.7,
         responseMimeType: "application/json",
       }
     });
 
-    return parseJSON(response.text, {});
+    return parseJSON(response.text, { revenueGap: 0, issues: [] });
   } catch (error) {
     console.error("AI Audit Error:", error);
-    return null;
+    throw error;
   }
 };
 
@@ -490,7 +578,7 @@ export const generateContentIdeas = async (industry: string, audience: string, t
   }
 };
 
-export const auditMarketingFunnel = async (funnelData: any) => {
+export const auditEmailSequence = async (funnelData: any) => {
   const prompt = `
     You are an elite funnel analyst and conversion rate optimization specialist. Your job is to audit a client's marketing funnel and identify exactly where they are losing money, with specific actionable fixes.
     When given funnel information, you will analyse every stage with the precision of a world-class CRO expert. You understand buyer psychology, copywriting principles, traffic quality, offer positioning, and post-purchase optimization.
@@ -522,6 +610,8 @@ export const auditMarketingFunnel = async (funnelData: any) => {
        - Score (1-10)
        - Analysis (What's working, what's failing)
        - The "Money Leak" (Exactly how much potential revenue is being lost here)
+       - Bottlenecks (2-3 specific conversion bottlenecks identified in this stage)
+       - Content Ideas (2-3 AI-generated content or copy ideas to improve this specific stage)
     5. Top 3 Fixes: The three highest-leverage changes to make in the next 48 hours to see an immediate ROI.
     6. Competitor Analysis: How this funnel stacks up against industry leaders in the same niche.
 
@@ -535,7 +625,9 @@ export const auditMarketingFunnel = async (funnelData: any) => {
           "name": "string",
           "score": number,
           "analysis": "string",
-          "moneyLeak": "string"
+          "moneyLeak": "string",
+          "bottlenecks": ["string"],
+          "contentIdeas": ["string"]
         }
       ],
       "topFixes": [
@@ -552,6 +644,92 @@ export const auditMarketingFunnel = async (funnelData: any) => {
   try {
     const response = await generateContentWithRetry({
       model: "gemini-3-flash-preview",
+      contents: [{ parts: [{ text: prompt }] }],
+      config: {
+        responseMimeType: "application/json",
+        tools: [{ googleSearch: {} }, { urlContext: {} }],
+      }
+    });
+
+    return parseJSON(response.text, {});
+  } catch (error) {
+    console.error("Email Sequence Audit Error:", error);
+    return null;
+  }
+};
+
+export const auditMarketingFunnel = async (funnelData: any) => {
+  const prompt = `
+You are an expert conversion funnel analyst. Analyze funnels and identify specific conversion blockers. Your analysis is direct, data-driven, and ranked by impact.
+
+ANALYZE THIS FUNNEL:
+
+Landing Page: ${funnelData.landingPageUrl || funnelData.landingPage || 'Not provided'}
+Middle Steps: ${funnelData.middleStepUrls || 'Not provided'}
+Thank You Page: ${funnelData.thankYouPageUrl || 'Not provided'}
+Traffic Source: ${funnelData.trafficSource || funnelData.trafficSources || 'Not provided'}
+Conversion Goal: ${funnelData.conversionGoal || 'Lead Generation / Sales'}
+
+EVALUATE:
+
+1. LANDING PAGE (rate 1-10 for each):
+   - Headline clarity
+   - Value prop distinctness
+   - CTA visibility/design
+   - Form friction (how many fields?)
+   - Social proof present?
+   - Mobile responsive?
+
+2. FUNNEL FLOW:
+   - What are all the steps between landing → conversion?
+   - What friction points exist?
+
+3. TOP 3 CONVERSION KILLERS:
+   - What kills conversions?
+   - Why does it kill conversion?
+   - Exact fix
+   - Estimated impact %
+
+4. QUICK WINS (3-5 changes this week):
+   - Win description
+   - Effort (low/medium)
+   - Impact potential
+   - How to implement
+
+5. TRAFFIC SOURCE FIT:
+   - Is this funnel optimized for the traffic source?
+   - What messaging gaps exist?
+
+OUTPUT AS JSON ONLY:
+
+{
+  "landing_page_scores": {
+    "headline_clarity": {"score": 0, "issue": "...", "fix": "..."},
+    "value_prop": {"score": 0, "issue": "...", "fix": "..."},
+    "cta_button": {"score": 0, "issue": "...", "fix": "..."},
+    "form_friction": {"score": 0, "issue": "...", "fix": "..."},
+    "social_proof": {"score": 0, "issue": "...", "fix": "..."},
+    "mobile_friendly": {"score": 0, "issue": "...", "fix": "..."}
+  },
+  "funnel_steps": ["step1", "step2", "..."],
+  "friction_points": ["friction1", "friction2"],
+  "top_killers": [
+    {"rank": 1, "problem": "...", "why": "...", "fix": "...", "impact": "X-Y%"},
+    {"rank": 2, "problem": "...", "why": "...", "fix": "...", "impact": "X-Y%"},
+    {"rank": 3, "problem": "...", "why": "...", "fix": "...", "impact": "X-Y%"}
+  ],
+  "quick_wins": [
+    {"win": "...", "effort": "low/medium", "impact": "X%", "steps": ["..."]},
+    {"win": "...", "effort": "low/medium", "impact": "X%", "steps": ["..."]}
+  ],
+  "traffic_fit": "optimized/partial/generic",
+  "priority": "The #1 thing to fix first"
+}
+  `;
+
+  try {
+    const response = await generateContentWithRetry({
+      model: "gemini-3.1-pro-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
         responseMimeType: "application/json",

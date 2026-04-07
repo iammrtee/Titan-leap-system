@@ -128,7 +128,7 @@ export const ContentManager: React.FC = () => {
       const newTasks = prevTasks.map(task => {
         if ((task.status === 'review' || task.status === 'done') && (!task.reviewLink || !task.reviewLink.trim())) {
           changed = true;
-          return { ...task, status: 'inprogress' };
+          return { ...task, status: 'inprogress' as TaskStatus };
         }
         return task;
       });
