@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { TrendingUp, Users, DollarSign, Target, ArrowUpRight, MoreHorizontal, Rocket, Zap, CheckCircle2, AlertCircle, Mail } from 'lucide-react';
+import { TrendingUp, Users, DollarSign, Target, ArrowUpRight, MoreHorizontal, Rocket, Zap, CheckCircle2, AlertCircle, Mail, Instagram, Linkedin, Clock } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 
 const MetricCard = ({ title, value, trend, trendValue, icon: Icon, color }: any) => (
@@ -135,7 +135,7 @@ export const DashboardOverview: React.FC = () => {
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
           <div className="flex items-center justify-between">
-            <h5 className="text-lg font-bold text-on-surface">Active Campaigns</h5>
+            <h5 className="text-lg font-bold text-on-surface">Campaign Performance</h5>
             <button className="text-primary text-xs font-bold uppercase tracking-wider hover:underline">View All</button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -174,20 +174,21 @@ export const DashboardOverview: React.FC = () => {
         </div>
 
         {/* Activity Log */}
-        <div className="glass-panel rounded-2xl p-8 shadow-ambient">
+        <div className="glass-panel rounded-2xl p-8 shadow-ambient flex flex-col h-full">
           <div className="flex items-center justify-between mb-8">
             <h5 className="text-lg font-bold text-on-surface">Activity Log</h5>
             <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant/40">
               <MoreHorizontal size={16} />
             </button>
           </div>
-          <div className="space-y-8 relative">
+          <div className="space-y-8 relative flex-1 overflow-y-auto pr-2 custom-scrollbar max-h-[300px]">
             <div className="absolute left-2.5 top-2 bottom-2 w-[1px] bg-outline-variant/30" />
             {[
               { title: 'New high-value lead', desc: "Enterprise contact 'Oracle' added to pipeline.", time: '2 mins ago', icon: Zap, color: 'bg-secondary-container' },
               { title: "Campaign 'Q4 Retail' Live", desc: "Status changed to active. Delivery started.", time: '1 hour ago', icon: Mail, color: 'bg-primary/10' },
               { title: 'Weekly Audit Completed', desc: "System healthy. 4 optimizations suggested.", time: '4 hours ago', icon: CheckCircle2, color: 'bg-surface-container' },
               { title: 'API Latency Spike', desc: "Resolved: Database indexing performance issue.", time: 'Yesterday', icon: AlertCircle, color: 'bg-error-container/20' },
+              { title: 'New team member added', desc: "Sarah Jenkins joined as Creative Designer.", time: '2 days ago', icon: Users, color: 'bg-tertiary/10' },
             ].map((item, i) => (
               <div key={i} className="relative flex gap-4 pl-8">
                 <div className={cn(
@@ -204,8 +205,88 @@ export const DashboardOverview: React.FC = () => {
               </div>
             ))}
           </div>
-          <button className="w-full mt-12 py-3 border border-outline-variant/20 rounded-xl text-xs font-bold text-on-surface-variant/60 hover:bg-surface-container transition-colors">
+          <button className="w-full mt-8 py-3 border border-outline-variant/20 rounded-xl text-xs font-bold text-on-surface-variant/60 hover:bg-surface-container transition-colors shrink-0">
             Full Activity History
+          </button>
+        </div>
+      </section>
+
+      {/* Active Campaigns & Content */}
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Active Campaigns */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="flex items-center justify-between">
+            <h5 className="text-lg font-bold text-on-surface">Active Campaigns</h5>
+            <button className="text-primary text-xs font-bold uppercase tracking-wider hover:underline">View All</button>
+          </div>
+          <div className="space-y-4">
+            {[
+              { name: 'SaaS Growth VSL', platform: 'Instagram', status: 'Scaling', spend: '$4,200', roas: '5.8x' },
+              { name: 'Bootstrap Manifesto', platform: 'LinkedIn', status: 'Active', spend: '$2,800', roas: '3.2x' },
+              { name: 'Growth OS Demo', platform: 'Instagram', status: 'Scaling', spend: '$3,450', roas: '4.1x' },
+            ].map((campaign, i) => (
+              <div key={i} className="bg-surface-container-lowest p-6 rounded-xl shadow-sm group hover:shadow-ambient transition-all border-none flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-primary/5 flex items-center justify-center text-primary group-hover:bg-primary/10 transition-all">
+                    {campaign.platform === 'Instagram' ? <Instagram size={20} /> : <Linkedin size={20} />}
+                  </div>
+                  <div>
+                    <h6 className="font-bold text-on-surface group-hover:text-primary transition-colors">{campaign.name}</h6>
+                    <p className="text-[10px] uppercase tracking-widest text-on-surface-variant/60 font-bold mt-1">{campaign.platform} Ads</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-8">
+                  <div className="text-right">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant/60">ROAS</p>
+                    <p className="text-sm font-black text-secondary">{campaign.roas}</p>
+                  </div>
+                  <div className={cn(
+                    "text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider",
+                    campaign.status === 'Scaling' ? "bg-secondary-container/20 text-on-secondary-fixed-variant" : "bg-surface-container text-on-surface-variant"
+                  )}>
+                    {campaign.status}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Content Calendar Preview */}
+        <div className="glass-panel rounded-2xl p-8 shadow-ambient">
+          <div className="flex items-center justify-between mb-8">
+            <h5 className="text-lg font-bold text-on-surface">Upcoming Content</h5>
+            <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant/40">
+              <MoreHorizontal size={16} />
+            </button>
+          </div>
+          <div className="space-y-8 relative">
+            <div className="absolute left-2.5 top-2 bottom-2 w-[1px] bg-outline-variant/30" />
+            {[
+              { day: 'Today', title: 'The Hidden Growth Hack for SaaS Founders', platform: 'TikTok', time: '18:00', color: 'bg-primary/10' },
+              { day: 'Tomorrow', title: 'Why we raised $0 and scaled to $1M ARR', platform: 'LinkedIn', time: '09:00', color: 'bg-secondary-container' },
+              { day: 'Mar 24', title: 'Day in the life of a Growth Engineer', platform: 'Instagram', time: '20:00', color: 'bg-surface-container' },
+            ].map((item, i) => (
+              <div key={i} className="relative flex gap-4 pl-8">
+                <div className={cn(
+                  "absolute left-0 top-1 w-5 h-5 rounded-full ring-4 ring-surface-container-lowest flex items-center justify-center z-10",
+                  item.color
+                )}>
+                  <Clock size={10} className={cn(item.color.includes('primary') ? 'text-primary' : item.color.includes('secondary') ? 'text-secondary' : 'text-on-surface-variant')} />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary">{item.platform}</span>
+                    <span className="text-[10px] font-bold text-on-surface-variant">{item.time}</span>
+                  </div>
+                  <p className="text-sm font-bold text-on-surface leading-tight">{item.title}</p>
+                  <span className="text-[10px] text-on-surface-variant/40 mt-2 block font-medium">{item.day}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button className="w-full mt-12 py-3 border border-outline-variant/20 rounded-xl text-xs font-bold text-on-surface-variant/60 hover:bg-surface-container transition-colors">
+            Full Calendar
           </button>
         </div>
       </section>
