@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Anchor, Network, LineChart, Download, Clapperboard, Info, Bolt, Search, Users, TrendingUp, Calendar, Upload, Clock, CheckCircle2, List, LayoutGrid, Filter, Plus, ChevronRight, Share2, MoreHorizontal, Instagram, Twitter, Linkedin, Youtube, Play, Zap, Rocket, Loader2, Sparkles, AlertCircle, FileText, ExternalLink, MoreVertical, Target, RefreshCw } from 'lucide-react';
+import { Anchor, Network, LineChart, Download, Clapperboard, Info, Bolt, Search, Users, TrendingUp, Calendar, Upload, Clock, CheckCircle2, List, LayoutGrid, Filter, Plus, ChevronRight, Share2, MoreHorizontal, Instagram, Twitter, Linkedin, Youtube, Play, Zap, Rocket, Loader2, Sparkles, AlertCircle, FileText, ExternalLink, MoreVertical, Target, RefreshCw, X } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent } from '@/src/services/ai';
 import { toast } from 'sonner';
@@ -242,6 +242,10 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
         return prev + 10;
       });
     }, 200);
+  };
+
+  const handleDeleteAsset = (indexToDelete: number) => {
+    setUploadedAssets(prevAssets => prevAssets.filter((_, index) => index !== indexToDelete));
   };
 
   const selectedDayItems = filteredCalendarItems.filter(item => 
@@ -1766,15 +1770,25 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                     key={i} 
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="aspect-square rounded-2xl md:rounded-[32px] overflow-hidden border border-outline-variant/10 shadow-md group cursor-pointer relative"
+                    className="aspect-square rounded-2xl md:rounded-[32px] overflow-hidden border border-outline-variant/10 shadow-md group relative"
                   >
                     <img src={img} alt="Asset" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" referrerPolicy="no-referrer" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                     {i === 0 && !isUploading && uploadProgress === 100 && (
-                      <div className="absolute top-4 right-4 bg-emerald-500 text-white p-1.5 rounded-full shadow-lg">
+                      <div className="absolute top-4 right-4 bg-emerald-500 text-white p-1.5 rounded-full shadow-lg pointer-events-none">
                         <CheckCircle2 size={14} />
                       </div>
                     )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteAsset(i);
+                      }}
+                      className="absolute top-4 left-4 bg-black/50 hover:bg-error text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg backdrop-blur-sm"
+                      title="Delete asset"
+                    >
+                      <X size={16} />
+                    </button>
                   </motion.div>
                 ))}
                 <button 
