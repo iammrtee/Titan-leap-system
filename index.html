@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My Google AI Studio App</title>
+    <script>
+      // Catch extension ready message in case it fires before React has mounted
+      window.__EXT_READY__ = false;
+      window.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'TITANLEAP_EXTENSION_READY') {
+          window.__EXT_READY__ = true;
+        }
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

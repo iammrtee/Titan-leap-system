@@ -22,6 +22,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [auditData, setAuditData] = useState<any>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [forceRegenerateTimestamp, setForceRegenerateTimestamp] = useState<number>(0);
 
   // Persistence: Load saved state on mount
@@ -29,6 +30,7 @@ export default function App() {
     const savedView = localStorage.getItem('titanleap_active_view');
     const savedAuditData = localStorage.getItem('titanleap_audit_report'); // Share with AuditView
     const savedDarkMode = localStorage.getItem('titanleap_dark_mode');
+    const savedSidebarState = localStorage.getItem('titanleap_sidebar_collapsed');
 
     if (savedView) setActiveView(savedView as ViewType);
     if (savedAuditData) {
@@ -39,12 +41,17 @@ export default function App() {
       }
     }
     if (savedDarkMode) setDarkMode(savedDarkMode === 'true');
+    if (savedSidebarState) setIsSidebarCollapsed(savedSidebarState === 'true');
   }, []);
 
   // Persistence: Save state on change
   useEffect(() => {
     localStorage.setItem('titanleap_active_view', activeView);
   }, [activeView]);
+
+  useEffect(() => {
+    localStorage.setItem('titanleap_sidebar_collapsed', String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
 
   useEffect(() => {
     localStorage.setItem('titanleap_dark_mode', String(darkMode));
@@ -140,11 +147,16 @@ export default function App() {
         onToggleDarkMode={() => setDarkMode(!darkMode)} 
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
       
       <Toaster position="top-right" richColors />
       
-      <main className="md:ml-64 min-h-screen flex flex-col relative">
+      <main className={cn(
+        "min-h-screen flex flex-col relative transition-all duration-300 ease-in-out",
+        isSidebarCollapsed ? "md:ml-20" : "md:ml-64"
+      )}>
         <TopBar 
           title={config.title} 
           subtitle={config.subtitle} 
@@ -154,7 +166,7 @@ export default function App() {
         
         <div className={cn(
           "w-full flex-1",
-          activeView === 'funnel' ? "p-0" : "p-4 md:p-8 max-w-7xl mx-auto"
+          activeView === 'funnel' ? "p-0" : "p-4 md:p-8 lg:p-12 xl:p-16 w-full"
         )}>
           <AnimatePresence mode="wait">
             <motion.div
@@ -170,8 +182,8 @@ export default function App() {
         </div>
 
         {/* Global Footer */}
-        <footer className="p-12 border-t border-outline-variant/10 bg-surface-container-lowest/30 backdrop-blur-sm">
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
+        <footer className="py-12 px-4 md:px-8 lg:px-12 xl:px-16 border-t border-outline-variant/10 bg-surface-container-lowest/30 backdrop-blur-sm">
+          <div className="w-full mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="flex items-center gap-3">
               <Logo className="w-8 h-8 rounded-full" />
               <span className="text-lg font-black uppercase tracking-tighter text-on-surface">TitanLeap</span>
@@ -191,17 +203,6 @@ export default function App() {
           </div>
         </footer>
       </main>
-
-      {/* Contextual FAB */}
-      <motion.button 
-        whileHover={{ scale: 1.1, rotate: 5 }}
-        whileTap={{ scale: 0.9 }}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-primary text-on-primary rounded-2xl shadow-2xl shadow-primary/20 flex items-center justify-center z-50 group border border-white/10"
-      >
-        <div className="relative">
-          <Plus size={28} className="group-hover:rotate-90 transition-transform duration-500" />
-        </div>
-      </motion.button>
     </div>
   );
 }

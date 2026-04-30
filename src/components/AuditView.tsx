@@ -378,7 +378,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
   };
 
   return (
-    <div className="max-w-[1600px] mx-auto p-4 md:p-12 space-y-8 md:space-y-16">
+    <div className="w-full space-y-8 md:space-y-16">
       {/* Top Header - Consistent with rest of system */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-8 relative">
         <div className="space-y-4">
@@ -939,7 +939,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
           </div>
         </div>
         ) : activeTab === 'result' ? (
-          <div className="max-w-5xl mx-auto w-full">
+          <div className="w-full">
               <div className="bg-surface-container-lowest rounded-[48px] border border-outline-variant/10 shadow-2xl min-h-[900px] flex flex-col overflow-hidden">
                 {auditReport ? (
                   <div className="flex-1 flex flex-col p-6 md:p-12 space-y-12">

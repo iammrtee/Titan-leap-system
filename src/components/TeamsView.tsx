@@ -45,7 +45,7 @@ export const TeamsView: React.FC = () => {
   }, []);
 
   return (
-    <div className="space-y-10 max-w-6xl mx-auto">
+    <div className="space-y-10 w-full">
       {/* Client Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-2">

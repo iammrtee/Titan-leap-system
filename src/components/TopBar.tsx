@@ -11,7 +11,7 @@ interface TopBarProps {
 
 export const TopBar: React.FC<TopBarProps> = ({ title, subtitle, badge, onToggleMobileMenu }) => {
   return (
-    <header className="w-full sticky top-0 z-40 bg-surface/60 backdrop-blur-2xl border-b border-outline-variant/5 h-16 flex items-center justify-between px-4 md:px-8">
+    <header className="w-full sticky top-0 z-40 bg-surface/60 backdrop-blur-2xl border-b border-outline-variant/5 h-16 flex items-center justify-between px-4 md:px-8 lg:px-12 xl:px-16">
       <div className="flex items-center gap-4 md:gap-6">
         {onToggleMobileMenu && (
           <button 

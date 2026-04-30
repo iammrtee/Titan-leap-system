@@ -178,7 +178,7 @@ export const FunnelHub: React.FC = () => {
       {/* Header Section */}
       <div className={cn(
         "flex flex-col gap-6 pt-4 md:pt-8 shrink-0",
-        activeTab === 'editor' ? "px-4 md:px-8" : "px-4 md:px-8 max-w-7xl mx-auto w-full"
+        activeTab === 'editor' ? "px-4 md:px-8 lg:px-12 xl:px-16" : "px-4 md:px-8 lg:px-12 xl:px-16 w-full"
       )}>
         <div className="flex flex-col md:flex-row justify-between items-start gap-6 md:gap-0">
           <div className="space-y-4">
@@ -219,7 +219,7 @@ export const FunnelHub: React.FC = () => {
       {/* Sub-navigation */}
       <div className={cn(
         "flex items-center gap-6 md:gap-8 border-b border-outline-variant/10 pb-0 mt-6 md:mt-8 shrink-0 overflow-x-auto no-scrollbar",
-        activeTab === 'editor' ? "px-4 md:px-8 mb-0" : "px-4 md:px-8 max-w-7xl mx-auto w-full"
+        activeTab === 'editor' ? "px-4 md:px-8 lg:px-12 xl:px-16 mb-0" : "px-4 md:px-8 lg:px-12 xl:px-16 w-full"
       )}>
         {(['current', 'editor', 'audit', 'competitor'] as FunnelTab[]).map((tab) => (
           <button
@@ -256,7 +256,7 @@ export const FunnelHub: React.FC = () => {
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.3 }}
           className={cn(
-            activeTab !== 'editor' ? "px-4 md:px-8 max-w-7xl mx-auto w-full" : "flex-1 min-h-0 flex flex-col"
+            activeTab !== 'editor' ? "px-4 md:px-8 lg:px-12 xl:px-16 w-full" : "flex-1 min-h-0 flex flex-col"
           )}
         >
           {activeTab === 'current' && (
