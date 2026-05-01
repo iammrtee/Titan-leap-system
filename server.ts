@@ -25,6 +25,15 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
+  app.get("/api/system/export-text", (req, res) => {
+    const filePath = path.join(process.cwd(), 'public', 'codebase.txt');
+    if (fs.existsSync(filePath)) {
+      res.download(filePath, "titanleap-codebase.txt");
+    } else {
+      res.status(404).send("Codebase text file not generated yet.");
+    }
+  });
+
   app.get("/api/extension/download", (req, res) => {
     try {
       const zip = new AdmZip();

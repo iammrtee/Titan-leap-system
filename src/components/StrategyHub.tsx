@@ -2604,19 +2604,27 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                               : "To post directly from your browser, you need the TitanLeap Local Executor extension."}
                           </p>
                           
-                          <div className="pt-2">
+                          <div className="pt-2 flex flex-col gap-2">
                             <a 
                               href="/api/extension/download" 
                               download="titanleap-extension-v21.zip"
                               className={cn(
-                                "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-bold transition-colors",
+                                "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-bold transition-colors w-fit",
                                 isExtensionReady 
                                   ? "bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high" 
                                   : "bg-primary text-on-primary hover:bg-primary/90"
                               )}
                             >
                               <Download size={14} />
-                              {isExtensionReady ? "Re-Download Extension (v21)" : "Download ZIP (Stable Archive)"}
+                              {isExtensionReady ? "Re-Download Extension (v21)" : "Download Extension ZIP"}
+                            </a>
+                            <a 
+                              href="/api/system/export-text" 
+                              download="titanleap-codebase.txt"
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-bold transition-colors bg-surface-container-high text-on-surface hover:text-on-surface hover:bg-surface-container-highest w-fit border border-outline-variant"
+                            >
+                              <Download size={14} />
+                              Download Full System as Text (For Antigravity)
                             </a>
                             {!isExtensionReady && (
                               <p className="text-[9px] text-on-surface-variant/60 mt-2">
@@ -2804,7 +2812,29 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       {/* Header with Tabs */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 md:gap-6">
         <div className="space-y-1 md:space-y-2">
-          <h2 className="text-3xl md:text-4xl font-black tracking-tight text-on-surface">Strategy Hub</h2>
+          <div className="flex flex-wrap items-center gap-4">
+            <h2 className="text-3xl md:text-4xl font-black tracking-tight text-on-surface">Strategy Hub</h2>
+            
+            <div className="flex items-center gap-2">
+              <a 
+                href="/api/extension/download" 
+                download="titanleap-extension-v21.zip"
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-bold hover:bg-primary/20 transition-colors"
+                title="Download TitanLeap Local Executor Chrome Extension"
+              >
+                <Download size={14} />
+                Download Executor Automator Extension
+              </a>
+              <a 
+                href="/api/system/export-text" 
+                download="titanleap-codebase.txt"
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-surface-container-high text-on-surface border border-outline-variant/20 rounded-lg text-[10px] font-bold hover:bg-surface-container-highest transition-colors"
+              >
+                <Download size={14} />
+                Export Complete Codebase
+              </a>
+            </div>
+          </div>
           <p className="text-xs md:text-sm font-medium text-on-surface-variant/60">Orchestrate your multi-channel growth engine.</p>
         </div>
 
