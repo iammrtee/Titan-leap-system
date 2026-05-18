@@ -55,6 +55,35 @@ CREATE POLICY "Public Updates" ON storage.objects FOR UPDATE USING (bucket_id = 
 -- Allow public deletes
 CREATE POLICY "Public Deletes" ON storage.objects FOR DELETE USING (bucket_id = 'media');
 
--- 5. Disable RLS on tables for prototyping (Enable later for production!)
+-- 5. Create a table for Leads
+CREATE TABLE IF NOT EXISTS leads (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT,
+  company TEXT,
+  source TEXT DEFAULT 'Audit',
+  status TEXT DEFAULT 'HOT', -- HOT, WARM, COLD, CONVERTED
+  product TEXT,
+  score INTEGER DEFAULT 0,
+  score_reason TEXT,
+  synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 6. Create a table for Sales/Revenue
+CREATE TABLE IF NOT EXISTS sales_transactions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  lead_id UUID REFERENCES leads(id),
+  amount DECIMAL(12,2) NOT NULL,
+  currency TEXT DEFAULT 'USD',
+  product_name TEXT,
+  status TEXT DEFAULT 'COMPLETED',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 7. Disable RLS on tables for prototyping (Enable later for production!)
 ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE posts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE leads DISABLE ROW LEVEL SECURITY;
+ALTER TABLE sales_transactions DISABLE ROW LEVEL SECURITY;

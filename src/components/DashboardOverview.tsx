@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { TrendingUp, Users, DollarSign, Target, ArrowUpRight, MoreHorizontal, Rocket, Zap, CheckCircle2, AlertCircle, Mail, Instagram, Linkedin, Clock } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { supabase } from '@/src/services/supabase';
 
 const MetricCard = ({ title, value, trend, trendValue, icon: Icon, color }: any) => (
   <motion.div 
@@ -56,6 +57,47 @@ const CampaignCard = ({ title, description, conversion, spend, status, icon: Ico
 );
 
 export const DashboardOverview: React.FC = () => {
+  const [totalLeads, setTotalLeads] = React.useState(0);
+  const [totalRevenue, setTotalRevenue] = React.useState(0);
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      // 1. Leads Count
+      const { count: leadsCount } = await supabase
+        .from('leads')
+        .select('*', { count: 'exact', head: true });
+      
+      setTotalLeads(leadsCount || 0);
+
+      // 2. Revenue Sum
+      const { data: salesData } = await supabase
+        .from('sales_transactions')
+        .select('amount')
+        .eq('status', 'COMPLETED');
+      
+      const revenue = (salesData || []).reduce((acc, curr) => acc + Number(curr.amount), 0);
+      setTotalRevenue(revenue);
+    };
+
+    fetchData();
+
+    // Subscribe to realtime
+    const leadsChannel = supabase
+      .channel('dash-leads')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchData())
+      .subscribe();
+    
+    const salesChannel = supabase
+      .channel('dash-sales')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_transactions' }, () => fetchData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(leadsChannel);
+      supabase.removeChannel(salesChannel);
+    };
+  }, []);
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -93,7 +135,9 @@ export const DashboardOverview: React.FC = () => {
           <div className="space-y-1 mt-12 md:mt-0">
             <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-on-surface-variant/60">Total Revenue</span>
             <div className="flex flex-wrap items-baseline gap-2">
-              <h4 className="text-4xl md:text-6xl font-black text-primary tracking-tighter">$142,840</h4>
+              <h4 className="text-4xl md:text-6xl font-black text-primary tracking-tighter">
+                ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </h4>
               <div className="bg-secondary-container px-2 py-1 rounded-md flex items-center gap-1">
                 <TrendingUp size={14} className="font-bold text-on-secondary-fixed-variant" />
                 <span className="text-[10px] font-bold text-on-secondary-fixed-variant">+12.4%</span>
@@ -124,7 +168,7 @@ export const DashboardOverview: React.FC = () => {
         />
         <MetricCard 
           title="Leads Generated" 
-          value="8,492" 
+          value={totalLeads.toLocaleString()} 
           trend={false} 
           icon={Target} 
           color="bg-primary/10" 

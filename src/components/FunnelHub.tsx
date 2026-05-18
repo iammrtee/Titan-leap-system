@@ -107,6 +107,14 @@ interface FunnelsPlusResult {
   quick_wins: QuickWin[];
   traffic_fit: string;
   priority: string;
+  stages: {
+    name: string;
+    score: number;
+    analysis: string;
+    moneyLeak: string;
+    bottlenecks: string[];
+    contentIdeas: string[];
+  }[];
 }
 
 interface CompetitorAnalysis {
@@ -274,6 +282,7 @@ export const FunnelHub: React.FC = () => {
                 intakeData={intakeData} 
                 onStartIntake={() => setShowIntake(true)}
                 auditResult={auditResult}
+                setActiveTab={setActiveTab}
               />
             )
           )}
@@ -382,11 +391,13 @@ const BusinessIntakeView = ({
 const CurrentFunnelView = ({ 
   intakeData, 
   onStartIntake,
-  auditResult
+  auditResult,
+  setActiveTab
 }: { 
   intakeData: BusinessIntake | null, 
   onStartIntake: () => void,
-  auditResult: FunnelsPlusResult | null
+  auditResult: FunnelsPlusResult | null,
+  setActiveTab: (tab: FunnelTab) => void
 }) => {
   const calculateHealthScore = (data: BusinessIntake | null, audit: FunnelsPlusResult | null) => {
     if (!data && !audit) return 62;

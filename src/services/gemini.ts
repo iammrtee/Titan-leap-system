@@ -3,8 +3,6 @@ import { TITANLEAP_SYSTEM_PROMPT } from "../prompt";
 import { AuditFormData } from "../types";
 
 export async function generateAuditReport(data: AuditFormData): Promise<string> {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
   const prompt = `
 ═══════════════════════════════════════════════════════════════
 FORM SUBMISSION DATA
@@ -53,18 +51,27 @@ Generate the complete audit report now using the TitanLeap monetization framewor
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3.1-pro-preview",
-      contents: prompt,
-      config: {
-        systemInstruction: TITANLEAP_SYSTEM_PROMPT,
+    const response = await fetch('/api/ai/gemini', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt,
+        systemPrompt: TITANLEAP_SYSTEM_PROMPT,
         temperature: 0.7,
-      }
+      }),
     });
 
-    return response.text || "Failed to generate report. Please try again.";
-  } catch (error) {
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || "Failed to generate report");
+    }
+
+    const result = await response.json();
+    return result.text || "Failed to generate report. Please try again.";
+  } catch (error: any) {
     console.error("Error generating report:", error);
-    throw new Error("Failed to generate report. Check console for details.");
+    throw new Error(error.message || "Failed to generate report. Check console for details.");
   }
 }

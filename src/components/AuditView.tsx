@@ -31,7 +31,8 @@ import {
   FileCode2
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { auditLandingPage, smartFillForm } from '@/src/services/ai';
+import { auditLandingPage, smartFillForm, getAIEngine, setAIEngine, type AIEngine } from '@/src/services/ai';
+import { supabase } from '@/src/services/supabase';
 import { toast } from 'sonner';
 import { Sparkles, Wand2, Loader2, FileDown, Printer, RefreshCw } from 'lucide-react';
 import { jsPDF } from 'jspdf';
@@ -41,6 +42,7 @@ import { Logo } from './Logo';
 interface FormData {
   // Section 1
   businessName: string;
+  email: string;
   industry: string;
   websiteUrl: string;
   businessDuration: string;
@@ -80,6 +82,7 @@ interface FormData {
 
 const INITIAL_FORM_DATA: FormData = {
   businessName: '',
+  email: '',
   industry: '',
   websiteUrl: '',
   businessDuration: '',
@@ -124,6 +127,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM_DATA);
   const [expandedSections, setExpandedSections] = useState<number[]>([1]);
   const [isAuditing, setIsAuditing] = useState(false);
+  const [engine, setEngine] = useState<AIEngine>(getAIEngine());
   const [isSmartFilling, setIsSmartFilling] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
@@ -270,6 +274,23 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
           businessName: formData.businessName || 'Your Business',
           timestamp: new Date().toLocaleString(),
         });
+
+        // Track Lead in Supabase
+        try {
+          await supabase.from('leads').insert({
+            name: formData.businessName || 'Anonymous',
+            email: formData.email || 'no-email@provided.com',
+            company: formData.businessName,
+            source: 'Inbound Audit',
+            product: dashboardResult.executiveOffer?.recommendedPackage || 'Audit',
+            status: 'HOT',
+            score: 85,
+            score_reason: 'High intent audit completed. Potential revenue gap: $' + (dashboardResult.revenueGap || 'Unknown')
+          });
+        } catch (dbError) {
+          console.error("Failed to track lead in Supabase:", dbError);
+        }
+
         toast.success("Audit Complete!", {
           id: auditToast,
           description: "Your algorithmic growth report is ready."
@@ -280,9 +301,25 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
       }
     } catch (error: any) {
       console.error("Audit failed:", error);
+      let errorMessage = error?.message || 'Please try again.';
+      
+      // Clean up JSON error strings if present
+      try {
+        const parsed = JSON.parse(errorMessage);
+        if (parsed.error) errorMessage = parsed.error;
+      } catch (e) {}
+
+      if (errorMessage === 'Forbidden' || errorMessage.includes('403')) {
+        const engine = getAIEngine() === 'claude' ? 'Claude' : 'Gemini';
+        const keyName = getAIEngine() === 'claude' ? 'CLAUDE_API_KEY' : 'GEMINI_API_KEY';
+        errorMessage = `${engine} API access restricted. Please ensure your '${keyName}' is valid in the Settings > Secrets panel.`;
+      } else if (errorMessage.includes('not_found_error')) {
+        errorMessage = `Model not found. Please check if your account has access to the requested Claude model.`;
+      }
+
       toast.error("Audit Failed", {
         id: auditToast,
-        description: `There was an error generating your report: ${error?.message || 'Please try again.'}`
+        description: errorMessage
       });
     } finally {
       setIsAuditing(false);
@@ -413,15 +450,73 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
           {/* Floating Progress Card - Compact */}
           <div className="w-full sm:w-auto bg-surface-container-low p-6 rounded-[24px] border border-outline-variant/10 shadow-xl flex flex-col gap-3 min-w-[280px] relative overflow-hidden group">
             <div className="flex justify-between items-center relative z-10">
-              <span className="text-[10px] font-normal uppercase tracking-[0.2em] text-primary">Audit Progress: {progress}%</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">
+                  {isAuditing ? 'AI Engineering Audit...' : `Audit Progress: ${progress}%`}
+                </span>
+                <span className="text-[8px] font-medium text-on-surface-variant/40 uppercase tracking-widest">
+                  Powered by {engine === 'gemini' ? 'Gemini 1.5 Flash' : 'Claude 3.5 Sonnet'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 p-1 bg-surface-container-highest/50 rounded-xl border border-outline-variant/10">
+                <button 
+                  onClick={() => {
+                    setAIEngine('gemini');
+                    setEngine('gemini');
+                    toast.success("Switched to Gemini", { icon: <Wand2 size={12} /> });
+                  }}
+                  className={cn(
+                    "w-7 h-7 rounded-lg flex items-center justify-center transition-all",
+                    engine === 'gemini' 
+                      ? "bg-primary text-white shadow-lg shadow-primary/20 scale-105" 
+                      : "text-on-surface-variant/40 hover:text-on-surface-variant hover:bg-surface-container-highest"
+                  )}
+                  title="Flash Engine (Fast)"
+                >
+                  <Zap size={12} fill={engine === 'gemini' ? "currentColor" : "none"} />
+                </button>
+                <button 
+                  onClick={() => {
+                    setAIEngine('claude');
+                    setEngine('claude');
+                    toast.success("Switched to Claude", { icon: <Sparkles size={12} /> });
+                  }}
+                  className={cn(
+                    "w-7 h-7 rounded-lg flex items-center justify-center transition-all",
+                    engine === 'claude' 
+                      ? "bg-secondary text-white shadow-lg shadow-secondary/20 scale-105" 
+                      : "text-on-surface-variant/40 hover:text-on-surface-variant hover:bg-surface-container-highest"
+                  )}
+                  title="Claude Engine (Elite)"
+                >
+                  <Sparkles size={12} fill={engine === 'claude' ? "currentColor" : "none"} />
+                </button>
+              </div>
+              {isAuditing && <Loader2 size={12} className="animate-spin text-primary ml-2" />}
             </div>
             <div className="h-2 bg-surface-container-highest rounded-full overflow-hidden relative z-10">
-              <motion.div 
-                className="h-full bg-primary shadow-[0_0_15px_rgba(var(--primary-rgb),0.5)]"
-                initial={{ width: 0 }}
-                animate={{ width: `${progress}%` }}
-                transition={{ duration: 0.8, ease: "circOut" }}
-              />
+              {isAuditing ? (
+                <div className="h-full w-full bg-surface-container-highest relative overflow-hidden">
+                  <motion.div 
+                    className="absolute inset-0 bg-primary opacity-30"
+                    animate={{ x: ['-100%', '100%'] }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                  />
+                  <motion.div 
+                    className="h-full bg-primary shadow-[0_0_15px_rgba(var(--primary-rgb),0.5)]"
+                    initial={{ width: `${progress}%` }}
+                    animate={{ width: "100%" }}
+                    transition={{ duration: 15, ease: "easeOut" }}
+                  />
+                </div>
+              ) : (
+                <motion.div 
+                  className="h-full bg-primary shadow-[0_0_15px_rgba(var(--primary-rgb),0.5)]"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ duration: 0.8, ease: "circOut" }}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -497,6 +592,15 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                       value={formData.businessName}
                       onChange={e => setFormData({...formData, businessName: e.target.value})}
                       placeholder="Lumina Digital"
+                      className="audit-input"
+                    />
+                  </InputGroup>
+                  <InputGroup label="Contact Email" tooltip="Where should we send your deep-dive strategy report?">
+                    <input 
+                      type="email" 
+                      value={formData.email}
+                      onChange={e => setFormData({...formData, email: e.target.value})}
+                      placeholder="founder@lumina.digital"
                       className="audit-input"
                     />
                   </InputGroup>

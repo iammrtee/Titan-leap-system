@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Users, TrendingUp, DollarSign, Target, ArrowUpRight, MoreHorizontal, Rocket, Zap, CheckCircle2, AlertCircle, LayoutGrid, List, Filter, Plus, ChevronRight, Share2, Clock, Upload, Instagram, Twitter, Linkedin, Youtube, Play, FileText, BarChart3, Sparkles, PieChart, RefreshCw, Search, X } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { supabase } from '@/src/services/supabase';
+import { toast } from 'sonner';
 
 interface Lead {
   id: string;
@@ -38,45 +39,55 @@ export const SalesDashboard: React.FC = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [totalLeads, setTotalLeads] = useState(0);
   const [totalConverted, setTotalConverted] = useState(0);
+  const [totalRevenue, setTotalRevenue] = useState(0);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
 
   useEffect(() => {
-    // Fetch initial data
-    const fetchLeads = async () => {
-      const { data, error, count } = await supabase
+    const fetchData = async () => {
+      // 1. Fetch Leads
+      const { data: leadsData, error: leadsError, count: leadsCount } = await supabase
         .from('leads')
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching leads:', error);
+      if (leadsError) {
+        console.error('Error fetching leads:', leadsError);
       } else {
-        setLeads(data || []);
-        setTotalLeads(count || 0);
-        setTotalConverted((data || []).filter(lead => lead.status.toUpperCase() === 'CONVERTED').length);
+        setLeads(leadsData || []);
+        setTotalLeads(leadsCount || 0);
+        setTotalConverted((leadsData || []).filter(lead => lead.status.toUpperCase() === 'CONVERTED').length);
+      }
+
+      // 2. Fetch Sales Transactions
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales_transactions')
+        .select('amount')
+        .eq('status', 'COMPLETED');
+
+      if (salesError) {
+        console.error('Error fetching sales:', salesError);
+      } else {
+        const revenue = (salesData || []).reduce((acc, curr) => acc + Number(curr.amount), 0);
+        setTotalRevenue(revenue);
       }
     };
 
-    fetchLeads();
+    fetchData();
 
-    // Subscribe to realtime changes
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'leads',
-        },
-        (payload) => {
-          fetchLeads();
-        }
-      )
+    // Subscribe to realtime changes on both tables
+    const leadsChannel = supabase
+      .channel('leads-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchData())
+      .subscribe();
+
+    const salesChannel = supabase
+      .channel('sales-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_transactions' }, () => fetchData())
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(leadsChannel);
+      supabase.removeChannel(salesChannel);
     };
   }, []);
 
@@ -144,7 +155,9 @@ export const SalesDashboard: React.FC = () => {
               ))}
             </div>
           </div>
-          <p className="text-2xl font-black text-on-surface tracking-tight">$142,500</p>
+          <p className="text-2xl font-black text-on-surface tracking-tight">
+            ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
           <div className="flex items-center gap-1 text-success mt-1">
             <TrendingUp size={12} />
             <span className="text-[10px] font-black">+14.2% vs prev period</span>
@@ -163,6 +176,34 @@ export const SalesDashboard: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button 
+              onClick={async () => {
+                const { data: lead } = await supabase.from('leads').insert({
+                  name: 'Test Prospect',
+                  email: `test-${Date.now()}@example.com`,
+                  company: 'Test Corp',
+                  source: 'Manual Test',
+                  status: 'HOT',
+                  product: 'Audit',
+                  score: 95,
+                  score_reason: 'High intent manual test'
+                }).select().single();
+
+                if (lead) {
+                  await supabase.from('sales_transactions').insert({
+                    lead_id: lead.id,
+                    amount: 2999,
+                    product_name: 'Launch Accelerator',
+                    status: 'COMPLETED'
+                  });
+                  toast.success("Test Lead & Sale Synced!");
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-xl hover:bg-primary/20 transition-all text-xs font-bold"
+            >
+              <Zap size={14} />
+              <span>Test Sync</span>
+            </button>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={14} />
               <input 

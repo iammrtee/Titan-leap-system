@@ -1,45 +1,54 @@
 import { GoogleGenAI } from "@google/genai";
 import { TITANLEAP_SYSTEM_PROMPT } from '../prompt';
+import { generateClaudeContent } from './claude';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+export type AIEngine = 'gemini' | 'claude';
 
-const generateContentWithRetry = async (params: any, maxRetries = 3) => {
-  let retryCount = 0;
-  while (retryCount <= maxRetries) {
-    try {
-      return await ai.models.generateContent(params);
-    } catch (error: any) {
-      const errorString = typeof error === 'object' ? JSON.stringify(error) : String(error);
-      const errorMessage = error?.message || error?.error?.message || errorString;
-      const errorStatus = error?.status || error?.code || error?.error?.code || error?.error?.status;
-      
-      const isOverloaded = 
-        errorStatus === 503 || 
-        errorStatus === 502 ||
-        errorStatus === 429 || 
-        errorStatus === 'UNAVAILABLE' ||
-        errorMessage.includes('503') || 
-        errorMessage.includes('502') ||
-        errorMessage.includes('429') || 
-        errorMessage.includes('Bad Gateway') ||
-        errorMessage.includes('high demand') ||
-        errorMessage.includes('UNAVAILABLE') ||
-        errorString.includes('503') ||
-        errorString.includes('502') ||
-        errorString.includes('Bad Gateway') ||
-        errorString.includes('high demand');
-      
-      if (isOverloaded && retryCount < maxRetries) {
-        retryCount++;
-        const delay = 1000 * Math.pow(2, retryCount); // 2s, 4s, 8s
-        console.warn(`Gemini API overloaded. Retrying in ${delay}ms... (Attempt ${retryCount} of ${maxRetries})`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      } else {
-        throw error;
-      }
-    }
+let currentEngine: AIEngine = (typeof window !== 'undefined' && localStorage.getItem('preferred_ai_engine') as AIEngine) || 'gemini';
+
+export const setAIEngine = (engine: AIEngine) => {
+  currentEngine = engine;
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('preferred_ai_engine', engine);
   }
-  throw new Error("Max retries reached");
+};
+
+export const getAIEngine = () => currentEngine;
+
+// Helper for Gemini Proxy
+const generateGeminiContent = async (params: {
+  prompt: string;
+  systemPrompt?: string;
+  responseMimeType?: string;
+  temperature?: number;
+}) => {
+  const response = await fetch('/api/ai/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Gemini request failed");
+  }
+  
+  return await response.json();
+};
+
+const unifiedGenerateContent = async (options: {
+  prompt: string;
+  systemPrompt?: string;
+  responseMimeType?: string;
+  temperature?: number;
+}) => {
+  if (currentEngine === 'claude') {
+    const result = await generateClaudeContent(options);
+    return { text: result.text };
+  } else {
+    const result = await generateGeminiContent(options);
+    return { text: result.text };
+  }
 };
 
 const parseJSON = (text: string | undefined, fallback: any = {}) => {
@@ -73,12 +82,9 @@ export const generateNotionContent = async (userPrompt: string) => {
   `;
 
   try {
-    const response = await generateContentWithRetry({
-      model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-      }
+    const response = await unifiedGenerateContent({
+      prompt,
+      responseMimeType: "application/json",
     });
 
     return parseJSON(response.text, []);
@@ -132,14 +138,9 @@ export const generateContentScripts = async (handle: string, mode: string) => {
     `;
 
   try {
-    const response = await generateContentWithRetry({
-      model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-        tools: [{ googleSearch: {} }, { urlContext: {} }],
-        toolConfig: { includeServerSideToolInvocations: true }
-      }
+    const response = await unifiedGenerateContent({
+      prompt,
+      responseMimeType: "application/json",
     });
 
     const data = parseJSON(response.text, {});
@@ -257,14 +258,11 @@ You MUST output valid JSON matching this exact structure:
   `;
 
   try {
-    const response = await generateContentWithRetry({
-      model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        systemInstruction: TITANLEAP_SYSTEM_PROMPT,
-        temperature: 0.7,
-        responseMimeType: "application/json",
-      }
+    const response = await unifiedGenerateContent({
+      prompt,
+      systemPrompt: TITANLEAP_SYSTEM_PROMPT,
+      temperature: 0.7,
+      responseMimeType: "application/json",
     });
 
     return parseJSON(response.text, { revenueGap: 0, issues: [] });
@@ -383,12 +381,9 @@ export const generate30DayPlan = async (auditData: any) => {
   `;
 
   try {
-    const response = await generateContentWithRetry({
-      model: "gemini-3-flash-preview", // Use flash to avoid rate limits
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-      }
+    const response = await unifiedGenerateContent({
+      prompt,
+      responseMimeType: "application/json",
     });
 
     return parseJSON(response.text, {});
@@ -427,16 +422,12 @@ export const smartFillForm = async (url: string) => {
   `;
 
   try {
-    const response = await generateContentWithRetry({
-      model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-        tools: [{ urlContext: {} }, { googleSearch: {} }],
-      }
+    const result = await generateGeminiContent({
+      prompt,
+      responseMimeType: "application/json",
     });
 
-    return parseJSON(response.text, {});
+    return parseJSON(result.text, {});
   } catch (error) {
     console.error("Smart Fill Error:", error);
     return null;
@@ -454,12 +445,9 @@ export const analyzeSocialTrends = async (platform: string) => {
   `;
 
   try {
-    const response = await generateContentWithRetry({
-      model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-      }
+    const response = await unifiedGenerateContent({
+      prompt,
+      responseMimeType: "application/json",
     });
 
     return parseJSON(response.text, []);
@@ -508,12 +496,9 @@ export const refinePlan = async (currentPlan: any, feedback: string) => {
   `;
 
   try {
-    const response = await generateContentWithRetry({
-      model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-      }
+    const response = await unifiedGenerateContent({
+      prompt,
+      responseMimeType: "application/json",
     });
 
     return parseJSON(response.text, {});
@@ -532,9 +517,8 @@ export const getPerformanceInsight = async (metrics: any) => {
   `;
 
   try {
-    const response = await generateContentWithRetry({
-      model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: prompt }] }],
+    const response = await unifiedGenerateContent({
+      prompt,
     });
 
     return response.text || "No insights available at this time.";
@@ -563,12 +547,9 @@ export const generateContentIdeas = async (industry: string, audience: string, t
   `;
 
   try {
-    const response = await generateContentWithRetry({
-      model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-      }
+    const response = await unifiedGenerateContent({
+      prompt,
+      responseMimeType: "application/json",
     });
 
     return parseJSON(response.text, []);
@@ -642,13 +623,9 @@ export const auditEmailSequence = async (funnelData: any) => {
   `;
 
   try {
-    const response = await generateContentWithRetry({
-      model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-        tools: [{ googleSearch: {} }, { urlContext: {} }],
-      }
+    const response = await unifiedGenerateContent({
+      prompt,
+      responseMimeType: "application/json",
     });
 
     return parseJSON(response.text, {});
@@ -728,13 +705,9 @@ OUTPUT AS JSON ONLY:
   `;
 
   try {
-    const response = await generateContentWithRetry({
-      model: "gemini-3.1-pro-preview",
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-        tools: [{ googleSearch: {} }, { urlContext: {} }],
-      }
+    const response = await unifiedGenerateContent({
+      prompt,
+      responseMimeType: "application/json",
     });
 
     return parseJSON(response.text, {});
@@ -827,13 +800,9 @@ export const analyzeCompetitorFunnel = async (competitorUrl: string) => {
   `;
 
   try {
-    const response = await generateContentWithRetry({
-      model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-        tools: [{ googleSearch: {} }],
-      }
+    const response = await unifiedGenerateContent({
+      prompt,
+      responseMimeType: "application/json",
     });
 
     if (!response.text) {

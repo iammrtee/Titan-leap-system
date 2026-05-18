@@ -170,6 +170,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   const [showCredentialsModal, setShowCredentialsModal] = useState(false);
   const [credentialsPlatform, setCredentialsPlatform] = useState<'twitter' | 'linkedin' | 'facebook' | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [twitterCredentials, setTwitterCredentials] = useState({ username: '', password: '' });
   
   // Listen for OAuth success messages from popup
   useEffect(() => {
@@ -2812,29 +2813,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       {/* Header with Tabs */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 md:gap-6">
         <div className="space-y-1 md:space-y-2">
-          <div className="flex flex-wrap items-center gap-4">
-            <h2 className="text-3xl md:text-4xl font-black tracking-tight text-on-surface">Strategy Hub</h2>
-            
-            <div className="flex items-center gap-2">
-              <a 
-                href="/api/extension/download" 
-                download="titanleap-extension-v21.zip"
-                className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-bold hover:bg-primary/20 transition-colors"
-                title="Download TitanLeap Local Executor Chrome Extension"
-              >
-                <Download size={14} />
-                Download Executor Automator Extension
-              </a>
-              <a 
-                href="/api/system/export-text" 
-                download="titanleap-codebase.txt"
-                className="inline-flex items-center gap-2 px-3 py-1.5 bg-surface-container-high text-on-surface border border-outline-variant/20 rounded-lg text-[10px] font-bold hover:bg-surface-container-highest transition-colors"
-              >
-                <Download size={14} />
-                Export Complete Codebase
-              </a>
-            </div>
-          </div>
+          <h2 className="text-3xl md:text-4xl font-black tracking-tight text-on-surface">Strategy Hub</h2>
           <p className="text-xs md:text-sm font-medium text-on-surface-variant/60">Orchestrate your multi-channel growth engine.</p>
         </div>
 
