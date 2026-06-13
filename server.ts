@@ -299,4 +299,42 @@ Return ONLY the JSON. No markdown. No explanation.`;
     console.log(`[DAEMON] Received request to publish to ${platforms.join(', ')}`);
     
     // Execute the actual headless browser daemon
-    const result = await ex
+    const result = await executePublishingDaemon({
+      platforms,
+      mediaUrls,
+      caption,
+      tokens: tokens || credentials,
+      scheduledTime,
+      linkedinCompanyId
+    });
+
+    res.json({
+      success: result.success,
+      message: result.success ? "Successfully processed by backend daemon" : "Daemon execution failed",
+      logs: result.logs,
+      error: result.error,
+      jobId: Math.random().toString(36).substring(7)
+    });
+  });
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+startServer();

@@ -150,7 +150,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
     if (savedAuditReport) {
       try {
         const parsed = JSON.parse(savedAuditReport);
-        if (parsed && parsed.issues) {
+        if (parsed && parsed.primaryConstraint) {
           setAuditReport(parsed);
         } else {
           // Old format, clear it
@@ -187,30 +187,31 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
 
   const handleSmartFill = async () => {
     if (!formData.websiteUrl) {
-      alert("Please enter a website URL first.");
+      toast.error("Enter a website URL first");
       return;
     }
     setIsSmartFilling(true);
+    const fillToast = toast.loading("Analysing your website with Claude...");
     try {
       const data = await smartFillForm(formData.websiteUrl);
-      if (data) {
-        // Sanitize numerical strings to ensure they work with type="number" inputs
-        const sanitizeNumber = (val: any) => {
-          if (!val) return '';
-          const cleaned = String(val).replace(/[^0-9.]/g, '');
-          return cleaned;
-        };
-
-        setFormData(prev => ({
-          ...prev,
-          ...data,
-          pricePoint: sanitizeNumber(data.pricePoint),
-          currentRevenue: sanitizeNumber(data.currentRevenue),
-          targetRevenue: sanitizeNumber(data.targetRevenue),
-        }));
-      }
-    } catch (error) {
+      const sanitizeNumber = (val: any) => {
+        if (!val) return '';
+        return String(val).replace(/[^0-9.]/g, '');
+      };
+      setFormData(prev => ({
+        ...prev,
+        ...data,
+        pricePoint: sanitizeNumber(data.pricePoint),
+        currentRevenue: sanitizeNumber(data.currentRevenue),
+        targetRevenue: sanitizeNumber(data.targetRevenue),
+      }));
+      toast.success("Form filled from your website!", { id: fillToast });
+    } catch (error: any) {
       console.error("Smart fill failed:", error);
+      toast.error("Smart Fill failed", {
+        id: fillToast,
+        description: error.message || "Could not analyse website. Check the URL and try again."
+      });
     } finally {
       setIsSmartFilling(false);
     }
@@ -261,7 +262,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
     }
 
     setIsAuditing(true);
-    const auditToast = toast.loading("Engineering Audit...", {
+    const auditToast = toast.loading("Building Growth Blueprint...", {
       description: "Analyzing your funnel, offer, and market position."
     });
 
@@ -282,18 +283,18 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
             email: formData.email || 'no-email@provided.com',
             company: formData.businessName,
             source: 'Inbound Audit',
-            product: dashboardResult.executiveOffer?.recommendedPackage || 'Audit',
+            product: 'Growth Blueprint',
             status: 'HOT',
             score: 85,
-            score_reason: 'High intent audit completed. Potential revenue gap: $' + (dashboardResult.revenueGap || 'Unknown')
+            score_reason: 'Growth Blueprint completed. Primary constraint: ' + (dashboardResult.primaryConstraint?.category || 'Unknown')
           });
         } catch (dbError) {
           console.error("Failed to track lead in Supabase:", dbError);
         }
 
-        toast.success("Audit Complete!", {
+        toast.success("Growth Blueprint Ready!", {
           id: auditToast,
-          description: "Your algorithmic growth report is ready."
+          description: "Your personalised Growth Blueprint has been generated."
         });
         setActiveTab('result');
       } else {
@@ -421,11 +422,11 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
         <div className="space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full border border-primary/10">
             <Sparkles size={14} className="text-primary" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-primary">Audit</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-primary">Growth Blueprint</span>
           </div>
-          <h1 className="text-3xl md:text-[38px] font-black tracking-tight text-on-surface">Revenue Leakage Analysis</h1>
+          <h1 className="text-3xl md:text-[38px] font-black tracking-tight text-on-surface">Business Growth Assessment</h1>
           <p className="text-sm md:text-[17px] text-on-surface-variant font-sans font-normal max-w-2xl leading-relaxed">
-            Tell us about your business — we'll show you exactly where you're leaving money on the table.
+            Tell us about your business — we'll show you exactly where you're getting the growth your business deserves.
           </p>
         </div>
         
@@ -452,7 +453,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
             <div className="flex justify-between items-center relative z-10">
               <div className="flex flex-col gap-0.5">
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">
-                  {isAuditing ? 'AI Engineering Audit...' : `Audit Progress: ${progress}%`}
+                  {isAuditing ? 'AI Building Growth Blueprint...' : `Blueprint Progress: ${progress}%`}
                 </span>
                 <span className="text-[8px] font-medium text-on-surface-variant/40 uppercase tracking-widest">
                   Powered by {engine === 'gemini' ? 'Gemini 1.5 Flash' : 'Claude 3.5 Sonnet'}
@@ -535,7 +536,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
             )}
           >
             <FileText size={16} />
-            Audit Intake
+            Business Assessment
           </button>
           <button
             onClick={() => setActiveTab('result')}
@@ -549,7 +550,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
             )}
           >
             <Sparkles size={16} />
-            Audit Result
+            Growth Blueprint
           </button>
         </div>
       </div>
@@ -565,7 +566,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
           {activeTab === 'intake' ? (
             <div className="w-full space-y-8 md:space-y-10">
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant/40">Audit Intake</h2>
+            <h2 className="text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant/40">Business Assessment</h2>
             <button 
               onClick={handleClearAudit}
               className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 hover:text-destructive transition-colors"
@@ -1027,7 +1028,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                   >
                     <Zap size={28} />
                   </motion.div>
-                  Engineering Report...
+                  Building Blueprint...
                 </>
               ) : (
                 <>
@@ -1043,615 +1044,295 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
           </div>
         </div>
         ) : activeTab === 'result' ? (
-          <div className="w-full">
-              <div className="bg-surface-container-lowest rounded-[48px] border border-outline-variant/10 shadow-2xl min-h-[900px] flex flex-col overflow-hidden">
-                {auditReport ? (
-                  <div className="flex-1 flex flex-col p-6 md:p-12 space-y-12">
-                    {/* Report Header */}
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#00ff85]">
-                        <div className="w-2 h-2 rounded-full bg-[#00ff85] animate-pulse" />
-                        Analysis Generated
-                      </div>
-                      <h2 className="text-4xl font-display font-black text-on-surface tracking-tight">
-                        Audit Report — {auditReport.businessName}
-                      </h2>
-                      <p className="text-xs font-bold text-on-surface-variant/40 uppercase tracking-widest">
-                        Last updated: {auditReport.timestamp}
-                      </p>
+          <div className="w-full" ref={reportRef}>
+            {auditReport ? (
+              <div className="space-y-6">
+
+                {/* ── REPORT HEADER ── */}
+                <div className="bg-[#0f0a1e] rounded-[40px] p-8 md:p-12 border border-white/5 shadow-2xl">
+                  <div className="flex items-start justify-between mb-8">
+                    <div className="flex items-center gap-3">
+                      <Logo className="h-7 w-auto opacity-90" />
+                      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">Growth Blueprint</span>
                     </div>
-                    <div className="flex gap-3">
-                      <button className="w-12 h-12 bg-surface-container-low border border-outline-variant/10 rounded-2xl flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-all shadow-sm">
-                        <Share2 size={20} />
-                      </button>
-                      <button className="w-12 h-12 bg-surface-container-low border border-outline-variant/10 rounded-2xl flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-all shadow-sm">
-                        <Download size={20} />
+                    <div className="flex items-center gap-3">
+                      <button onClick={handleExportPDF} className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-white/60 hover:text-white transition-all">
+                        <FileDown size={14} />
+                        Export
                       </button>
                     </div>
                   </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-[#00ff85] animate-pulse" />
+                      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#00ff85]">Analysis Ready</span>
+                    </div>
+                    <h1 className="text-4xl md:text-5xl font-display font-black text-white tracking-tight leading-tight">
+                      {auditReport.businessName}
+                    </h1>
+                    <p className="text-sm text-white/30 font-medium">{auditReport.timestamp}</p>
+                  </div>
+                </div>
 
-                  {/* Summary Card */}
-                  <div className="bg-[#3b00b9] rounded-[40px] p-12 text-white relative overflow-hidden shadow-2xl shadow-primary/20">
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-on-surface/5 blur-[120px] rounded-full -translate-y-1/2 translate-x-1/2" />
-                    <div className="relative z-10 space-y-8">
-                      <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">Estimated Monthly Revenue Gap</p>
-                      <div className="flex flex-col md:flex-row md:items-center gap-6">
-                        <h3 className="text-8xl font-display font-black tracking-tighter text-[#00ff85]">
-                          ${auditReport.revenueGap?.toLocaleString() || '0'}
-                          <span className="text-3xl text-white/30 ml-3 font-medium">/mo</span>
-                        </h3>
-                        <div className="bg-on-surface/10 backdrop-blur-xl px-6 py-3 rounded-[24px] border border-white/10 flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-[#00ff85]/20 flex items-center justify-center">
-                            <TrendingUp size={18} className="text-[#00ff85]" />
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-black text-[#00ff85]">24%</span>
-                            <span className="text-[9px] font-bold uppercase tracking-widest text-white/60">Potential Increase</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Social Links Found */}
-                      {formData.socialHandles.some(h => h.trim() !== '') && (
-                        <div className="pt-4 border-t border-white/10 flex flex-wrap gap-4">
-                          {formData.socialHandles.filter(h => h.trim() !== '').map((handle, i) => (
-                            <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/60">
-                              <Globe size={12} />
-                              {handle}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {auditReport.executiveOffer && (
-                        <div className="pt-6 border-t border-white/10 space-y-4">
-                          <p className="text-base font-medium text-white/70 max-w-xl leading-relaxed">
-                            <span className="font-bold text-white">TLDR:</span> {auditReport.executiveOffer.tldr}
+                {/* ── PAGE 1: EXECUTIVE SUMMARY ── */}
+                <div className="bg-[#3b00b9] rounded-[40px] p-8 md:p-12 shadow-2xl shadow-[#3b00b9]/20 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+                  <div className="relative z-10 space-y-8">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 mb-3">01 — Executive Summary</p>
+                      <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight">Our Diagnosis</h2>
+                    </div>
+                    {auditReport.executiveSummary && (
+                      <div className="space-y-6 max-w-3xl">
+                        <p className="text-base md:text-lg text-white/80 leading-relaxed font-medium">
+                          {auditReport.executiveSummary.businessUnderstanding}
+                        </p>
+                        <div className="h-px bg-white/10" />
+                        <p className="text-sm text-white/60 leading-relaxed">
+                          {auditReport.executiveSummary.currentSituation}
+                        </p>
+                        <p className="text-sm text-white/60 leading-relaxed">
+                          {auditReport.executiveSummary.mainObservations}
+                        </p>
+                        <div className="p-6 bg-white/10 rounded-[24px] border border-white/10">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-[#00ff85] mb-2">Biggest Opportunity</p>
+                          <p className="text-sm text-white font-semibold leading-relaxed">
+                            {auditReport.executiveSummary.biggestOpportunities}
                           </p>
-                          <div className="inline-block px-4 py-2 bg-white/10 rounded-xl border border-white/20">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-white/60 mb-1">Recommended Package</p>
-                            <p className="text-sm font-bold text-white">{auditReport.executiveOffer.recommendedPackage}</p>
-                          </div>
                         </div>
-                      )}
+                      </div>
+                    )}
+                    {/* Constraint badges */}
+                    <div className="flex flex-wrap gap-3 pt-2">
+                      {[auditReport.primaryConstraint, auditReport.secondaryConstraint, auditReport.thirdConstraint].filter(Boolean).map((c: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2 px-4 py-2 bg-white/10 border border-white/10 rounded-full">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-white/40">{i === 0 ? 'Primary' : i === 1 ? 'Secondary' : 'Third'}</span>
+                          <span className="text-[11px] font-black text-white uppercase tracking-wider">{c.category}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
+                </div>
 
-                  {/* Issue Cards */}
-                  <div className="space-y-8">
-                    <h4 className="text-[11px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40">Critical Leakage Points</h4>
-                    <div className="grid grid-cols-1 gap-6">
-                      {auditReport.issues?.map((issue: any) => {
-                        const Icon = getIconForArea(issue.area);
+                {/* ── PAGE 2: BUSINESS SNAPSHOT ── */}
+                {auditReport.businessSnapshot && (
+                  <div className="bg-surface-container-lowest rounded-[40px] p-8 md:p-12 border border-outline-variant/10 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40 mb-3">02 — Business Snapshot</p>
+                    <h2 className="text-2xl font-black text-on-surface tracking-tight mb-8">What We Know About Your Business</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+                      {[
+                        { label: 'Business Type', value: auditReport.businessSnapshot.businessType },
+                        { label: 'Offer', value: auditReport.businessSnapshot.offer },
+                        { label: 'Target Audience', value: auditReport.businessSnapshot.targetAudience },
+                        { label: 'Growth Goal', value: auditReport.businessSnapshot.growthGoal },
+                        { label: 'Current Stage', value: auditReport.businessSnapshot.currentStage },
+                      ].map((item, i) => (
+                        <div key={i} className="p-5 bg-surface-container-low rounded-[24px] border border-outline-variant/10">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-1">{item.label}</p>
+                          <p className="text-sm font-bold text-on-surface leading-snug">{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-6 bg-primary/5 rounded-[24px] border border-primary/10">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-primary/60 mb-2">Summary of Findings</p>
+                      <p className="text-sm text-on-surface-variant leading-relaxed">{auditReport.businessSnapshot.summaryOfFindings}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── PAGES 3-5: THREE CONSTRAINTS ── */}
+                {[
+                  { data: auditReport.primaryConstraint, num: '03', label: 'Primary Constraint' },
+                  { data: auditReport.secondaryConstraint, num: '04', label: 'Secondary Constraint' },
+                  { data: auditReport.thirdConstraint, num: '05', label: 'Third Constraint' },
+                ].filter(c => c.data).map(({ data, num, label }) => {
+                  const categoryColors: {[key: string]: { bg: string, text: string, badge: string }} = {
+                    'Positioning': { bg: 'bg-blue-500/5', text: 'text-blue-400', badge: 'bg-blue-500/10 border-blue-500/20 text-blue-400' },
+                    'Authority':   { bg: 'bg-purple-500/5', text: 'text-purple-400', badge: 'bg-purple-500/10 border-purple-500/20 text-purple-400' },
+                    'Acquisition': { bg: 'bg-amber-500/5', text: 'text-amber-400', badge: 'bg-amber-500/10 border-amber-500/20 text-amber-400' },
+                    'Conversion':  { bg: 'bg-teal-500/5', text: 'text-teal-400', badge: 'bg-teal-500/10 border-teal-500/20 text-teal-400' },
+                    'Sales':       { bg: 'bg-rose-500/5', text: 'text-rose-400', badge: 'bg-rose-500/10 border-rose-500/20 text-rose-400' },
+                  };
+                  const color = categoryColors[data.category] || categoryColors['Positioning'];
+                  return (
+                    <div key={num} className={`rounded-[40px] p-8 md:p-12 border border-outline-variant/10 shadow-sm ${color.bg}`}>
+                      <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40 mb-3">{num} — {label}</p>
+                          <h2 className="text-2xl font-black text-on-surface tracking-tight">{data.category}</h2>
+                        </div>
+                        <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${color.badge}`}>
+                          {label.split(' ')[0]} Constraint
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div className="space-y-6">
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-2">What We Found</p>
+                            <p className="text-sm text-on-surface-variant leading-relaxed">{data.whatWeFound}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-2">Evidence</p>
+                            <p className="text-sm text-on-surface-variant leading-relaxed">{data.evidence}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-2">Why It Matters</p>
+                            <p className="text-sm text-on-surface-variant leading-relaxed">{data.whyItMatters}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-2">Business Impact</p>
+                            <p className="text-sm font-semibold text-on-surface leading-relaxed">{data.businessImpact}</p>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-4">Recommended Actions</p>
+                          <div className="space-y-3">
+                            {data.recommendedActions?.map((action: string, i: number) => (
+                              <div key={i} className="flex items-start gap-3 p-4 bg-surface-container-lowest rounded-[20px] border border-outline-variant/10">
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${color.bg} border ${color.badge.split(' ')[1]}`}>
+                                  <span className={`text-[9px] font-black ${color.text}`}>{i + 1}</span>
+                                </div>
+                                <p className="text-sm text-on-surface font-medium leading-snug">{action}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* ── PAGE 6: 90-DAY ROADMAP ── */}
+                {auditReport.roadmap && (
+                  <div className="bg-surface-container-lowest rounded-[40px] p-8 md:p-12 border border-outline-variant/10 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40 mb-3">06 — Growth Roadmap</p>
+                    <h2 className="text-2xl font-black text-on-surface tracking-tight mb-8">Your 90-Day Blueprint</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {[
+                        { key: 'month1', label: 'Month 1', accent: 'border-t-primary' },
+                        { key: 'month2', label: 'Month 2', accent: 'border-t-secondary' },
+                        { key: 'month3', label: 'Month 3', accent: 'border-t-[#00ff85]' },
+                      ].map(({ key, label, accent }) => {
+                        const month = auditReport.roadmap[key];
+                        if (!month) return null;
                         return (
-                          <div key={issue.id} className="bg-surface-container-lowest rounded-[32px] p-8 border border-outline-variant/10 shadow-sm group hover:border-primary/20 transition-all">
-                            <div className="flex items-start gap-8">
-                              <div className={cn(
-                                "w-16 h-16 rounded-[24px] flex items-center justify-center shadow-sm shrink-0",
-                                issue.status === 'critical' ? "bg-error/5 text-error" : 
-                                issue.status === 'improve' ? "bg-warning/5 text-warning" : "bg-success/5 text-success"
-                              )}>
-                                <Icon size={32} />
-                              </div>
-                              <div className="flex-1 space-y-6">
-                                <div className="flex items-center justify-between">
-                                  <div className="space-y-1">
-                                    <h5 className="text-xl font-black text-on-surface tracking-tight">{issue.area}</h5>
-                                    <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-[0.2em]">Technical Optimization</p>
-                                  </div>
-                                  <span className={cn(
-                                    "px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest",
-                                    issue.status === 'critical' ? "bg-error/10 text-error border border-error/20" : 
-                                    issue.status === 'improve' ? "bg-warning/10 text-warning border border-warning/20" : "bg-success/10 text-success border border-success/20"
-                                  )}>
-                                    {issue.priority}
-                                  </span>
+                          <div key={key} className={`p-6 bg-surface-container-low rounded-[28px] border border-outline-variant/10 border-t-2 ${accent}`}>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-1">{label}</p>
+                            <p className="text-sm font-black text-on-surface mb-5 leading-snug">{month.focus}</p>
+                            <div className="space-y-2.5">
+                              {month.actions?.map((action: string, i: number) => (
+                                <div key={i} className="flex items-start gap-2.5">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-primary/60 mt-1.5 shrink-0" />
+                                  <p className="text-xs text-on-surface-variant leading-relaxed">{action}</p>
                                 </div>
-                                
-                                <div className="space-y-4">
-                                  <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-1">The Problem</p>
-                                    <p className="text-sm font-medium text-on-surface-variant/70 leading-relaxed">
-                                      {issue.problem}
-                                    </p>
-                                  </div>
-                                  {issue.whyItMatters && (
-                                    <div>
-                                      <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-1">Why It Matters</p>
-                                      <p className="text-sm font-medium text-on-surface-variant/70 leading-relaxed">
-                                        {issue.whyItMatters}
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                                  <div className="bg-surface-container-low/50 rounded-2xl p-5 border border-outline-variant/5">
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-2">Rev Impact</p>
-                                    <p className={cn(
-                                      "text-xl font-black",
-                                      issue.status === 'critical' ? "text-error" : "text-warning"
-                                    )}>
-                                      -${issue.impact?.toLocaleString() || '0'}/mo
-                                    </p>
-                                  </div>
-                                  <div className="bg-surface-container-low/50 rounded-2xl p-5 border border-outline-variant/5">
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-2">Action</p>
-                                    <p className="text-sm font-black text-on-surface">
-                                      {issue.action}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                {(issue.implementationTime || issue.effortLevel) && (
-                                  <div className="flex gap-4 pt-4 border-t border-outline-variant/10">
-                                    {issue.implementationTime && (
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">Time:</span>
-                                        <span className="text-xs font-bold text-on-surface-variant">{issue.implementationTime}</span>
-                                      </div>
-                                    )}
-                                    {issue.effortLevel && (
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">Effort:</span>
-                                        <span className="text-xs font-bold text-on-surface-variant">{issue.effortLevel}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                                
-                                {issue.serviceHint && (
-                                  <div className="bg-primary/5 rounded-xl p-4 border border-primary/10">
-                                    <p className="text-xs font-medium text-primary/80">
-                                      <span className="font-bold">💡 Service Hint:</span> {issue.serviceHint}
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
+                              ))}
                             </div>
                           </div>
                         );
                       })}
                     </div>
                   </div>
+                )}
 
-                  {/* Quick Win */}
-                  {auditReport.quickWin && (
-                    <div className="bg-surface-container-lowest rounded-[32px] p-8 border border-outline-variant/10 shadow-sm">
-                      <h4 className="text-[11px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40 mb-6">Quick Win</h4>
-                      <div className="space-y-6">
-                        <div>
-                          <h5 className="text-xl font-black text-on-surface tracking-tight">{auditReport.quickWin.title}</h5>
-                          <p className="text-sm font-medium text-on-surface-variant/70 mt-2">{auditReport.quickWin.description}</p>
+                {/* ── PAGE 7: QUICK WINS ── */}
+                {auditReport.quickWins?.length > 0 && (
+                  <div className="bg-surface-container-lowest rounded-[40px] p-8 md:p-12 border border-outline-variant/10 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40 mb-3">07 — Quick Wins</p>
+                    <h2 className="text-2xl font-black text-on-surface tracking-tight mb-8">High-Impact Actions You Can Take Now</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {auditReport.quickWins.map((win: string, i: number) => (
+                        <div key={i} className="flex items-start gap-4 p-5 bg-surface-container-low rounded-[24px] border border-outline-variant/10">
+                          <div className="w-8 h-8 rounded-xl bg-[#00ff85]/10 border border-[#00ff85]/20 flex items-center justify-center shrink-0">
+                            <span className="text-[10px] font-black text-[#00ff85]">{String(i + 1).padStart(2, '0')}</span>
+                          </div>
+                          <p className="text-sm text-on-surface font-medium leading-snug pt-1">{win}</p>
                         </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="bg-surface-container-low/50 rounded-2xl p-6 border border-outline-variant/5">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-4">What We Do</p>
-                            <ul className="space-y-3">
-                              {auditReport.quickWin.whatWeDo?.map((item: string, i: number) => (
-                                <li key={i} className="flex items-start gap-3">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                                  <span className="text-sm font-medium text-on-surface-variant/80">{item}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                          <div className="bg-surface-container-low/50 rounded-2xl p-6 border border-outline-variant/5">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-4">What You Do</p>
-                            <ul className="space-y-3">
-                              {auditReport.quickWin.whatYouDo?.map((item: string, i: number) => (
-                                <li key={i} className="flex items-start gap-3">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                                  <span className="text-sm font-medium text-on-surface-variant/80">{item}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-
-                        <div className="bg-surface-container-low/50 rounded-2xl p-6 border border-outline-variant/5">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-4">Expected Outcome</p>
-                          <ul className="space-y-3">
-                            {auditReport.quickWin.expectedOutcome?.map((item: string, i: number) => (
-                              <li key={i} className="flex items-start gap-3">
-                                <div className="w-1.5 h-1.5 rounded-full bg-success mt-1.5 shrink-0" />
-                                <span className="text-sm font-medium text-on-surface-variant/80">{item}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        <div className="flex flex-wrap gap-4 pt-4 border-t border-outline-variant/10">
-                          <div className="bg-surface-container-low px-4 py-2 rounded-xl border border-outline-variant/10">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 block mb-1">Timeline</span>
-                            <span className="text-sm font-bold text-on-surface">{auditReport.quickWin.timeline}</span>
-                          </div>
-                          <div className="bg-surface-container-low px-4 py-2 rounded-xl border border-outline-variant/10">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 block mb-1">Cost</span>
-                            <span className="text-sm font-bold text-on-surface">{auditReport.quickWin.cost}</span>
-                          </div>
-                          <div className="bg-success/10 px-4 py-2 rounded-xl border border-success/20">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-success/60 block mb-1">ROI</span>
-                            <span className="text-sm font-bold text-success">{auditReport.quickWin.roi}</span>
-                          </div>
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                  )}
-
-                  {/* Case Study */}
-                  {auditReport.caseStudy && (
-                    <div className="bg-surface-container-lowest rounded-[32px] p-8 border border-outline-variant/10 shadow-sm">
-                      <h4 className="text-[11px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40 mb-6">Case Study</h4>
-                      <div className="space-y-6">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                            <TrendingUp size={24} />
-                          </div>
-                          <div>
-                            <h5 className="text-xl font-black text-on-surface tracking-tight">{auditReport.caseStudy.company}</h5>
-                            <p className="text-sm font-medium text-on-surface-variant/70">Starting Point: {auditReport.caseStudy.startingPoint}</p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="bg-surface-container-low/50 rounded-2xl p-6 border border-outline-variant/5">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-4">The Fix</p>
-                            <ul className="space-y-3">
-                              {auditReport.caseStudy.theFix?.map((item: string, i: number) => (
-                                <li key={i} className="flex items-start gap-3">
-                                  <ArrowRight size={16} className="text-primary mt-0.5 shrink-0" />
-                                  <span className="text-sm font-medium text-on-surface-variant/80">{item}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                          <div className="bg-surface-container-low/50 rounded-2xl p-6 border border-outline-variant/5">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-4">Results</p>
-                            <ul className="space-y-3">
-                              {auditReport.caseStudy.results?.map((item: string, i: number) => (
-                                <li key={i} className="flex items-start gap-3">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-success mt-1.5 shrink-0" />
-                                  <span className="text-sm font-medium text-on-surface-variant/80">{item}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-
-                        <div className="bg-primary/5 rounded-xl p-4 border border-primary/10">
-                          <p className="text-sm font-medium text-primary/80">
-                            <span className="font-bold">Key Insight:</span> {auditReport.caseStudy.keyInsight}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Implementation Tiers */}
-                  {auditReport.implementationTiers && auditReport.implementationTiers.length > 0 && (
-                    <div className="space-y-6">
-                      <h4 className="text-[11px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40">Implementation Tiers</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {auditReport.implementationTiers.map((tier: any, i: number) => (
-                          <div key={i} className="bg-surface-container-lowest rounded-[32px] p-8 border border-outline-variant/10 shadow-sm flex flex-col">
-                            <div className="mb-6">
-                              <h5 className="text-xl font-black text-on-surface tracking-tight mb-2">{tier.name}</h5>
-                              <p className="text-2xl font-black text-primary mb-4">{tier.price}</p>
-                              <p className="text-sm font-medium text-on-surface-variant/70">{tier.description}</p>
-                            </div>
-                            <div className="flex-1">
-                              <ul className="space-y-3">
-                                {tier.features?.map((feature: string, j: number) => (
-                                  <li key={j} className="flex items-start gap-3">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                                    <span className="text-sm font-medium text-on-surface-variant/80">{feature}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Footer Actions */}
-                  <div className="mt-auto pt-12 border-t border-outline-variant/10 flex items-center gap-4">
-                    <button 
-                      onClick={runAudit}
-                      disabled={isAuditing}
-                      className="flex-1 py-5 bg-surface-container-low border border-outline-variant/10 rounded-2xl font-black text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-all shadow-sm flex items-center justify-center gap-2"
-                    >
-                      {isAuditing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                      {isAuditing ? 'Regenerating...' : 'Regenerate'}
-                      <span className="px-1.5 py-0.5 bg-surface-container-highest text-on-surface-variant rounded-md text-[8px] font-black uppercase tracking-widest shrink-0">Ultra</span>
-                    </button>
-                    <button 
-                      onClick={handleExportPDF}
-                      disabled={isExporting}
-                      className="flex-1 py-5 bg-surface-container-low border border-outline-variant/10 rounded-2xl font-black text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-all shadow-sm flex items-center justify-center gap-2"
-                    >
-                      {isExporting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
-                      {isExporting ? 'Generating...' : 'Export PDF'}
-                    </button>
-                    <button 
-                      onClick={() => onStartStrategy?.(auditReport)}
-                      className="flex-[1.5] py-5 bg-[#00ff85] text-on-surface font-black text-[11px] uppercase tracking-[0.2em] rounded-2xl shadow-[0_20px_40px_rgba(0,255,133,0.2)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
-                    >
-                      Start Strategy
-                      <ArrowRight size={18} />
-                    </button>
-                  </div>
-                </div>
-                ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-6">
-                    <div className="w-20 h-20 bg-surface-container-highest rounded-full flex items-center justify-center text-on-surface-variant/50">
-                      <Zap size={32} />
-                    </div>
-                    <div className="space-y-2">
-                      <h3 className="text-2xl font-black text-on-surface">No Audit Data Found</h3>
-                      <p className="text-sm font-medium text-on-surface-variant/60 max-w-md mx-auto">
-                        It looks like you haven't run an audit yet, or the previous data was in an older format. Please go back to the intake form and run a new audit.
-                      </p>
-                    </div>
-                    <button 
-                      onClick={() => setActiveTab('intake')}
-                      className="px-8 py-4 bg-primary text-on-primary rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-primary/20"
-                    >
-                      Go to Intake Form
-                    </button>
                   </div>
                 )}
-          </div>
-        </div>
-      ) : null}
-    </motion.div>
-    </AnimatePresence>
 
-      {/* Hidden PDF Template */}
-      <div id="pdf-report-container" style={{ position: 'absolute', top: 0, left: '-9999px', width: '800px', zIndex: -100 }}>
-        <div 
-          ref={reportRef}
-          className="w-[800px] bg-[#f5f5f0] p-16 space-y-12 font-serif"
-          style={{ minHeight: '1131px' }} // A4 aspect ratio approx
-        >
-          {/* Header */}
-          <div className="flex justify-between items-end border-b-2 border-on-surface pb-8">
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Logo className="w-10 h-10 rounded-full" />
-                <span className="text-2xl font-black uppercase tracking-tighter">TitanLeap</span>
-              </div>
-              <h1 className="text-5xl font-black tracking-tight text-on-surface">Audit Report</h1>
-            </div>
-            <div className="text-right space-y-1">
-              <p className="text-xs font-black uppercase tracking-widest text-on-surface-variant">Confidential Analysis</p>
-              <p className="text-sm font-bold">{new Date().toLocaleDateString()}</p>
-            </div>
-          </div>
-
-          {/* Business Info */}
-          <div className="grid grid-cols-2 gap-12">
-            <div className="space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Client</p>
-              <p className="text-2xl font-black">{formData.businessName || 'Untitled Business'}</p>
-              <p className="text-sm text-on-surface-variant">{formData.websiteUrl}</p>
-            </div>
-            <div className="space-y-2 text-right">
-              <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Industry</p>
-              <p className="text-xl font-bold">{formData.industry || 'Not Specified'}</p>
-            </div>
-          </div>
-
-          {/* Revenue Gap Section */}
-          <div className="bg-[#3b00b9] rounded-[40px] p-12 text-white relative overflow-hidden">
-            <div className="relative z-10 space-y-6">
-              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">Estimated Monthly Revenue Gap</p>
-              <h2 className="text-7xl font-black tracking-tighter text-[#00ff85]">
-                ${auditReport?.revenueGap?.toLocaleString() || '0'}
-                <span className="text-2xl text-white/30 ml-3 font-medium">/mo</span>
-              </h2>
-              
-              {/* Social Links in PDF */}
-              {formData.socialHandles.some(h => h.trim() !== '') && (
-                <div className="pt-4 border-t border-white/10 flex flex-wrap gap-4">
-                  {formData.socialHandles.filter(h => h.trim() !== '').map((handle, i) => (
-                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/60">
-                      {handle}
+                {/* ── PAGE 8: HOW TITANLEAP CAN HELP ── */}
+                {auditReport.titanLeapHelp?.length > 0 && (
+                  <div className="bg-[#0f0a1e] rounded-[40px] p-8 md:p-12 border border-white/5 shadow-2xl">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-3">08 — Implementation</p>
+                    <h2 className="text-2xl font-black text-white tracking-tight mb-2">How TitanLeap Can Help</h2>
+                    <p className="text-sm text-white/40 mb-10">Each constraint identified in this report can be directly addressed through TitanLeap.</p>
+                    <div className="space-y-6">
+                      {auditReport.titanLeapHelp.map((item: any, i: number) => (
+                        <div key={i} className="p-8 bg-white/5 rounded-[32px] border border-white/5">
+                          <div className="flex items-center gap-3 mb-6">
+                            <div className="w-8 h-8 rounded-xl bg-[#3b00b9] flex items-center justify-center">
+                              <span className="text-[10px] font-black text-white">{String(i + 1).padStart(2, '0')}</span>
+                            </div>
+                            <h3 className="text-base font-black text-white uppercase tracking-wider">{item.constraint} Constraint</h3>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                              <p className="text-[9px] font-black uppercase tracking-widest text-white/30 mb-3">TitanLeap Can Help By</p>
+                              <div className="space-y-2">
+                                {item.howWeHelp?.map((help: string, j: number) => (
+                                  <div key={j} className="flex items-start gap-2.5">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-[#00ff85] mt-1.5 shrink-0" />
+                                    <p className="text-sm text-white/60">{help}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="p-5 bg-[#00ff85]/5 rounded-[20px] border border-[#00ff85]/10">
+                              <p className="text-[9px] font-black uppercase tracking-widest text-[#00ff85]/60 mb-2">Expected Outcome</p>
+                              <p className="text-sm text-white/80 font-medium leading-relaxed">{item.expectedOutcome}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
-
-              <p className="text-lg font-medium text-white/70 max-w-xl leading-relaxed">
-                This figure represents the immediate growth opportunity identified through our algorithmic analysis of your current funnel efficiency and market benchmarks.
-              </p>
-
-              {auditReport?.executiveOffer && (
-                <div className="pt-6 border-t border-white/10 space-y-4">
-                  <p className="text-base font-medium text-white/70 max-w-xl leading-relaxed">
-                    <span className="font-bold text-white">TLDR:</span> {auditReport.executiveOffer.tldr}
-                  </p>
-                  <div className="inline-block px-4 py-2 bg-white/10 rounded-xl border border-white/20">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-white/60 mb-1">Recommended Package</p>
-                    <p className="text-sm font-bold text-white">{auditReport.executiveOffer.recommendedPackage}</p>
                   </div>
-                </div>
-              )}
-            </div>
-          </div>
+                )}
 
-          {/* Pricing & Offer Details */}
-          <div className="grid grid-cols-2 gap-8 bg-surface-container-low p-8 rounded-3xl border border-outline-variant/10">
-            <div className="space-y-2">
-              <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Primary Offer</p>
-              <p className="text-lg font-black text-on-surface">{formData.mainOffer || 'N/A'}</p>
-              <p className="text-xs text-on-surface-variant italic">"{formData.differentiator}"</p>
-            </div>
-            <div className="space-y-2 text-right">
-              <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Price Point</p>
-              <p className="text-2xl font-black text-primary">{formData.currency} {formData.pricePoint}</p>
-              <p className="text-[10px] font-bold text-on-surface-variant/60">Pricing Page: {formData.pricingPageUrl || 'N/A'}</p>
-            </div>
-          </div>
-
-          {/* Key Findings */}
-          <div className="space-y-8">
-            <h3 className="text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant/40 border-b border-outline-variant/10 pb-4">Critical Leakage Points</h3>
-            <div className="space-y-8">
-              {auditReport?.issues?.map((issue: any, idx: number) => (
-                <div key={idx} className="grid grid-cols-12 gap-8 items-start">
-                  <div className="col-span-1 text-4xl font-black text-on-surface-variant/20 italic">
-                    0{idx + 1}
-                  </div>
-                  <div className="col-span-11 space-y-4">
-                    <div className="flex justify-between items-center">
-                      <h4 className="text-2xl font-black text-on-surface">{issue.area}</h4>
-                      <span className="px-4 py-1 bg-error/10 text-error rounded-full text-[10px] font-black uppercase tracking-widest">
-                        {issue.priority}
-                      </span>
+                {/* ── NEXT STEP ── */}
+                {auditReport.nextStep && (
+                  <div className="bg-[#3b00b9] rounded-[40px] p-8 md:p-12 shadow-2xl shadow-[#3b00b9]/20 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+                    <div className="relative z-10 max-w-2xl">
+                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 mb-4">Recommended Next Step</p>
+                      <p className="text-lg md:text-xl text-white font-semibold leading-relaxed">{auditReport.nextStep}</p>
                     </div>
-                    <p className="text-lg font-medium text-on-surface-variant leading-relaxed">
-                      {issue.problem}
-                    </p>
-                    <div className="grid grid-cols-2 gap-8 pt-4">
-                      <div className="space-y-1">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Revenue Impact</p>
-                        <p className="text-xl font-black text-error">-${issue.impact?.toLocaleString()}/mo</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Strategic Action</p>
-                        <p className="text-base font-black text-on-surface">{issue.action}</p>
-                      </div>
-                    </div>
-                    {issue.whyItMatters && (
-                      <div className="pt-4 border-t border-outline-variant/10">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-1">Why It Matters</p>
-                        <p className="text-sm font-medium text-on-surface-variant/70 leading-relaxed">{issue.whyItMatters}</p>
-                      </div>
-                    )}
-                    {issue.serviceHint && (
-                      <div className="bg-primary/5 rounded-xl p-4 border border-primary/10 mt-4">
-                        <p className="text-xs font-medium text-primary/80">
-                          <span className="font-bold">💡 Service Hint:</span> {issue.serviceHint}
-                        </p>
-                      </div>
-                    )}
                   </div>
+                )}
+
+                {/* Footer */}
+                <div className="flex justify-between items-center px-4 pb-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/30">Generated by TitanLeap</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/30">titanleap.ai</p>
                 </div>
-              ))}
-            </div>
+
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[400px] gap-6 text-center p-12">
+                <div className="w-16 h-16 rounded-[24px] bg-surface-container-low border border-outline-variant/10 flex items-center justify-center">
+                  <FileText size={28} className="text-on-surface-variant/30" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-xl font-black text-on-surface">No Blueprint Yet</h3>
+                  <p className="text-sm text-on-surface-variant/60 max-w-sm">Complete the business assessment and run the analysis to generate your Growth Blueprint.</p>
+                </div>
+                <button
+                  onClick={() => setActiveTab('intake')}
+                  className="px-6 py-3 bg-primary text-on-primary rounded-2xl font-black text-xs uppercase tracking-widest hover:opacity-90 transition-all"
+                >
+                  Start Assessment
+                </button>
+              </div>
+            )}
           </div>
-
-          {/* Quick Win */}
-          {auditReport?.quickWin && (
-            <div className="space-y-6 pt-8 border-t border-outline-variant/10">
-              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant/40 border-b border-outline-variant/10 pb-4">Quick Win: {auditReport.quickWin.title}</h3>
-              <p className="text-lg font-medium text-on-surface-variant leading-relaxed">{auditReport.quickWin.description}</p>
-              
-              <div className="grid grid-cols-2 gap-8">
-                <div className="space-y-2">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">What We Do</p>
-                  <ul className="list-disc list-inside text-sm text-on-surface-variant space-y-1">
-                    {auditReport.quickWin.whatWeDo?.map((item: string, i: number) => <li key={i}>{item}</li>)}
-                  </ul>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">What You Do</p>
-                  <ul className="list-disc list-inside text-sm text-on-surface-variant space-y-1">
-                    {auditReport.quickWin.whatYouDo?.map((item: string, i: number) => <li key={i}>{item}</li>)}
-                  </ul>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Expected Outcome</p>
-                <ul className="list-disc list-inside text-sm text-on-surface-variant space-y-1">
-                  {auditReport.quickWin.expectedOutcome?.map((item: string, i: number) => <li key={i}>{item}</li>)}
-                </ul>
-              </div>
-
-              <div className="flex gap-8 pt-4">
-                <div className="space-y-1">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Timeline</p>
-                  <p className="text-sm font-bold text-on-surface">{auditReport.quickWin.timeline}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Cost</p>
-                  <p className="text-sm font-bold text-on-surface">{auditReport.quickWin.cost}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-success/60">ROI</p>
-                  <p className="text-sm font-bold text-success">{auditReport.quickWin.roi}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Case Study */}
-          {auditReport?.caseStudy && (
-            <div className="space-y-6 pt-8 border-t border-outline-variant/10">
-              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant/40 border-b border-outline-variant/10 pb-4">Case Study: {auditReport.caseStudy.company}</h3>
-              
-              <div className="space-y-2">
-                <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Starting Point</p>
-                <p className="text-sm font-medium text-on-surface-variant">{auditReport.caseStudy.startingPoint}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-8">
-                <div className="space-y-2">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">The Fix</p>
-                  <ul className="list-disc list-inside text-sm text-on-surface-variant space-y-1">
-                    {auditReport.caseStudy.theFix?.map((item: string, i: number) => <li key={i}>{item}</li>)}
-                  </ul>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Results</p>
-                  <ul className="list-disc list-inside text-sm text-on-surface-variant space-y-1">
-                    {auditReport.caseStudy.results?.map((item: string, i: number) => <li key={i}>{item}</li>)}
-                  </ul>
-                </div>
-              </div>
-              <p className="text-sm font-bold text-primary italic pt-2">"{auditReport.caseStudy.keyInsight}"</p>
-            </div>
-          )}
-
-          {/* Implementation Tiers */}
-          {auditReport?.implementationTiers && (
-            <div className="space-y-6 pt-8 border-t border-outline-variant/10">
-              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant/40 border-b border-outline-variant/10 pb-4">Implementation Options</h3>
-              <div className="grid grid-cols-3 gap-6">
-                {auditReport.implementationTiers.map((tier: any, idx: number) => (
-                  <div key={idx} className="p-6 bg-surface-container-low rounded-2xl border border-outline-variant/10 space-y-4">
-                    <h4 className="text-lg font-black text-on-surface">{tier.name}</h4>
-                    <p className="text-xl font-black text-primary">{tier.price}</p>
-                    <p className="text-xs text-on-surface-variant">{tier.description}</p>
-                    <ul className="list-disc list-inside text-[10px] text-on-surface-variant space-y-1 pt-2 border-t border-outline-variant/10">
-                      {tier.features?.map((feature: string, i: number) => <li key={i}>{feature}</li>)}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Footer */}
-          <div className="pt-12 border-t border-outline-variant/10 flex justify-between items-center">
-            <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">
-              Generated by TitanLeap AI Growth Engine
-            </p>
-            <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">
-              titanleap.ai
-            </p>
-          </div>
-        </div>
-      </div>
+        ) : null}
+      </motion.div>
+      </AnimatePresence>
     </div>
   );
 };
+
 
 // Helper Components
 const CollapsibleSection = ({ id, title, isOpen, isComplete, onToggle, children }: any) => (
