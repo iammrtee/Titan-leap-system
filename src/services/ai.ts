@@ -4,7 +4,7 @@ import { generateClaudeContent } from './claude';
 
 export type AIEngine = 'gemini' | 'claude';
 
-let currentEngine: AIEngine = (typeof window !== 'undefined' && localStorage.getItem('preferred_ai_engine') as AIEngine) || 'gemini';
+let currentEngine: AIEngine = (typeof window !== 'undefined' && localStorage.getItem('preferred_ai_engine') as AIEngine) || 'claude';
 
 export const setAIEngine = (engine: AIEngine) => {
   currentEngine = engine;
@@ -163,97 +163,125 @@ export const generateContentScripts = async (handle: string, mode: string) => {
 
 export const auditLandingPage = async (formData: any) => {
   const prompt = `
-═══════════════════════════════════════════════════════════════
-FORM SUBMISSION DATA
-═══════════════════════════════════════════════════════════════
+You are an elite growth consultant — not an AI audit tool. Your job is to deeply understand this business and diagnose the specific constraints holding back their growth. Think like a trusted advisor who has studied the business carefully, not a report generator.
 
-BUSINESS BASICS:
+BUSINESS INFORMATION:
 Business Name: ${formData.businessName}
 Industry: ${formData.industry}
-Website URL: ${formData.websiteUrl}
-Duration: ${formData.businessDuration}
-
-SOCIAL MEDIA:
+Website: ${formData.websiteUrl}
+In Business: ${formData.businessDuration}
 Primary Platform: ${formData.primaryPlatform}
-Social Handle(s): ${formData.socialHandles?.join(', ')}
-Average Monthly Reach: ${formData.monthlyReach}
-Posting Consistency: ${formData.postingConsistently}
-
-OFFER:
-Main Product/Service: ${formData.mainOffer}
-Price Point: ${formData.currency} ${formData.pricePoint}
-Pricing Page URL: ${formData.pricingPageUrl}
-Upsell/Downsell: ${formData.hasUpsell ? 'Yes - ' + formData.upsellDetails : 'No'}
-Competitive Difference: ${formData.differentiator}
-Current Conversion Rate: ${formData.conversionRate}%
-
-REVENUE & GOALS:
-Current Monthly Revenue: $${formData.currentRevenue}
-Target Monthly Revenue: $${formData.targetRevenue}
-Timeline to Target: ${formData.timeline}
-Biggest Challenge: ${formData.challenges?.join(', ')}
-
-FUNNEL:
+Social Handles: ${formData.socialHandles?.join(', ') || 'Not provided'}
+Monthly Reach: ${formData.monthlyReach || 'Unknown'}
+Posting Consistently: ${formData.postingConsistently}
+Main Offer: ${formData.mainOffer}
+Price Point: ${formData.currency || 'USD'} ${formData.pricePoint}
+Competitive Difference: ${formData.differentiator || 'Not specified'}
+Current Revenue: $${formData.currentRevenue}/mo
+Target Revenue: $${formData.targetRevenue}/mo
+Timeline: ${formData.timeline}
+Biggest Challenge: ${formData.challenges?.join(', ') || 'Not specified'}
 Landing Page: ${formData.hasLandingPage ? formData.landingPageUrl : 'No'}
-Thank You Page: ${formData.hasThankYouPage ? formData.thankYouPageUrl : 'No'}
 Email Sequence: ${formData.emailSequence}
-Tools Used: ${formData.tools?.join(', ')}
+Running Ads: ${formData.runningAds ? 'Yes — ' + formData.adPlatform : 'No'}
+Content Types: ${formData.contentTypes?.join(', ') || 'Not specified'}
+Tools Used: ${formData.tools?.join(', ') || 'Not specified'}
 
-CONTENT & ADS:
-Running Paid Ads: ${formData.runningAds ? 'Yes - ' + formData.adPlatform + ' ($' + formData.adSpend + '/mo)' : 'No'}
-Existing Content Scripts: ${formData.hasScripts ? 'Yes' : 'No'}
-Content Types: ${formData.contentTypes?.join(', ')}
+CONSTRAINT CATEGORIES TO DIAGNOSE:
+1. Positioning — Does the market clearly understand who this is for and why it's different?
+2. Authority — Does this business have the trust signals needed to convert cold traffic?
+3. Acquisition — Are they generating enough of the right kind of attention consistently?
+4. Conversion — Is their system turning attention into leads and leads into clients?
+5. Sales — Is there a reliable process to close and retain business?
 
-═══════════════════════════════════════════════════════════════
+DIAGNOSIS INSTRUCTIONS:
+- Identify the TOP 3 constraints most limiting this business's growth right now.
+- Base your diagnosis on observable signals from the information provided.
+- Write like a consultant who has studied this business — specific, thoughtful, human.
+- Do NOT invent revenue figures, percentages, or KPIs.
+- Do NOT use generic audit language or filler phrases.
+- Write the Executive Summary as if you are presenting directly to the business owner.
+- Every section should feel earned and specific to this business.
 
-Generate a comprehensive growth audit based on the TitanLeap monetization framework.
-You MUST output valid JSON matching this exact structure:
+Output ONLY valid JSON matching this exact structure:
 {
-  "revenueGap": number (estimated monthly revenue gap in dollars),
-  "executiveOffer": {
-    "tldr": string (One-sentence diagnosis -> fix -> outcome),
-    "recommendedPackage": string (e.g., "Launch Accelerator", "Scaling System")
+  "executiveSummary": {
+    "businessUnderstanding": "2-3 sentences showing you understand what this business does, who it serves, and where it is in its growth journey",
+    "currentSituation": "2-3 sentences on the current growth situation based on what was shared",
+    "mainObservations": "2-3 sentences on the most important patterns or gaps observed",
+    "biggestOpportunities": "2-3 sentences on where the biggest leverage is"
   },
-  "issues": [
+  "businessSnapshot": {
+    "businessType": "One line description of the business model",
+    "offer": "What they sell and at what price",
+    "targetAudience": "Who they serve",
+    "growthGoal": "What they are trying to achieve",
+    "currentStage": "Early-stage / Growth-stage / Scaling / Established",
+    "summaryOfFindings": "One paragraph summary of the overall diagnosis"
+  },
+  "primaryConstraint": {
+    "category": "One of: Positioning / Authority / Acquisition / Conversion / Sales",
+    "whatWeFound": "2-3 sentences describing the specific constraint observed",
+    "evidence": "Specific signals from the intake that support this diagnosis",
+    "whyItMatters": "Why this constraint is limiting growth right now",
+    "businessImpact": "The practical effect this constraint has on the business day-to-day",
+    "recommendedActions": ["Specific action 1", "Specific action 2", "Specific action 3"]
+  },
+  "secondaryConstraint": {
+    "category": "One of: Positioning / Authority / Acquisition / Conversion / Sales",
+    "whatWeFound": "2-3 sentences describing the specific constraint observed",
+    "evidence": "Specific signals from the intake that support this diagnosis",
+    "whyItMatters": "Why this constraint is limiting growth right now",
+    "businessImpact": "The practical effect this constraint has on the business day-to-day",
+    "recommendedActions": ["Specific action 1", "Specific action 2", "Specific action 3"]
+  },
+  "thirdConstraint": {
+    "category": "One of: Positioning / Authority / Acquisition / Conversion / Sales",
+    "whatWeFound": "2-3 sentences describing the specific constraint observed",
+    "evidence": "Specific signals from the intake that support this diagnosis",
+    "whyItMatters": "Why this constraint is limiting growth right now",
+    "businessImpact": "The practical effect this constraint has on the business day-to-day",
+    "recommendedActions": ["Specific action 1", "Specific action 2", "Specific action 3"]
+  },
+  "roadmap": {
+    "month1": {
+      "focus": "Month 1 theme in one sentence",
+      "actions": ["Action 1", "Action 2", "Action 3", "Action 4"]
+    },
+    "month2": {
+      "focus": "Month 2 theme in one sentence",
+      "actions": ["Action 1", "Action 2", "Action 3", "Action 4"]
+    },
+    "month3": {
+      "focus": "Month 3 theme in one sentence",
+      "actions": ["Action 1", "Action 2", "Action 3", "Action 4"]
+    }
+  },
+  "quickWins": [
+    "Specific quick win 1",
+    "Specific quick win 2",
+    "Specific quick win 3",
+    "Specific quick win 4",
+    "Specific quick win 5"
+  ],
+  "titanLeapHelp": [
     {
-      "id": string (unique identifier),
-      "area": string (e.g., "Landing Page", "Offer", "Email Sequence", "Ads"),
-      "problem": string (detailed description of the leakage point),
-      "impact": number (estimated revenue impact in dollars),
-      "action": string (actionable recommendation to fix it),
-      "priority": string ("Critical", "Improve", or "Optimise"),
-      "status": string ("critical", "improve", or "optimise"),
-      "implementationTime": string (e.g., "2 weeks"),
-      "effortLevel": string ("Low", "Medium", "High"),
-      "whyItMatters": string (Quantify the loss),
-      "serviceHint": string (Optional hint at your service)
+      "constraint": "Primary constraint category name",
+      "howWeHelp": ["Specific way 1", "Specific way 2", "Specific way 3"],
+      "expectedOutcome": "What improves as a result"
+    },
+    {
+      "constraint": "Secondary constraint category name",
+      "howWeHelp": ["Specific way 1", "Specific way 2", "Specific way 3"],
+      "expectedOutcome": "What improves as a result"
+    },
+    {
+      "constraint": "Third constraint category name",
+      "howWeHelp": ["Specific way 1", "Specific way 2", "Specific way 3"],
+      "expectedOutcome": "What improves as a result"
     }
   ],
-  "quickWin": {
-    "title": string (e.g., "30-DAY QUICK WIN (Creative + Ads Only)"),
-    "description": string,
-    "whatWeDo": [string],
-    "whatYouDo": [string],
-    "expectedOutcome": [string],
-    "timeline": string,
-    "cost": string,
-    "roi": string
-  },
-  "caseStudy": {
-    "company": string,
-    "startingPoint": string,
-    "theFix": [string],
-    "results": [string],
-    "keyInsight": string
-  },
-  "implementationTiers": [
-    {
-      "name": string,
-      "price": string,
-      "description": string,
-      "features": [string]
-    }
-  ]
+  "nextStep": "2-3 sentences written as a trusted advisor recommending the most important next step. Do not hard sell. Be direct and genuine."
 }
   `;
 
@@ -265,7 +293,7 @@ You MUST output valid JSON matching this exact structure:
       responseMimeType: "application/json",
     });
 
-    return parseJSON(response.text, { revenueGap: 0, issues: [] });
+    return parseJSON(response.text, { primaryConstraint: null, secondaryConstraint: null, thirdConstraint: null });
   } catch (error) {
     console.error("AI Audit Error:", error);
     throw error;
@@ -394,43 +422,67 @@ export const generate30DayPlan = async (auditData: any) => {
 };
 
 export const smartFillForm = async (url: string) => {
-  const prompt = `
-    Analyze the website: ${url}.
-    Extract detailed business information for a growth audit.
-    
-    Specific Instructions:
-    1. Look for social media links (Instagram, LinkedIn, Twitter, TikTok, YouTube) specifically in the FOOTER of the website.
-    2. Look for the primary product/service offers, usually found on a "Pricing" or "Services" page.
-    3. Extract the price points in USD. If multiple tiers exist, provide the most popular or mid-tier price.
-    4. Calculate potential monthly revenue based on the pricing found.
-    5. Assume the business goal is to acquire 5 to 10 new clients per month. Calculate 'targetRevenue' as (Price Point * 10).
-    
-    Provide:
-    1. businessName (The official name of the business)
-    2. industry (Choose from: B2B SaaS, E-commerce, Coaching/Consulting, Agency, Local Business, Other)
-    3. primaryPlatform (The main social media platform they focus on)
-    4. socialHandles (An array of social media handles or profile URLs found in the footer)
-    5. mainOffer (A concise description of their primary offer/product)
-    6. pricePoint (The numerical value of their primary offer in USD as a string)
-    7. pricingPageUrl (The URL of the pricing or services page where the offer was found)
-    8. differentiator (What makes them unique)
-    9. currentRevenue (An estimate of their current monthly revenue based on their scale, or '0' if unknown, as a string)
-    10. targetRevenue (Calculated as pricePoint * 10, representing the goal of 10 new clients, as a string)
-    11. currency (Always set this to 'USD')
-    
-    Format the output as a JSON object with these keys.
-  `;
-
+  // Try server-side endpoint first (it can actually fetch the page)
   try {
-    const result = await generateGeminiContent({
-      prompt,
-      responseMimeType: "application/json",
+    const serverRes = await fetch('/api/ai/smart-fill', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
     });
+    if (serverRes.ok) {
+      const data = await serverRes.json();
+      if (data && typeof data === 'object' && !data.error) return data;
+    }
+  } catch (_) {
+    // fall through to direct Claude call
+  }
 
-    return parseJSON(result.text, {});
-  } catch (error) {
-    console.error("Smart Fill Error:", error);
-    return null;
+  // Fallback: call Claude proxy directly (always available)
+  const smartFillPrompt = `You are a business intelligence analyst. Analyse this website URL and extract structured business information to pre-fill an audit form. Use your best inference — do not leave fields empty if you can make a reasonable guess.
+
+WEBSITE URL: ${url}
+
+Extract and return ONLY a valid JSON object with these exact keys:
+{
+  "businessName": "Official name of the business",
+  "industry": "One of: B2B SaaS, E-commerce, Coaching/Consulting, Agency, Local Business, Other",
+  "primaryPlatform": "Their main social media platform — one of: Instagram, LinkedIn, TikTok, YouTube, Twitter-X",
+  "socialHandles": ["array of social handles or profile URLs found, e.g. '@handle'"],
+  "monthlyReach": "Estimated monthly social media reach as number string, e.g. '5000'. Use '1000' if unknown.",
+  "mainOffer": "Their primary product or service in one sentence",
+  "pricePoint": "Numeric price of main offer in USD as string, e.g. '2997'. Use '0' if not found.",
+  "differentiator": "What makes them unique or their main value proposition in one sentence",
+  "currentRevenue": "0",
+  "targetRevenue": "If pricePoint known, set to pricePoint * 10, else '0'",
+  "currency": "USD",
+  "timeline": "One of: 30 days, 60 days, 90 days, 6 months, 1 year",
+  "challenges": ["1-3 items from: Getting leads, Converting leads, Retaining clients, Content creation, Ads not working, No clear strategy, Other"],
+  "tools": ["Tools they likely use from: Mailchimp, ConvertKit, ClickFunnels, Webflow, Shopify, Kajabi, None, Other"],
+  "contentTypes": ["Content types from: Short-form video, Long-form video, Carousels, Blogs, Emails, Podcasts"],
+  "hasLandingPage": true,
+  "hasUpsell": false,
+  "runningAds": false,
+  "emailSequence": "One of: Yes, No, In progress"
+}
+Return ONLY the JSON. No markdown. No explanation.`;
+
+  const proxyRes = await fetch('/api/ai/claude', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: smartFillPrompt }),
+  });
+
+  if (!proxyRes.ok) {
+    const err = await proxyRes.json().catch(() => ({ error: 'Smart fill failed' }));
+    throw new Error(err.error || 'Smart fill failed');
+  }
+
+  const result = await proxyRes.json();
+  const cleaned = (result.text || '').replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    throw new Error('Could not parse Smart Fill response. Try again.');
   }
 };
 
@@ -738,66 +790,37 @@ export const analyzeCompetitorFunnel = async (competitorUrl: string) => {
     YOUR ANALYSIS FRAMEWORK:
     1. Traffic Sources: Where are they getting their traffic from? Look for signals: are they running paid ads (Meta, TikTok, Google)? Is their content organic-first? Do they rely on SEO, affiliates, partnerships, or direct outreach? What platforms are most active? What is their estimated traffic volume and consistency?
     2. Hook and Content Strategy: What hook style do they use? Examples: pain-agitate-solve, curiosity gap, bold claim, transformation story, social proof lead, controversy, before-and-after. How long is their hook? What emotion does it target — fear, aspiration, frustration, greed, belonging? How frequently do they post? What content format dominates — short video, carousel, long-form, email, ads?
-    3. Landing Page Structure: What does their landing page lead with — headline, video, testimonials? Is it a long-form sales letter, VSL page, webinar registration, or simple opt-in? How many fields are in their forms? Is the CTA clear and above the fold? What is the primary conversion goal of the page?
-    4. Offer and Pricing: What is their core offer? Is it a low-ticket tripwire, a high-ticket coaching program, a SaaS subscription, or a physical product? What is the price point? Is there a clear value proposition and risk reversal (guarantee)? How do they bundle their products?
-    5. Backend and Retention: What happens after the first purchase? Is there an immediate upsell or order bump? Do they have an automated email nurture sequence? How do they handle customer retention and repeat sales? What is their estimated LTV strategy?
+    3. Landing Page Structure: What does their landing page lead with — headline, video, testimonials? Is it a long-form sales letter, VSL page, webinar registration, or, VSL page, webinar registration, or direct offer page? What is the primary CTA? Are there upsells, order bumps, or downsells visible?
+    4. Offer and Pricing: What is their core offer and price point? Do they have a free lead magnet or low-ticket tripwire? What is their high-ticket backend offer? What transformation are they selling?
+    5. Trust and Social Proof: What proof do they use — testimonials, case studies, logos, before/after, revenue screenshots, media mentions? How prominent is it?
+    6. Their Biggest Gap: Based on everything you observe, what is the single biggest strategic gap in their funnel that a competitor could exploit?
 
-    OUTPUT FORMAT:
-    Return your analysis as a JSON object with this exact structure:
+    Return ONLY a valid JSON object with this shape:
     {
-      "profile": {
-        "name": "string",
-        "platforms": ["string"],
-        "niche": "string",
-        "audienceSize": "string",
-        "strength": "Weak | Moderate | Strong | Elite"
-      },
-      "map": [
-        {
-          "stage": "string (One of the 5 layers above)",
-          "platform": "string",
-          "strength": "Weak | Moderate | Strong"
-        }
-      ],
-      "deepBreakdown": [
-        {
-          "stage": "string (One of the 5 layers above)",
-          "whatTheyDo": "string",
-          "effectiveness": "string",
-          "whyItWorks": "string"
-        }
-      ],
-      "dangerousTraits": [
-        {
-          "trait": "string",
-          "detail": "string"
-        }
-      ],
-      "actionPlan": [
-        {
-          "whatTheyDo": "string",
-          "whyItWorks": "string",
-          "howToApply": "string",
-          "expectedImpact": "string"
-        }
-      ],
-      "competitiveEdge": [
-        {
-          "gap": "string (What they are NOT doing)",
-          "advantage": "string (How you can exploit this to win)",
-          "difficulty": "Low | Medium | High"
-        }
-      ],
-      "sources": [
-        {
-          "title": "string (e.g., 'Official Website', 'Meta Ad Library')",
-          "url": "string"
-        }
-      ]
-    }
-
-    Be specific at all times. Never give generic observations. If a signal is unclear, say what you can infer and why.
-  `;
+  "competitorName": "Real name of the competitor",
+  "website": "their website URL",
+  "primaryPlatform": "main platform they use",
+  "followerCount": "estimated followers/audience size",
+  "trafficSources": ["organic", "paid ads", "SEO", "etc"],
+  "hookStyle": "pain-agitate-solve / curiosity gap / etc",
+  "contentFormats": ["short-form video", "carousels", "etc"],
+  "postingFrequency": "e.g. 3x/week",
+  "coreOffer": "what they sell",
+  "pricePoint": "$997 / $49/mo / etc",
+  "freeLeadMagnet": "their lead magnet if any",
+  "highTicketOffer": "their backend offer if any",
+  "landingPageType": "VSL / sales letter / webinar / etc",
+  "primaryCTA": "their main call to action",
+  "hasUpsell": true,
+  "emailMarketing": "Yes / No / Unknown",
+  "techStack": ["ClickFunnels", "Shopify", "etc"],
+  "trustSignals": ["testimonials", "case studies", "etc"],
+  "runningAds": true,
+  "adPlatforms": ["Meta", "TikTok", "Google"],
+  "biggestGap": "The single biggest strategic gap in their funnel",
+  "whatIsWorking": "What is clearly working for them",
+  "yourEdge": "How you can beat them based on this analysis"
+}`;
 
   try {
     const response = await unifiedGenerateContent({
@@ -805,13 +828,9 @@ export const analyzeCompetitorFunnel = async (competitorUrl: string) => {
       responseMimeType: "application/json",
     });
 
-    if (!response.text) {
-      throw new Error("Empty response from AI");
-    }
-
-    return parseJSON(response.text);
+    return parseJSON(response.text, {});
   } catch (error) {
-    console.error("Competitor Analysis Error:", error);
+    console.error("Competitor Funnel Analysis Error:", error);
     return null;
   }
 };

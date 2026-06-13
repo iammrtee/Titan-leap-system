@@ -35,6 +35,7 @@ export const generateClaudeContent = async (params: {
   responseMimeType?: string;
   temperature?: number;
   apiKey?: string; // Optional override
+  model?: string;  // Optional model override
 }) => {
   // If in browser, call the server proxy
   if (typeof window !== 'undefined') {
@@ -77,10 +78,7 @@ export const generateClaudeContent = async (params: {
       apiKey: keyToUse,
     });
     
-    // Use a known stable model ID. 
-    // If sonnet 3.5 was 404ing, it might be due to account restrictions or a temporary platform issue.
-    // We'll try the latest alias which is often more reliable if IDs are shifting.
-    const modelId = "claude-3-5-sonnet-latest"; 
+    const modelId = params.model || "claude-sonnet-4-5";
     
     console.log(`[CLAUDE_SERVER_V4] Executing with model: ${modelId}`);
     

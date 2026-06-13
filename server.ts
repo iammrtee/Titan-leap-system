@@ -116,6 +116,80 @@ async function startServer() {
     }
   });
 
+  // Smart Fill — fetches website server-side, extracts business info via Claude
+  app.post("/api/ai/smart-fill", async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url) return res.status(400).json({ error: "URL is required" });
+
+      // Fetch the page server-side (avoids CORS, can actually read content)
+      let pageText = '';
+      try {
+        const pageRes = await fetch(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TitanLeap/1.0; +https://titanleap.ai)' },
+          signal: AbortSignal.timeout(12000)
+        });
+        const html = await pageRes.text();
+        // Strip scripts, styles, tags — keep readable text
+        pageText = html
+          .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+          .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 10000);
+      } catch (fetchErr: any) {
+        console.warn("[SmartFill] Could not fetch URL:", fetchErr.message);
+        pageText = `Website at ${url} (could not fetch — extract what you can from the URL itself)`;
+      }
+
+      const prompt = `You are a business intelligence analyst. Analyse the following website content and extract structured business information to pre-fill an audit form.
+
+WEBSITE URL: ${url}
+WEBSITE CONTENT:
+${pageText}
+
+Extract and return ONLY a valid JSON object with these exact keys. Use your best inference from the content — do not leave fields empty if you can make a reasonable guess:
+{
+  "businessName": "Official name of the business",
+  "industry": "One of: B2B SaaS, E-commerce, Coaching/Consulting, Agency, Local Business, Other",
+  "primaryPlatform": "Their main social media platform — one of: Instagram, LinkedIn, TikTok, YouTube, Twitter-X",
+  "socialHandles": ["array of social handles or profile URLs found on site, e.g. '@handle' or 'instagram.com/handle'"],
+  "monthlyReach": "Estimated monthly social media reach as a number string, e.g. '5000'. Use '1000' if unknown.",
+  "mainOffer": "Their primary product or service described in one sentence",
+  "pricePoint": "Numeric price of main offer in USD as string, e.g. '2997'. Use '0' if not found.",
+  "differentiator": "What makes them unique or their main value proposition in one sentence",
+  "currentRevenue": "0",
+  "targetRevenue": "If pricePoint is known, set to pricePoint * 10 as string, else '0'",
+  "currency": "USD",
+  "timeline": "One of: 30 days, 60 days, 90 days, 6 months, 1 year — pick most appropriate for their business stage",
+  "challenges": ["Array of 1-3 items from: Getting leads, Converting leads, Retaining clients, Content creation, Ads not working, No clear strategy, Other"],
+  "tools": ["Array of tools they likely use from: Mailchimp, ConvertKit, ClickFunnels, Webflow, Shopify, Kajabi, None, Other"],
+  "contentTypes": ["Array of content types they produce from: Short-form video, Long-form video, Carousels, Blogs, Emails, Podcasts"],
+  "hasLandingPage": true,
+  "hasUpsell": false,
+  "runningAds": false,
+  "emailSequence": "One of: Yes, No, In progress"
+}
+Return ONLY the JSON. No markdown. No explanation.`;
+
+      const { generateClaudeContent } = await import("./src/services/claude.ts");
+      const result = await generateClaudeContent({
+        prompt,
+        apiKey: process.env.CLAUDE_API_KEY,
+        model: "claude-haiku-4-5-20251001"  // cheapest model — smart fill doesn't need heavy reasoning
+      });
+      const cleaned = (result.text || '').replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
+      const parsed = JSON.parse(cleaned);
+      res.json(parsed);
+    } catch (error: any) {
+      const errMsg = error?.message || String(error) || "Smart fill failed";
+      console.error("[SmartFill] Error:", errMsg, error?.stack);
+      res.status(500).json({ error: errMsg });
+    }
+  });
+
   // n8n Webhook for Leads
   app.post("/api/webhooks/n8n/leads", async (req, res) => {
     try {
@@ -220,45 +294,9 @@ async function startServer() {
 
   // Endpoint for the daemon to "post" to
   app.post("/api/daemon/publish", async (req, res) => {
-    const { platforms, mediaUrls, caption, scheduledTime, credentials } = req.body;
+    const { platforms, mediaUrls, caption, scheduledTime, tokens, credentials, linkedinCompanyId } = req.body;
     
     console.log(`[DAEMON] Received request to publish to ${platforms.join(', ')}`);
     
     // Execute the actual headless browser daemon
-    const result = await executePublishingDaemon({
-      platforms,
-      mediaUrls,
-      caption,
-      credentials
-    });
-    
-    res.json({ 
-      success: result.success, 
-      message: result.success ? "Successfully processed by backend daemon" : "Daemon execution failed",
-      logs: result.logs,
-      error: result.error,
-      jobId: Math.random().toString(36).substring(7)
-    });
-  });
-
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-}
-
-startServer();
+    const result = await ex
