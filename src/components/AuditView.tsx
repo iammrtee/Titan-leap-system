@@ -129,6 +129,8 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
   const [isAuditing, setIsAuditing] = useState(false);
   const [engine, setEngine] = useState<AIEngine>(getAIEngine());
   const [isSmartFilling, setIsSmartFilling] = useState(false);
+  const [showSmartFillInput, setShowSmartFillInput] = useState(false);
+  const [smartFillUrl, setSmartFillUrl] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'intake' | 'result'>('intake');
@@ -185,15 +187,17 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
     }
   };
 
-  const handleSmartFill = async () => {
-    if (!formData.websiteUrl) {
-      toast.error("Enter a website URL first");
+  const handleSmartFill = async (urlOverride?: string) => {
+    const url = urlOverride || smartFillUrl || formData.websiteUrl;
+    if (!url) {
+      setShowSmartFillInput(true);
       return;
     }
+    setShowSmartFillInput(false);
     setIsSmartFilling(true);
     const fillToast = toast.loading("Analysing your website with Claude...");
     try {
-      const data = await smartFillForm(formData.websiteUrl);
+      const data = await smartFillForm(url);
       const sanitizeNumber = (val: any) => {
         if (!val) return '';
         return String(val).replace(/[^0-9.]/g, '');
@@ -201,10 +205,12 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
       setFormData(prev => ({
         ...prev,
         ...data,
+        websiteUrl: data.websiteUrl || url,
         pricePoint: sanitizeNumber(data.pricePoint),
         currentRevenue: sanitizeNumber(data.currentRevenue),
         targetRevenue: sanitizeNumber(data.targetRevenue),
       }));
+      setSmartFillUrl('');
       toast.success("Form filled from your website!", { id: fillToast });
     } catch (error: any) {
       console.error("Smart fill failed:", error);
@@ -431,19 +437,44 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
         </div>
         
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
-          <div className="relative group w-full sm:w-auto">
-            <button 
-              onClick={handleSmartFill}
-              disabled={isSmartFilling || !formData.websiteUrl}
-              className="w-full sm:w-auto bg-secondary text-on-secondary px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-secondary/20 flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100 group"
+          <div className="flex flex-col gap-2 w-full sm:w-auto">
+            <button
+              onClick={() => {
+                if (isSmartFilling) return;
+                if (formData.websiteUrl && !showSmartFillInput) {
+                  handleSmartFill(formData.websiteUrl);
+                } else {
+                  setShowSmartFillInput(v => !v);
+                }
+              }}
+              disabled={isSmartFilling}
+              className="w-full sm:w-auto bg-secondary text-on-secondary px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-secondary/20 flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 group"
             >
               {isSmartFilling ? <Loader2 size={18} className="animate-spin" /> : <Wand2 size={18} className="group-hover:rotate-12 transition-transform" />}
               {isSmartFilling ? 'Analyzing Site...' : 'Smart Fill with AI'}
               <span className="px-1.5 py-0.5 bg-white/20 text-white rounded-md text-[8px] font-black uppercase tracking-widest shrink-0">Pro</span>
             </button>
-            {!formData.websiteUrl && (
-              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 bg-on-surface text-surface text-[10px] font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                Enter a website URL first
+            {showSmartFillInput && !isSmartFilling && (
+              <div className="flex gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                <input
+                  autoFocus
+                  type="url"
+                  value={smartFillUrl}
+                  onChange={e => setSmartFillUrl(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && smartFillUrl.trim()) handleSmartFill(smartFillUrl.trim());
+                    if (e.key === 'Escape') setShowSmartFillInput(false);
+                  }}
+                  placeholder="https://yourwebsite.com"
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-outline-variant bg-surface text-on-surface text-sm placeholder:text-on-surface-variant/50 focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary/30"
+                />
+                <button
+                  onClick={() => { if (smartFillUrl.trim()) handleSmartFill(smartFillUrl.trim()); }}
+                  disabled={!smartFillUrl.trim()}
+                  className="px-4 py-2.5 rounded-xl bg-secondary text-on-secondary text-sm font-bold disabled:opacity-40 hover:opacity-90 transition-opacity"
+                >
+                  Go
+                </button>
               </div>
             )}
           </div>
