@@ -1075,283 +1075,25 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
           </div>
         </div>
         ) : activeTab === 'result' ? (
-          <div className="w-full" ref={reportRef}>
+          <div ref={reportRef}>
             {auditReport ? (
-              <div className="space-y-6">
-
-                {/* ── REPORT HEADER ── */}
-                <div className="bg-[#0f0a1e] rounded-[40px] p-8 md:p-12 border border-white/5 shadow-2xl">
-                  <div className="flex items-start justify-between mb-8">
-                    <div className="flex items-center gap-3">
-                      <Logo className="h-7 w-auto opacity-90" />
-                      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">Growth Blueprint</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button onClick={handleExportPDF} className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-white/60 hover:text-white transition-all">
-                        <FileDown size={14} />
-                        Export
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-[#00ff85] animate-pulse" />
-                      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#00ff85]">Analysis Ready</span>
-                    </div>
-                    <h1 className="text-4xl md:text-5xl font-display font-black text-white tracking-tight leading-tight">
-                      {auditReport.businessName}
-                    </h1>
-                    <p className="text-sm text-white/30 font-medium">{auditReport.timestamp}</p>
-                  </div>
-                </div>
-
-                {/* ── PAGE 1: EXECUTIVE SUMMARY ── */}
-                <div className="bg-[#3b00b9] rounded-[40px] p-8 md:p-12 shadow-2xl shadow-[#3b00b9]/20 relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
-                  <div className="relative z-10 space-y-8">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 mb-3">01 — Executive Summary</p>
-                      <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight">Our Diagnosis</h2>
-                    </div>
-                    {auditReport.executiveSummary && (
-                      <div className="space-y-6 max-w-3xl">
-                        <p className="text-base md:text-lg text-white/80 leading-relaxed font-medium">
-                          {auditReport.executiveSummary.businessUnderstanding}
-                        </p>
-                        <div className="h-px bg-white/10" />
-                        <p className="text-sm text-white/60 leading-relaxed">
-                          {auditReport.executiveSummary.currentSituation}
-                        </p>
-                        <p className="text-sm text-white/60 leading-relaxed">
-                          {auditReport.executiveSummary.mainObservations}
-                        </p>
-                        <div className="p-6 bg-white/10 rounded-[24px] border border-white/10">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-[#00ff85] mb-2">Biggest Opportunity</p>
-                          <p className="text-sm text-white font-semibold leading-relaxed">
-                            {auditReport.executiveSummary.biggestOpportunities}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    {/* Constraint badges */}
-                    <div className="flex flex-wrap gap-3 pt-2">
-                      {[auditReport.primaryConstraint, auditReport.secondaryConstraint, auditReport.thirdConstraint].filter(Boolean).map((c: any, i: number) => (
-                        <div key={i} className="flex items-center gap-2 px-4 py-2 bg-white/10 border border-white/10 rounded-full">
-                          <span className="text-[9px] font-black uppercase tracking-widest text-white/40">{i === 0 ? 'Primary' : i === 1 ? 'Secondary' : 'Third'}</span>
-                          <span className="text-[11px] font-black text-white uppercase tracking-wider">{c.category}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── PAGE 2: BUSINESS SNAPSHOT ── */}
-                {auditReport.businessSnapshot && (
-                  <div className="bg-surface-container-lowest rounded-[40px] p-8 md:p-12 border border-outline-variant/10 shadow-sm">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40 mb-3">02 — Business Snapshot</p>
-                    <h2 className="text-2xl font-black text-on-surface tracking-tight mb-8">What We Know About Your Business</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                      {[
-                        { label: 'Business Type', value: auditReport.businessSnapshot.businessType },
-                        { label: 'Offer', value: auditReport.businessSnapshot.offer },
-                        { label: 'Target Audience', value: auditReport.businessSnapshot.targetAudience },
-                        { label: 'Growth Goal', value: auditReport.businessSnapshot.growthGoal },
-                        { label: 'Current Stage', value: auditReport.businessSnapshot.currentStage },
-                      ].map((item, i) => (
-                        <div key={i} className="p-5 bg-surface-container-low rounded-[24px] border border-outline-variant/10">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-1">{item.label}</p>
-                          <p className="text-sm font-bold text-on-surface leading-snug">{item.value}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="p-6 bg-primary/5 rounded-[24px] border border-primary/10">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-primary/60 mb-2">Summary of Findings</p>
-                      <p className="text-sm text-on-surface-variant leading-relaxed">{auditReport.businessSnapshot.summaryOfFindings}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* ── PAGES 3-5: THREE CONSTRAINTS ── */}
-                {[
-                  { data: auditReport.primaryConstraint, num: '03', label: 'Primary Constraint' },
-                  { data: auditReport.secondaryConstraint, num: '04', label: 'Secondary Constraint' },
-                  { data: auditReport.thirdConstraint, num: '05', label: 'Third Constraint' },
-                ].filter(c => c.data).map(({ data, num, label }) => {
-                  const categoryColors: {[key: string]: { bg: string, text: string, badge: string }} = {
-                    'Positioning': { bg: 'bg-blue-500/5', text: 'text-blue-400', badge: 'bg-blue-500/10 border-blue-500/20 text-blue-400' },
-                    'Authority':   { bg: 'bg-purple-500/5', text: 'text-purple-400', badge: 'bg-purple-500/10 border-purple-500/20 text-purple-400' },
-                    'Acquisition': { bg: 'bg-amber-500/5', text: 'text-amber-400', badge: 'bg-amber-500/10 border-amber-500/20 text-amber-400' },
-                    'Conversion':  { bg: 'bg-teal-500/5', text: 'text-teal-400', badge: 'bg-teal-500/10 border-teal-500/20 text-teal-400' },
-                    'Sales':       { bg: 'bg-rose-500/5', text: 'text-rose-400', badge: 'bg-rose-500/10 border-rose-500/20 text-rose-400' },
-                  };
-                  const color = categoryColors[data.category] || categoryColors['Positioning'];
-                  return (
-                    <div key={num} className={`rounded-[40px] p-8 md:p-12 border border-outline-variant/10 shadow-sm ${color.bg}`}>
-                      <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40 mb-3">{num} — {label}</p>
-                          <h2 className="text-2xl font-black text-on-surface tracking-tight">{data.category}</h2>
-                        </div>
-                        <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${color.badge}`}>
-                          {label.split(' ')[0]} Constraint
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        <div className="space-y-6">
-                          <div>
-                            <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-2">What We Found</p>
-                            <p className="text-sm text-on-surface-variant leading-relaxed">{data.whatWeFound}</p>
-                          </div>
-                          <div>
-                            <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-2">Evidence</p>
-                            <p className="text-sm text-on-surface-variant leading-relaxed">{data.evidence}</p>
-                          </div>
-                          <div>
-                            <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-2">Why It Matters</p>
-                            <p className="text-sm text-on-surface-variant leading-relaxed">{data.whyItMatters}</p>
-                          </div>
-                          <div>
-                            <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-2">Business Impact</p>
-                            <p className="text-sm font-semibold text-on-surface leading-relaxed">{data.businessImpact}</p>
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-4">Recommended Actions</p>
-                          <div className="space-y-3">
-                            {data.recommendedActions?.map((action: string, i: number) => (
-                              <div key={i} className="flex items-start gap-3 p-4 bg-surface-container-lowest rounded-[20px] border border-outline-variant/10">
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${color.bg} border ${color.badge.split(' ')[1]}`}>
-                                  <span className={`text-[9px] font-black ${color.text}`}>{i + 1}</span>
-                                </div>
-                                <p className="text-sm text-on-surface font-medium leading-snug">{action}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* ── PAGE 6: 90-DAY ROADMAP ── */}
-                {auditReport.roadmap && (
-                  <div className="bg-surface-container-lowest rounded-[40px] p-8 md:p-12 border border-outline-variant/10 shadow-sm">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40 mb-3">06 — Growth Roadmap</p>
-                    <h2 className="text-2xl font-black text-on-surface tracking-tight mb-8">Your 90-Day Blueprint</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      {[
-                        { key: 'month1', label: 'Month 1', accent: 'border-t-primary' },
-                        { key: 'month2', label: 'Month 2', accent: 'border-t-secondary' },
-                        { key: 'month3', label: 'Month 3', accent: 'border-t-[#00ff85]' },
-                      ].map(({ key, label, accent }) => {
-                        const month = auditReport.roadmap[key];
-                        if (!month) return null;
-                        return (
-                          <div key={key} className={`p-6 bg-surface-container-low rounded-[28px] border border-outline-variant/10 border-t-2 ${accent}`}>
-                            <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40 mb-1">{label}</p>
-                            <p className="text-sm font-black text-on-surface mb-5 leading-snug">{month.focus}</p>
-                            <div className="space-y-2.5">
-                              {month.actions?.map((action: string, i: number) => (
-                                <div key={i} className="flex items-start gap-2.5">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-primary/60 mt-1.5 shrink-0" />
-                                  <p className="text-xs text-on-surface-variant leading-relaxed">{action}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* ── PAGE 7: QUICK WINS ── */}
-                {auditReport.quickWins?.length > 0 && (
-                  <div className="bg-surface-container-lowest rounded-[40px] p-8 md:p-12 border border-outline-variant/10 shadow-sm">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40 mb-3">07 — Quick Wins</p>
-                    <h2 className="text-2xl font-black text-on-surface tracking-tight mb-8">High-Impact Actions You Can Take Now</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {auditReport.quickWins.map((win: string, i: number) => (
-                        <div key={i} className="flex items-start gap-4 p-5 bg-surface-container-low rounded-[24px] border border-outline-variant/10">
-                          <div className="w-8 h-8 rounded-xl bg-[#00ff85]/10 border border-[#00ff85]/20 flex items-center justify-center shrink-0">
-                            <span className="text-[10px] font-black text-[#00ff85]">{String(i + 1).padStart(2, '0')}</span>
-                          </div>
-                          <p className="text-sm text-on-surface font-medium leading-snug pt-1">{win}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* ── PAGE 8: HOW TITANLEAP CAN HELP ── */}
-                {auditReport.titanLeapHelp?.length > 0 && (
-                  <div className="bg-[#0f0a1e] rounded-[40px] p-8 md:p-12 border border-white/5 shadow-2xl">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-3">08 — Implementation</p>
-                    <h2 className="text-2xl font-black text-white tracking-tight mb-2">How TitanLeap Can Help</h2>
-                    <p className="text-sm text-white/40 mb-10">Each constraint identified in this report can be directly addressed through TitanLeap.</p>
-                    <div className="space-y-6">
-                      {auditReport.titanLeapHelp.map((item: any, i: number) => (
-                        <div key={i} className="p-8 bg-white/5 rounded-[32px] border border-white/5">
-                          <div className="flex items-center gap-3 mb-6">
-                            <div className="w-8 h-8 rounded-xl bg-[#3b00b9] flex items-center justify-center">
-                              <span className="text-[10px] font-black text-white">{String(i + 1).padStart(2, '0')}</span>
-                            </div>
-                            <h3 className="text-base font-black text-white uppercase tracking-wider">{item.constraint} Constraint</h3>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                              <p className="text-[9px] font-black uppercase tracking-widest text-white/30 mb-3">TitanLeap Can Help By</p>
-                              <div className="space-y-2">
-                                {item.howWeHelp?.map((help: string, j: number) => (
-                                  <div key={j} className="flex items-start gap-2.5">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-[#00ff85] mt-1.5 shrink-0" />
-                                    <p className="text-sm text-white/60">{help}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="p-5 bg-[#00ff85]/5 rounded-[20px] border border-[#00ff85]/10">
-                              <p className="text-[9px] font-black uppercase tracking-widest text-[#00ff85]/60 mb-2">Expected Outcome</p>
-                              <p className="text-sm text-white/80 font-medium leading-relaxed">{item.expectedOutcome}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* ── NEXT STEP ── */}
-                {auditReport.nextStep && (
-                  <div className="bg-[#3b00b9] rounded-[40px] p-8 md:p-12 shadow-2xl shadow-[#3b00b9]/20 relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
-                    <div className="relative z-10 max-w-2xl">
-                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 mb-4">Recommended Next Step</p>
-                      <p className="text-lg md:text-xl text-white font-semibold leading-relaxed">{auditReport.nextStep}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Footer */}
-                <div className="flex justify-between items-center px-4 pb-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/30">Generated by TitanLeap</p>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/30">titanleap.ai</p>
-                </div>
-
-              </div>
+              <RevenueLeakBlueprint
+                auditReport={auditReport}
+                formData={formData}
+                onStartStrategy={onStartStrategy}
+                onExport={handleExportPDF}
+                isExporting={isExporting}
+                onBack={() => setActiveTab('intake')}
+                onClear={handleClearAudit}
+              />
             ) : (
-              <div className="flex flex-col items-center justify-center min-h-[400px] gap-6 text-center p-12">
-                <div className="w-16 h-16 rounded-[24px] bg-surface-container-low border border-outline-variant/10 flex items-center justify-center">
-                  <FileText size={28} className="text-on-surface-variant/30" />
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:400,gap:24,textAlign:'center',padding:'48px 24px',background:'#06030D',color:'#EDE9F5'}}>
+                <div style={{width:64,height:64,borderRadius:16,background:'#100823',border:'1px solid #1F1430',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>📋</div>
+                <div>
+                  <h3 style={{fontSize:21,fontWeight:800,margin:'0 0 8px'}}>No Blueprint Yet</h3>
+                  <p style={{fontSize:15,color:'#9B91B4',maxWidth:'36ch',margin:0}}>Complete the assessment and run the analysis to generate your Revenue Leak Blueprint.</p>
                 </div>
-                <div className="space-y-2">
-                  <h3 className="text-xl font-black text-on-surface">No Blueprint Yet</h3>
-                  <p className="text-sm text-on-surface-variant/60 max-w-sm">Complete the business assessment and run the analysis to generate your Growth Blueprint.</p>
-                </div>
-                <button
-                  onClick={() => setActiveTab('intake')}
-                  className="px-6 py-3 bg-primary text-on-primary rounded-2xl font-black text-xs uppercase tracking-widest hover:opacity-90 transition-all"
-                >
+                <button onClick={() => setActiveTab('intake')} style={{padding:'14px 28px',background:'#6B21E8',color:'#EDE9F5',border:'none',borderRadius:10,fontWeight:700,fontSize:13,textTransform:'uppercase',letterSpacing:'0.1em',cursor:'pointer'}}>
                   Start Assessment
                 </button>
               </div>
@@ -1464,3 +1206,250 @@ const Chip: React.FC<{ label: string, selected: boolean, onClick: () => void }> 
     {label}
   </button>
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  REVENUE LEAK BLUEPRINT  —  matches revenue-leak-audit.html exactly
+// ─────────────────────────────────────────────────────────────────────────────
+const BG_DEEP  = '#06030D';
+const BG       = '#0B0418';
+const CARD     = '#100823';
+const CARD_HI  = '#160B30';
+const INK      = '#EDE9F5';
+const INK_DIM  = '#9B91B4';
+const INK_FAINT= '#665C7E';
+const LINE     = '#1F1430';
+const LINE_BR  = '#2E1F47';
+const PURPLE   = '#6B21E8';
+const GOLD     = '#F5C518';
+const DANGER   = '#FF5A5A';
+const MONO     = "'JetBrains Mono','SF Mono',ui-monospace,monospace";
+
+const W: React.CSSProperties = { maxWidth: 760, margin: '0 auto', padding: '0 24px' };
+const M: React.CSSProperties = { fontFamily: MONO };
+
+const RevenueLeakBlueprint: React.FC<{
+  auditReport: any;
+  formData: FormData;
+  onStartStrategy?: (data: any) => void;
+  onExport: () => void;
+  isExporting: boolean;
+  onBack: () => void;
+  onClear: () => void;
+}> = ({ auditReport, formData, onStartStrategy, onExport, isExporting, onBack, onClear }) => {
+
+  const leaks = [
+    { data: auditReport.primaryConstraint,   sev: 'high' },
+    { data: auditReport.secondaryConstraint, sev: 'med'  },
+    { data: auditReport.thirdConstraint,     sev: 'med'  },
+  ].filter(l => l.data);
+
+  // Dollar-range math — conservative, assumption-visible
+  const rev = Math.max(Number(formData.currentRevenue) || 0, 500);
+  const RATES = [
+    { lo: 0.15, hi: 0.25, note: `Primary constraint recovery at 15–25% of $${rev.toLocaleString()}/mo baseline.` },
+    { lo: 0.08, hi: 0.13, note: `Secondary constraint recovery at 8–13% of $${rev.toLocaleString()}/mo baseline.` },
+    { lo: 0.04, hi: 0.08, note: `Third constraint recovery at 4–8% of $${rev.toLocaleString()}/mo baseline.` },
+  ];
+  const costs = RATES.map(r => ({
+    low:  Math.round(rev * r.lo),
+    high: Math.round(rev * r.hi),
+    note: r.note,
+  }));
+  const totalLow  = costs.slice(0, leaks.length).reduce((s, c) => s + c.low,  0);
+  const totalHigh = costs.slice(0, leaks.length).reduce((s, c) => s + c.high, 0);
+
+  const moves: string[] = auditReport.quickWins?.length
+    ? auditReport.quickWins
+    : leaks.map((l: any) => l.data?.recommendedActions?.[0]).filter(Boolean);
+
+  const EFFORT = ['~1–3 hrs · Do this first', '~2–4 hrs · This week', '~1–2 hrs · This week'];
+
+  return (
+    <div style={{ background: BG_DEEP, color: INK, fontFamily: "-apple-system,'SF Pro Display','Archivo',system-ui,sans-serif", lineHeight: 1.5, WebkitFontSmoothing: 'antialiased' }}>
+
+      {/* ── TOP BAR ── */}
+      <div style={{ padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${LINE}`, maxWidth: 760, margin: '0 auto' }}>
+        <span style={{ ...M, fontSize: 11, color: INK_FAINT, letterSpacing: '0.12em' }}>TitanLeap · Revenue Leak Audit</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onBack} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_FAINT, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>← Edit</button>
+          <button onClick={onExport} disabled={isExporting} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_DIM, background: CARD, border: `1px solid ${LINE_BR}`, borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>
+            {isExporting ? 'Exporting…' : '↓ PDF'}
+          </button>
+        </div>
+      </div>
+
+      {/* ── HEADER ── */}
+      <header style={{ padding: '64px 0 0', background: `radial-gradient(120% 80% at 80% -10%, rgba(107,33,232,.28), transparent 60%), ${BG_DEEP}`, borderBottom: `1px solid ${LINE}` }}>
+        <div style={W}>
+          <div style={{ ...M, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: GOLD, display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
+            <span style={{ display: 'inline-block', width: 26, height: 1, background: GOLD }} />
+            Revenue Leak Audit
+          </div>
+          <h1 style={{ fontSize: 'clamp(34px,7vw,52px)', fontWeight: 800, lineHeight: 1.04, letterSpacing: '-0.02em', margin: '0 0 14px' }}>
+            {leaks.length} revenue {leaks.length === 1 ? 'leak is' : 'leaks are'} quietly holding you back.
+          </h1>
+          <p style={{ color: INK_DIM, fontSize: 16, maxWidth: '50ch', marginBottom: 36 }}>
+            A focused teardown of where revenue is escaping — and what each leak is worth when you fix it.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', borderTop: `1px solid ${LINE}`, marginTop: 8 }}>
+            {[
+              { k: 'Prepared for', v: auditReport.businessName || formData.businessName || '—' },
+              { k: 'Date', v: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) },
+              { k: 'Industry', v: formData.industry || '—' },
+              { k: 'Leaks found', v: `${leaks.length} critical`, flag: true },
+            ].map((m, i, arr) => (
+              <div key={i} style={{ flex: 1, minWidth: 140, padding: '18px 20px 22px 0', borderRight: i < arr.length - 1 ? `1px solid ${LINE}` : 'none' }}>
+                <div style={{ ...M, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 7 }}>{m.k}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: (m as any).flag ? GOLD : INK }}>{m.v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      {/* ── UNCOMFORTABLE TRUTH ── */}
+      {auditReport.executiveSummary && (
+        <div style={{ padding: '44px 24px', background: BG, borderBottom: `1px solid ${LINE}` }}>
+          <div style={W}>
+            <div style={{ border: `1px solid ${LINE_BR}`, borderLeft: `3px solid ${GOLD}`, background: `linear-gradient(180deg,${CARD_HI},${CARD})`, padding: '30px 32px', borderRadius: 4 }}>
+              <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: GOLD, marginBottom: 14 }}>The uncomfortable truth</div>
+              <p style={{ fontSize: 21, lineHeight: 1.45, fontWeight: 600, letterSpacing: '-0.01em', margin: 0 }}>
+                {auditReport.executiveSummary.businessUnderstanding}
+              </p>
+              {auditReport.executiveSummary.mainObservations && (
+                <div style={{ marginTop: 18, fontSize: 13, color: INK_DIM }}>{auditReport.executiveSummary.mainObservations}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── LEAKS ── */}
+      <section style={{ padding: '52px 24px', borderBottom: `1px solid ${LINE}`, background: BG_DEEP }}>
+        <div style={W}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_FAINT }}>The Leaks</div>
+            <div style={{ ...M, fontSize: 13, color: GOLD, fontWeight: 600 }}>{leaks.length} found · ranked by $ impact</div>
+          </div>
+          <p style={{ fontSize: 15, color: INK_DIM, marginBottom: 34, maxWidth: '54ch' }}>
+            No fluff. Here are the constraints actually bleeding revenue, biggest first.
+          </p>
+
+          {leaks.map(({ data, sev }, i) => {
+            const cost = costs[i];
+            const isHigh = sev === 'high';
+            return (
+              <div key={i} style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 6, marginBottom: 20, overflow: 'hidden' }}>
+                {/* top row */}
+                <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', padding: '24px 26px 20px', flexWrap: 'wrap' }}>
+                  <div style={{ ...M, fontSize: 13, fontWeight: 700, color: PURPLE, border: `1px solid ${LINE_BR}`, borderRadius: 6, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: BG_DEEP }}>
+                    {String(i + 1).padStart(2, '0')}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 160 }}>
+                    <h3 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', margin: '0 0 6px' }}>{data.category}</h3>
+                    <div style={{ ...M, fontSize: 12, color: INK_FAINT }}>{(data.evidence || 'Identified in business audit').slice(0, 80)}</div>
+                  </div>
+                  <div style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 4, flexShrink: 0, fontWeight: 600, ...(isHigh ? { background: 'rgba(255,90,90,.12)', color: DANGER, border: '1px solid rgba(255,90,90,.3)' } : { background: 'rgba(245,197,24,.1)', color: GOLD, border: '1px solid rgba(245,197,24,.28)' }) }}>
+                    {isHigh ? 'High' : 'Med'}
+                  </div>
+                </div>
+
+                {/* body */}
+                <div style={{ padding: '0 26px 8px' }}>
+                  {data.whatWeFound  && <p style={{ fontSize: 15, color: INK_DIM, margin: '0 0 10px', maxWidth: '58ch' }}>{data.whatWeFound}</p>}
+                  {data.whyItMatters && <p style={{ fontSize: 14, color: INK_DIM, margin: '0 0 18px', maxWidth: '58ch' }}>{data.whyItMatters}</p>}
+
+                  {/* cost box */}
+                  <div style={{ display: 'flex', alignItems: 'stretch', border: `1px solid ${LINE_BR}`, borderRadius: 6, margin: '4px 0 20px', overflow: 'hidden' }}>
+                    <div style={{ padding: '18px 22px', background: BG_DEEP, borderRight: `1px solid ${LINE_BR}`, flexShrink: 0 }}>
+                      <div style={{ ...M, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 6 }}>Est. monthly loss</div>
+                      <div style={{ ...M, fontSize: 22, fontWeight: 700, color: DANGER, letterSpacing: '-0.01em' }}>${cost.low.toLocaleString()}–${cost.high.toLocaleString()}</div>
+                    </div>
+                    <div style={{ padding: '18px 22px', fontSize: 13, color: INK_FAINT, display: 'flex', alignItems: 'center', flex: 1 }}>
+                      {data.businessImpact || cost.note}
+                    </div>
+                  </div>
+                </div>
+
+                {/* fix footer */}
+                <div style={{ borderTop: `1px solid ${LINE}`, padding: '18px 26px 24px', display: 'flex', gap: 14, alignItems: 'flex-start', background: 'linear-gradient(180deg,transparent,rgba(107,33,232,.05))' }}>
+                  <div style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: PURPLE, fontWeight: 700, paddingTop: 2, flexShrink: 0 }}>Fix</div>
+                  <div>
+                    <p style={{ fontSize: 14, color: INK, margin: 0 }}>{data.recommendedActions?.[0] || 'Implement the recommended fix outlined above.'}</p>
+                    {data.recommendedActions?.[1] && <p style={{ fontSize: 13, color: INK_DIM, margin: '6px 0 0' }}>{data.recommendedActions[1]}</p>}
+                    <div style={{ ...M, fontSize: 11, color: INK_FAINT, marginTop: 6 }}>{EFFORT[i] || '~2–4 hrs'}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── TOTAL ── */}
+      <div style={{ background: BG, textAlign: 'center', padding: '48px 24px' }}>
+        <div style={W}>
+          <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_DIM, marginBottom: 14 }}>Total estimated monthly leak</div>
+          <div style={{ ...M, fontSize: 'clamp(34px,8vw,52px)' as any, fontWeight: 800, color: GOLD, letterSpacing: '-0.02em' }}>${totalLow.toLocaleString()} – ${totalHigh.toLocaleString()}</div>
+          <div style={{ fontSize: 14, color: INK_FAINT, marginTop: 14, maxWidth: '46ch', marginLeft: 'auto', marginRight: 'auto' }}>
+            Conservative estimate based on ${rev.toLocaleString()}/mo revenue baseline. The primary fix recovers the most.
+          </div>
+        </div>
+      </div>
+
+      {/* ── THIS WEEK'S MOVES ── */}
+      {moves.length > 0 && (
+        <section style={{ padding: '52px 24px', borderBottom: `1px solid ${LINE}`, background: BG_DEEP }}>
+          <div style={W}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_FAINT }}>This Week's Moves</div>
+              <div style={{ ...M, fontSize: 13, color: GOLD, fontWeight: 600 }}>in order</div>
+            </div>
+            <p style={{ fontSize: 15, color: INK_DIM, marginBottom: 34, maxWidth: '54ch' }}>Do them top to bottom. Highest-dollar fix first.</p>
+            {moves.slice(0, 5).map((move: string, i: number) => (
+              <div key={i} style={{ display: 'flex', gap: 18, alignItems: 'flex-start', padding: '20px 0', borderTop: i > 0 ? `1px solid ${LINE}` : 'none' }}>
+                <div style={{ ...M, fontSize: 13, color: GOLD, fontWeight: 700, flexShrink: 0, paddingTop: 1 }}>{String(i + 1).padStart(2, '0')}</div>
+                <div>
+                  <p style={{ fontSize: 14, color: INK, margin: '0 0 4px' }}>{move}</p>
+                  {i < leaks.length && <div style={{ ...M, fontSize: 11, color: INK_FAINT }}>Recovers Leak {String(i + 1).padStart(2, '0')} · {['~1–3 hrs', '~2–4 hrs', '~1–2 hrs'][i] || '~2 hrs'}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── CTA ── */}
+      <div style={{ background: `radial-gradient(120% 100% at 50% 0%, rgba(107,33,232,.3), transparent 65%), ${BG_DEEP}`, textAlign: 'center', padding: '60px 24px 70px' }}>
+        <div style={W}>
+          <h2 style={{ fontSize: 'clamp(26px,5vw,34px)', fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 14px' }}>
+            {onStartStrategy ? 'Ready to build your growth strategy?' : 'Want us to fix all of this for you?'}
+          </h2>
+          <p style={{ color: INK_DIM, fontSize: 16, maxWidth: '48ch', margin: '0 auto 30px' }}>
+            {auditReport.nextStep || "We'll implement every fix in this report and rebuild your funnel so it converts the traffic you're already paying for."}
+          </p>
+          {onStartStrategy && (
+            <button onClick={() => onStartStrategy(auditReport)} style={{ display: 'inline-block', background: GOLD, color: '#1a1205', fontWeight: 700, fontSize: 15, padding: '15px 34px', borderRadius: 8, border: 'none', cursor: 'pointer', letterSpacing: '0.01em', boxShadow: '0 8px 30px rgba(245,197,24,.2)' }}>
+              Build Growth Strategy
+            </button>
+          )}
+          <div style={{ marginTop: 18, ...M, fontSize: 12, color: INK_FAINT }}>Or export this report and share it with your team.</div>
+        </div>
+      </div>
+
+      {/* ── FOOTER ── */}
+      <footer style={{ padding: '30px 24px 40px', textAlign: 'center', background: BG_DEEP }}>
+        <div style={W}>
+          <div style={{ fontWeight: 800, fontSize: 15, letterSpacing: '-0.01em' }}>Titan<span style={{ color: PURPLE }}>Leap</span></div>
+          <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 8, maxWidth: '52ch', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
+            Dollar ranges are directional estimates based on reported revenue and typical conversion benchmarks — not guarantees. Actual results depend on traffic quality and offer fit.
+          </div>
+          <div style={{ marginTop: 20, display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <button onClick={onBack} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_FAINT, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 4, padding: '7px 16px', cursor: 'pointer' }}>← Edit Assessment</button>
+            <button onClick={onClear} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_FAINT, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 4, padding: '7px 16px', cursor: 'pointer' }}>Clear & Restart</button>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+};
