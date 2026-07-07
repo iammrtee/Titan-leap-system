@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your First 90 Days — titanleap.co — Titan Leap</title>
+<style>
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     SHARED DESIGN TOKENS
+     Do NOT change values here — they propagate to every rendered document.
+     To brand-adjust, change these and regenerate.
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  :root{
+    --purple:      #6B21E8;
+    --purple-soft: #8B4DF0;
+    --gold:        #F5C518;
+    --bg:          #0B0418;
+    --bg-deep:     #06030D;
+    --ink:         #EDE9F5;
+    --ink-dim:     #9B91B4;
+    --ink-faint:   #665C7E;
+    --line:        #1F1430;
+    --line-bright: #2E1F47;
+    --card:        #100823;
+    --card-hi:     #160B30;
+    --danger:      #FF5A5A;
+    --green:       #4ADE80;
+  }
+
+  /* ── RESET ── */
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg-deep);color:var(--ink);
+    font-family:-apple-system,'SF Pro Display','Archivo',system-ui,sans-serif;
+    line-height:1.5;-webkit-font-smoothing:antialiased;
+  }
+
+  /* ── SHARED HELPERS ── */
+  .mono{font-family:'JetBrains Mono','SF Mono',ui-monospace,monospace}
+
+  /* Default wrap — audit overrides to 760px, roadmap to 780px */
+  .wrap{max-width:760px;margin:0 auto;padding:0 24px}
+
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--gold);
+    display:flex;align-items:center;gap:10px;margin-bottom:22px;
+  }
+  .eyebrow::before{content:"";width:26px;height:1px;background:var(--gold)}
+
+  .btn{
+    display:inline-block;background:var(--gold);color:#1a1205;
+    font-weight:700;font-size:15px;padding:15px 34px;border-radius:8px;
+    text-decoration:none;letter-spacing:.01em;
+    box-shadow:0 8px 30px rgba(245,197,24,.2);
+    transition:transform .15s ease,box-shadow .15s ease;
+  }
+  .btn:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(245,197,24,.3)}
+
+  /* ── FOOTER ── */
+  footer{padding:30px 0 44px;text-align:center;background:var(--bg-deep)}
+  footer .logo{font-weight:800;font-size:15px;letter-spacing:-.01em}
+  footer .logo span{color:var(--purple)}
+  footer .dis{
+    font-size:11px;color:var(--ink-faint);margin-top:8px;
+    max-width:52ch;margin-left:auto;margin-right:auto;line-height:1.5;
+  }
+
+  /* ── ACCESSIBILITY ── */
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     RENDERER-SPECIFIC CSS — injected by each child template (extra_css block).
+     Everything above stays locked across all documents.
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+  /* ── ROADMAP-SPECIFIC ────────────────────────────────────────────────── */
+
+  /* 780px wrap for roadmap (vs 760px default) */
+  .wrap{max-width:780px}
+  .eyebrow{margin-bottom:24px}  /* roadmap uses 24px vs base 22px */
+
+  /* HEADER */
+  header{
+    padding:72px 0 56px;
+    background:
+      radial-gradient(130% 90% at 75% -10%, rgba(107,33,232,.32), transparent 60%),
+      var(--bg-deep);
+    border-bottom:1px solid var(--line);
+  }
+  h1{font-size:clamp(36px,7.5vw,58px);font-weight:800;line-height:1.02;letter-spacing:-.025em;margin-bottom:18px}
+  h1 .em{color:var(--purple-soft)}
+  .lede{color:var(--ink-dim);font-size:17px;max-width:52ch;line-height:1.6}
+
+  /* THESIS */
+  .thesis{padding:44px 0;background:var(--bg);border-bottom:1px solid var(--line)}
+  .thesis-card{
+    border:1px solid var(--line-bright);border-left:3px solid var(--purple);
+    background:linear-gradient(180deg,var(--card-hi),var(--card));
+    padding:30px 32px;border-radius:4px;
+  }
+  .thesis-card .lbl{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--purple-soft);margin-bottom:14px}
+  .thesis-card p{font-size:20px;line-height:1.5;font-weight:600;letter-spacing:-.01em}
+  .thesis-card p .hl{color:var(--gold)}
+
+  /* TIMELINE */
+  .timeline{padding:56px 0 20px;background:var(--bg-deep)}
+  .sec-head{margin-bottom:8px}
+  .sec-title{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint)}
+  .sec-lead{font-size:15px;color:var(--ink-dim);margin-bottom:44px;max-width:54ch}
+
+  /* PHASES */
+  .phase{position:relative;padding-left:42px;padding-bottom:48px}
+  .phase::before{
+    content:"";position:absolute;left:13px;top:8px;bottom:-8px;width:1px;
+    background:linear-gradient(180deg,var(--line-bright),var(--line));
+  }
+  .phase:last-child::before{display:none}
+  .phase-dot{
+    position:absolute;left:0;top:2px;width:28px;height:28px;border-radius:50%;
+    background:var(--bg-deep);border:1px solid var(--line-bright);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--purple-soft);
+    z-index:2;
+  }
+  .phase-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+  .phase-days{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--gold);font-weight:600;letter-spacing:.04em}
+  .phase-head h2{font-size:24px;font-weight:800;letter-spacing:-.02em}
+  .phase-goal{font-size:15px;color:var(--ink-dim);margin-bottom:24px;max-width:56ch}
+  .phase-goal strong{color:var(--ink);font-weight:600}
+
+  /* WORK ITEMS */
+  .work{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 0}
+  .work-item{display:flex;gap:16px;align-items:flex-start;padding:16px 24px;border-top:1px solid var(--line)}
+  .work-item:first-child{border-top:none}
+  .work-item .ic{
+    width:22px;height:22px;border-radius:5px;flex-shrink:0;margin-top:1px;
+    background:rgba(107,33,232,.14);border:1px solid var(--line-bright);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--purple-soft);font-weight:700;
+  }
+  .work-item .wc h4{font-size:15px;font-weight:600;margin-bottom:3px}
+  .work-item .wc p{font-size:13.5px;color:var(--ink-dim);line-height:1.5}
+
+  /* MILESTONE */
+  .milestone{
+    margin-top:18px;display:flex;gap:12px;align-items:center;
+    padding:14px 20px;border-radius:8px;
+    background:linear-gradient(90deg,rgba(74,222,128,.08),transparent);
+    border:1px solid rgba(74,222,128,.22);
+  }
+  .milestone .flag{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--green);font-weight:700;flex-shrink:0}
+  .milestone p{font-size:14px;color:var(--ink);font-weight:500}
+
+  /* OUTCOME GRID */
+  .outcome{padding:56px 0;background:var(--bg);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .outcome .sec-title{margin-bottom:8px}
+  .outcome h3{font-size:clamp(24px,4.5vw,32px);font-weight:800;letter-spacing:-.02em;margin-bottom:30px;max-width:18ch}
+  .outcome h3 .em{color:var(--gold)}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .out-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:22px}
+  .out-card .n{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--purple-soft);letter-spacing:-.01em;margin-bottom:8px}
+  .out-card h4{font-size:15px;font-weight:600;margin-bottom:5px}
+  .out-card p{font-size:13px;color:var(--ink-dim);line-height:1.5}
+
+  /* CTA */
+  .cta{
+    background:radial-gradient(130% 100% at 50% 0%, rgba(107,33,232,.32), transparent 65%),var(--bg-deep);
+    text-align:center;padding:64px 0 72px;
+  }
+  .cta h2{font-size:clamp(28px,5.5vw,38px);font-weight:800;letter-spacing:-.02em;margin-bottom:14px}
+  .cta p{color:var(--ink-dim);font-size:16px;max-width:50ch;margin:0 auto 32px}
+  /* roadmap btn is slightly larger than base */
+  .btn{padding:16px 36px}
+  .cta .fine{margin-top:18px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-faint)}
+  .cta .alt{display:block;margin-top:10px;color:var(--purple-soft);font-size:13px;text-decoration:none}
+  .cta .alt:hover{text-decoration:underline}
+
+  /* footer wider on roadmap */
+  footer .dis{max-width:54ch}
+
+  @media (max-width:560px){
+    .grid{grid-template-columns:1fr}
+    .phase{padding-left:36px}
+  }
+
+</style>
+</head>
+<body>
+
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">The 90-Day Growth System · titanleap.co</div>
+    <h1>What your first <span class="em">90 days</span> actually looks like.</h1>
+    <p class="lede">Starts by closing the 3 revenue leaks we found on titanleap.co. Then builds the engine that keeps compounding after the 90 days end.</p>
+  </div>
+</header>
+
+<div class="thesis">
+  <div class="wrap">
+    <div class="thesis-card">
+      <div class="lbl">The operating principle</div>
+      <p>Most agencies sell you <span class="hl">activity</span> — more posts, more ads, more noise. We build the <span class="hl">machine</span> underneath it: fix what's leaking, build what converts, then automate it so it runs without you babysitting it.</p>
+    </div>
+  </div>
+</div>
+
+<div class="timeline">
+  <div class="wrap">
+    <div class="sec-head"><div class="sec-title">The Roadmap · 3 Phases</div></div>
+    <p class="sec-lead">Three 30-day phases. Each one ends with something live and measurable — no 90-day "trust us" black box.</p>
+
+    
+    <div class="phase">
+      <div class="phase-dot">01</div>
+      <div class="phase-head">
+        <span class="phase-days">Days 1–30</span>
+        <h2>Foundation &amp; Fix</h2>
+      </div>
+      <p class="phase-goal">We fix the 3 leaks bleeding ~$1,604–$4,678/mo before adding anything new. <strong>Every dollar you're already spending should convert before we spend a new one.</strong></p>
+      <div class="work">
+        
+        <div class="work-item">
+          <div class="ic">A</div>
+          <div class="wc">
+            <h4>Dead cta buttons</h4>
+            <p>Audit every CTA link across homepage, pricing page, and any linked landing page. Fix broken URLs, confirm checkout loads, verify mobile tap targets aren't overlapping.</p>
+          </div>
+        </div>
+        
+        <div class="work-item">
+          <div class="ic">B</div>
+          <div class="wc">
+            <h4>Missing retargeting pixel</h4>
+            <p>Install Meta Pixel (or Google Tag) via GTM. Add purchase and lead events on thank-you pages so paid campaigns can optimise toward real buyers, not just clicks.</p>
+          </div>
+        </div>
+        
+        <div class="work-item">
+          <div class="ic">C</div>
+          <div class="wc">
+            <h4>Instrument everything</h4>
+            <p>Pixels, GA4, event tracking on every key action. From here on, every decision is made on data, not vibes.</p>
+          </div>
+        </div>
+        
+      </div>
+      <div class="milestone">
+        <span class="flag">Day 30</span>
+        <p>3 leaks closed, pixel live, every action tracked. You're now converting traffic you were previously losing.</p>
+      </div>
+    </div>
+    
+    <div class="phase">
+      <div class="phase-dot">02</div>
+      <div class="phase-head">
+        <span class="phase-days">Days 31–60</span>
+        <h2>Build &amp; Launch</h2>
+      </div>
+      <p class="phase-goal">Now that the foundation holds, we build the engine that brings people in. <strong>Content, ads, and funnels designed to work together — not three disconnected efforts.</strong></p>
+      <div class="work">
+        
+        <div class="work-item">
+          <div class="ic">A</div>
+          <div class="wc">
+            <h4>Content engine live</h4>
+            <p>A founder-led content system across your primary channel, built on four pillars — teach, prove, build, provoke — so you're known for something, not just posting.</p>
+          </div>
+        </div>
+        
+        <div class="work-item">
+          <div class="ic">B</div>
+          <div class="wc">
+            <h4>Paid acquisition tested</h4>
+            <p>Small, controlled ad tests pointed at the now-working funnel. We find what converts before scaling spend, not after.</p>
+          </div>
+        </div>
+        
+        <div class="work-item">
+          <div class="ic">C</div>
+          <div class="wc">
+            <h4>Offer ladder in place</h4>
+            <p>A clear path from low-risk entry offer up to retainer — so cold visitors have a cheap front door instead of bouncing off your highest price.</p>
+          </div>
+        </div>
+        
+      </div>
+      <div class="milestone">
+        <span class="flag">Day 60</span>
+        <p>Traffic is flowing in, the offer ladder is converting, and you can see exactly what's working.</p>
+      </div>
+    </div>
+    
+    <div class="phase">
+      <div class="phase-dot">03</div>
+      <div class="phase-head">
+        <span class="phase-days">Days 61–90</span>
+        <h2>Automate &amp; Scale</h2>
+      </div>
+      <p class="phase-goal">The system works — now we take you out of the loop and pour fuel on the winners. <strong>Growth that doesn't depend on your daily attention.</strong></p>
+      <div class="work">
+        
+        <div class="work-item">
+          <div class="ic">A</div>
+          <div class="wc">
+            <h4>AI lead flow automated</h4>
+            <p>Lead capture, scoring, and qualification handled by automated pipelines. Hot leads surface to you; the rest get nurtured without manual work.</p>
+          </div>
+        </div>
+        
+        <div class="work-item">
+          <div class="ic">B</div>
+          <div class="wc">
+            <h4>Double down on what converts</h4>
+            <p>We cut what didn't work and scale spend behind the channels and content that produced real buyers. Data decides, not opinion.</p>
+          </div>
+        </div>
+        
+        <div class="work-item">
+          <div class="ic">C</div>
+          <div class="wc">
+            <h4>Handover-ready system</h4>
+            <p>Documented, automated, and running. You own a growth machine — not a dependency on an agency that disappears when you stop paying.</p>
+          </div>
+        </div>
+        
+      </div>
+      <div class="milestone">
+        <span class="flag">Day 90</span>
+        <p>A self-running growth system: leads in, automated, scaling behind proven winners.</p>
+      </div>
+    </div>
+    
+  </div>
+</div>
+
+<div class="outcome">
+  <div class="wrap">
+    <div class="sec-title">By Day 90 You Own</div>
+    <h3>A system, not a <span class="em">stack of invoices.</span></h3>
+    <div class="grid">
+      
+      <div class="out-card">
+        <div class="n">0</div>
+        <h4>Dead ends in your funnel</h4>
+        <p>Every path from visitor to buyer works and is tracked.</p>
+      </div>
+      
+      <div class="out-card">
+        <div class="n">1</div>
+        <h4>Content engine running</h4>
+        <p>A repeatable system producing demand, not one-off posts.</p>
+      </div>
+      
+      <div class="out-card">
+        <div class="n">∞</div>
+        <h4>Automated lead flow</h4>
+        <p>Capture and qualification that runs without your attention.</p>
+      </div>
+      
+      <div class="out-card">
+        <div class="n">100%</div>
+        <h4>Owned, not rented</h4>
+        <p>The system stays yours — documented and handover-ready.</p>
+      </div>
+      
+    </div>
+  </div>
+</div>
+
+<div class="cta">
+  <div class="wrap">
+    <h2>Want to see where your 90 days would start?</h2>
+    <p>It starts with the audit — we find your three biggest leaks and what they're costing you. That's the first move in the roadmap above.</p>
+    <a href="https://titanleapagency.gumroad.com/l/fxift" class="btn">Get your Revenue Leak Audit</a>
+    <a href="#" class="alt">Or book a call to talk through the full 90 days →</a>
+    <div class="fine">$297 · delivered in 5 business days</div>
+  </div>
+</div>
+
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Titan<span>Leap</span></div>
+    <div class="dis">TitanLeap builds growth systems — not campaigns. The roadmap above is the standard arc; exact work is scoped to your funnel after the audit.</div>
+  </div>
+</footer>
+
+</body>
+</html>
+                                 

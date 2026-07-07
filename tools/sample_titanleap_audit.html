@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Revenue Leak Audit — titanleap.co — Titan Leap</title>
+<style>
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     SHARED DESIGN TOKENS
+     Do NOT change values here — they propagate to every rendered document.
+     To brand-adjust, change these and regenerate.
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  :root{
+    --purple:      #6B21E8;
+    --purple-soft: #8B4DF0;
+    --gold:        #F5C518;
+    --bg:          #0B0418;
+    --bg-deep:     #06030D;
+    --ink:         #EDE9F5;
+    --ink-dim:     #9B91B4;
+    --ink-faint:   #665C7E;
+    --line:        #1F1430;
+    --line-bright: #2E1F47;
+    --card:        #100823;
+    --card-hi:     #160B30;
+    --danger:      #FF5A5A;
+    --green:       #4ADE80;
+  }
+
+  /* ── RESET ── */
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg-deep);color:var(--ink);
+    font-family:-apple-system,'SF Pro Display','Archivo',system-ui,sans-serif;
+    line-height:1.5;-webkit-font-smoothing:antialiased;
+  }
+
+  /* ── SHARED HELPERS ── */
+  .mono{font-family:'JetBrains Mono','SF Mono',ui-monospace,monospace}
+
+  /* Default wrap — audit overrides to 760px, roadmap to 780px */
+  .wrap{max-width:760px;margin:0 auto;padding:0 24px}
+
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--gold);
+    display:flex;align-items:center;gap:10px;margin-bottom:22px;
+  }
+  .eyebrow::before{content:"";width:26px;height:1px;background:var(--gold)}
+
+  .btn{
+    display:inline-block;background:var(--gold);color:#1a1205;
+    font-weight:700;font-size:15px;padding:15px 34px;border-radius:8px;
+    text-decoration:none;letter-spacing:.01em;
+    box-shadow:0 8px 30px rgba(245,197,24,.2);
+    transition:transform .15s ease,box-shadow .15s ease;
+  }
+  .btn:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(245,197,24,.3)}
+
+  /* ── FOOTER ── */
+  footer{padding:30px 0 44px;text-align:center;background:var(--bg-deep)}
+  footer .logo{font-weight:800;font-size:15px;letter-spacing:-.01em}
+  footer .logo span{color:var(--purple)}
+  footer .dis{
+    font-size:11px;color:var(--ink-faint);margin-top:8px;
+    max-width:52ch;margin-left:auto;margin-right:auto;line-height:1.5;
+  }
+
+  /* ── ACCESSIBILITY ── */
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     RENDERER-SPECIFIC CSS — injected by each child template (extra_css block).
+     Everything above stays locked across all documents.
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+  /* ── AUDIT-SPECIFIC ──────────────────────────────────────────────────── */
+
+  /* HEADER */
+  header{
+    padding:64px 0 0;
+    background:
+      radial-gradient(120% 80% at 80% -10%, rgba(107,33,232,.28), transparent 60%),
+      var(--bg-deep);
+    border-bottom:1px solid var(--line);
+  }
+  h1{font-size:clamp(34px,7vw,52px);font-weight:800;line-height:1.04;letter-spacing:-.02em;margin-bottom:14px}
+  .sub{color:var(--ink-dim);font-size:16px;max-width:50ch;margin-bottom:36px}
+  .meta-row{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--line);margin-top:8px}
+  .meta{flex:1;min-width:140px;padding:18px 20px 22px 0;border-right:1px solid var(--line)}
+  .meta:last-child{border-right:none;padding-right:0}
+  .meta .k{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:7px}
+  .meta .v{font-size:15px;font-weight:600}
+  .meta .v.flag{color:var(--gold)}
+
+  /* THE UNCOMFORTABLE TRUTH */
+  .truth{margin:0;padding:44px 0;background:var(--bg);border-bottom:1px solid var(--line)}
+  .truth-card{
+    border:1px solid var(--line-bright);border-left:3px solid var(--gold);
+    background:linear-gradient(180deg,var(--card-hi),var(--card));
+    padding:30px 32px;border-radius:4px;
+  }
+  .truth-card .lbl{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
+  .truth-card p{font-size:21px;line-height:1.45;font-weight:600;letter-spacing:-.01em}
+  .truth-card .by{margin-top:18px;font-size:13px;color:var(--ink-dim)}
+
+  /* LEAKS SECTION */
+  section{padding:52px 0;border-bottom:1px solid var(--line);background:var(--bg-deep)}
+  .sec-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px}
+  .sec-title{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint)}
+  .sec-sum{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--gold);font-weight:600}
+  .sec-lead{font-size:15px;color:var(--ink-dim);margin-bottom:34px;max-width:54ch}
+
+  /* LEAK CARDS */
+  .leak{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:0;margin-bottom:20px;overflow:hidden}
+  .leak-top{display:flex;gap:18px;align-items:flex-start;padding:24px 26px 20px}
+  .leak-no{
+    font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--purple);
+    border:1px solid var(--line-bright);border-radius:6px;
+    width:40px;height:40px;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;background:var(--bg-deep);
+  }
+  .leak-h{flex:1}
+  .leak-h h3{font-size:20px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px}
+  .leak-h .where{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-faint)}
+  .sev{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:5px 9px;border-radius:4px;flex-shrink:0;font-weight:600}
+  .sev.high{background:rgba(255,90,90,.12);color:var(--danger);border:1px solid rgba(255,90,90,.3)}
+  .sev.med{background:rgba(245,197,24,.1);color:var(--gold);border:1px solid rgba(245,197,24,.28)}
+
+  .leak-body{padding:0 26px 8px}
+  .leak-body p{font-size:15px;color:var(--ink-dim);margin-bottom:18px;max-width:58ch}
+  .leak-body p strong{color:var(--ink);font-weight:600}
+
+  /* COST BOX */
+  .cost{display:flex;align-items:stretch;gap:0;border:1px solid var(--line-bright);border-radius:6px;margin:4px 0 20px;overflow:hidden}
+  .cost-fig{padding:18px 22px;background:var(--bg-deep);border-right:1px solid var(--line-bright)}
+  .cost-fig .k{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:6px}
+  .cost-fig .v{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--danger);letter-spacing:-.01em}
+  .cost-note{padding:18px 22px;font-size:13px;color:var(--ink-faint);display:flex;align-items:center;flex:1}
+
+  /* FIX FOOTER */
+  .fix{border-top:1px solid var(--line);padding:18px 26px 24px;display:flex;gap:14px;align-items:flex-start;background:linear-gradient(180deg,transparent,rgba(107,33,232,.05))}
+  .fix .tag{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--purple);font-weight:700;padding-top:2px;flex-shrink:0}
+  .fix p{font-size:14px;color:var(--ink);margin:0}
+  .fix .eff{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-faint);margin-top:6px}
+
+  /* TOTAL */
+  .total{background:var(--bg);text-align:center;padding:48px 0}
+  .total .k{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:14px}
+  .total .v{font-family:'JetBrains Mono',monospace;font-size:clamp(34px,8vw,52px);font-weight:800;color:var(--gold);letter-spacing:-.02em}
+  .total .cap{font-size:14px;color:var(--ink-faint);margin-top:14px;max-width:46ch;margin-left:auto;margin-right:auto}
+
+  /* THIS WEEK'S MOVES */
+  .week-item{display:flex;gap:18px;align-items:flex-start;padding:20px 0;border-top:1px solid var(--line)}
+  .week-item:first-of-type{border-top:none}
+  .week-no{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--gold);font-weight:700;flex-shrink:0;padding-top:1px}
+  .week-c h4{font-size:16px;font-weight:600;margin-bottom:4px}
+  .week-c p{font-size:14px;color:var(--ink-dim)}
+  .week-c .t{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-faint);margin-top:6px}
+
+  /* CTA */
+  .cta{
+    background:radial-gradient(120% 100% at 50% 0%, rgba(107,33,232,.3), transparent 65%),var(--bg-deep);
+    text-align:center;padding:60px 0 70px;
+  }
+  .cta h2{font-size:clamp(26px,5vw,34px);font-weight:800;letter-spacing:-.02em;margin-bottom:14px}
+  .cta p{color:var(--ink-dim);font-size:16px;max-width:48ch;margin:0 auto 30px}
+  .cta .fine{margin-top:18px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-faint)}
+
+  @media (max-width:560px){
+    .cost{flex-direction:column}
+    .cost-fig{border-right:none;border-bottom:1px solid var(--line-bright)}
+    .meta{min-width:50%;flex:0 0 50%;border-right:none}
+    .leak-top{flex-wrap:wrap}
+  }
+
+</style>
+</head>
+<body>
+
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Revenue Leak Audit</div>
+    <h1>Your buy button doesn't work.</h1>
+    <p class="sub">A focused teardown of where revenue is escaping your funnel — and what each leak is worth if you fix it.</p>
+    <div class="meta-row">
+      <div class="meta"><div class="k">Prepared for</div><div class="v">titanleap.co</div></div>
+      <div class="meta"><div class="k">Date</div><div class="v">July 1, 2026</div></div>
+      <div class="meta"><div class="k">Pages reviewed</div><div class="v">7</div></div>
+      <div class="meta"><div class="k">Leaks found</div><div class="v flag">3 critical</div></div>
+    </div>
+  </div>
+</header>
+
+<div class="truth">
+  <div class="wrap">
+    <div class="truth-card">
+      <div class="lbl">The uncomfortable truth</div>
+      <p>TitanLeap has a broken primary CTA. Visitors who reach that button have already decided they're interested — you're losing them at the exact moment they were ready to pay. That's not a traffic problem. It's a tap that's been left running.</p>
+      <div class="by">— Based on live inspection of titanleap.co</div>
+    </div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-title">The Leaks</div>
+      <div class="sec-sum">3 found · ranked by $ impact</div>
+    </div>
+    <p class="sec-lead">No fluff, no 12-point checklist dump. Here are the 3 things actually bleeding revenue, biggest first.</p>
+
+    
+    <div class="leak">
+      <div class="leak-top">
+        <div class="leak-no">01</div>
+        <div class="leak-h">
+          <h3>Dead CTA buttons</h3>
+          <div class="where">Homepage · pricing page · primary offer CTA</div>
+        </div>
+        <div class="sev high">High</div>
+      </div>
+      <div class="leak-body">
+        <p>Your primary call-to-action button either goes nowhere, throws a 404, or lands on a page that can't convert. <strong>Visitors who reach a CTA already have intent — killing that moment costs full addressable revenue, not a fraction of it.</strong></p>
+        <div class="cost">
+          <div class="cost-fig">
+            <div class="k">Est. monthly loss</div>
+            <div class="v">$1,604–$3,742</div>
+          </div>
+          <div class="cost-note">Assumes ~500 monthly visitors, 3% reaching CTA intent, $297 offer price. At 60% recovery this leak is worth $1,604–$3,742/mo.</div>
+        </div>
+      </div>
+      <div class="fix">
+        <div class="tag">Fix</div>
+        <div>
+          <p>Audit every CTA link across homepage, pricing page, and any linked landing page. Fix broken URLs, confirm checkout loads, verify mobile tap targets aren't overlapping.</p>
+          <div class="eff">1–4 hrs · This week</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="leak">
+      <div class="leak-top">
+        <div class="leak-no">02</div>
+        <div class="leak-h">
+          <h3>Missing retargeting pixel</h3>
+          <div class="where">Site-wide — head tag</div>
+        </div>
+        <div class="sev med">Med</div>
+      </div>
+      <div class="leak-body">
+        <p>No pixel means every visitor who bounces is gone forever — you can't retarget, lookalike, or attribute. <strong>Paid traffic you've already bought is single-use instead of a compounding asset.</strong></p>
+        <div class="cost">
+          <div class="cost-fig">
+            <div class="k">Est. monthly loss</div>
+            <div class="v">$267–$624</div>
+          </div>
+          <div class="cost-note">Assumes ~500 monthly visitors, 3% reaching CTA intent, $297 offer price. At 10% recovery this leak is worth $267–$624/mo.</div>
+        </div>
+      </div>
+      <div class="fix">
+        <div class="tag">Fix</div>
+        <div>
+          <p>Install Meta Pixel (or Google Tag) via GTM. Add purchase and lead events on thank-you pages so paid campaigns can optimise toward real buyers, not just clicks.</p>
+          <div class="eff">2–4 hrs · This week</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="leak">
+      <div class="leak-top">
+        <div class="leak-no">03</div>
+        <div class="leak-h">
+          <h3>Broken social links</h3>
+          <div class="where">Footer · header nav social icons</div>
+        </div>
+        <div class="sev med">Med</div>
+      </div>
+      <div class="leak-body">
+        <p>Social links resolve to placeholder # or a 404. Every visitor who clicks to vet you hits a dead end. <strong>Trust holes like this don't just lose that visitor — they poison the whole purchase decision.</strong></p>
+        <div class="cost">
+          <div class="cost-fig">
+            <div class="k">Est. monthly loss</div>
+            <div class="v">$134–$312</div>
+          </div>
+          <div class="cost-note">Assumes ~500 monthly visitors, 3% reaching CTA intent, $297 offer price. At 5% recovery this leak is worth $134–$312/mo.</div>
+        </div>
+      </div>
+      <div class="fix">
+        <div class="tag">Fix</div>
+        <div>
+          <p>Update every social href to the live profile URL. Open each link in an incognito window to confirm it resolves. Remove any platforms you're not actually active on — a missing link is cleaner than a broken one.</p>
+          <div class="eff">30 min · Today</div>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+</section>
+
+<div class="total">
+  <div class="wrap">
+    <div class="k">Total estimated monthly leak</div>
+    <div class="v">$2,005 – $4,678</div>
+    <div class="cap">Based on ~500 monthly visitors, 3% CTA intent rate, $297 offer price. Directional — not a guarantee.</div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-title">This Week's Moves</div>
+      <div class="sec-sum">in order</div>
+    </div>
+    <p class="sec-lead">Do them top to bottom. Each one maps to a leak above. Highest-dollar fix first.</p>
+
+    
+    <div class="week-item">
+      <div class="week-no">01</div>
+      <div class="week-c">
+        <h4>Fix: Dead CTA buttons</h4>
+        <p>Open your site on mobile + desktop. Click every CTA. Fix every broken link, dead anchor, or checkout error you find. This is literally leaving money in a broken vending machine.</p>
+        <div class="t">Recovers Leak 01 · 1–4 hrs</div>
+      </div>
+    </div>
+    
+    <div class="week-item">
+      <div class="week-no">02</div>
+      <div class="week-c">
+        <h4>Fix: Missing retargeting pixel</h4>
+        <p>Install your Meta Pixel (or Google Tag) via GTM. Fire a ViewContent event on key pages, a Lead event on form submissions, and a Purchase event on thank-you. Verify with Pixel Helper. Now paid traffic compounds.</p>
+        <div class="t">Recovers Leak 02 · 2–4 hrs</div>
+      </div>
+    </div>
+    
+    <div class="week-item">
+      <div class="week-no">03</div>
+      <div class="week-c">
+        <h4>Fix: Broken social links</h4>
+        <p>Update every social link on the site to the live profile URL. Test each one in incognito. Remove any platform you're not active on — a missing icon is better than a broken link.</p>
+        <div class="t">Recovers Leak 03 · 30 min</div>
+      </div>
+    </div>
+    
+  </div>
+</section>
+
+<div class="cta">
+  <div class="wrap">
+    <h2>Want to see where your 90 days would start?</h2>
+    <p>It starts with the audit — we find your three biggest leaks and what they're costing you. That's the first move in the roadmap above.</p>
+    <a href="https://titanleapagency.gumroad.com/l/fxift" class="btn">Book the Growth System Sprint</a>
+    <div class="fine">Or reply to this report — we read every one.</div>
+  </div>
+</div>
+
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Titan<span>Leap</span></div>
+    <div class="dis">Dollar ranges are directional estimates based on observed funnel structure and typical conversion benchmarks, not guarantees. Your actual numbers depend on traffic quality and offer fit.</div>
+  </div>
+</footer>
+
+</body>
+</html>
+                                 

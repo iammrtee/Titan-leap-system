@@ -1,37 +1,11 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Revenue Leak Audit — {{ prospect_domain }} — Titan Leap</title>
-<style>
-  :root{
-    --purple:#6B21E8;
-    --gold:#F5C518;
-    --bg:#0B0418;
-    --bg-deep:#06030D;
-    --ink:#EDE9F5;
-    --ink-dim:#9B91B4;
-    --ink-faint:#665C7E;
-    --line:#1F1430;
-    --line-bright:#2E1F47;
-    --danger:#FF5A5A;
-    --card:#100823;
-    --card-hi:#160B30;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html{scroll-behavior:smooth}
-  body{
-    background:var(--bg-deep);
-    color:var(--ink);
-    font-family:-apple-system,'SF Pro Display','Archivo',system-ui,sans-serif;
-    line-height:1.5;
-    -webkit-font-smoothing:antialiased;
-  }
-  .mono{font-family:'JetBrains Mono','SF Mono',ui-monospace,monospace}
-  .wrap{max-width:760px;margin:0 auto;padding:0 24px}
+{% extends "_base.j2" %}
 
-  /* ---------- HEADER ---------- */
+{% block title %}Revenue Leak Audit — {{ prospect_domain }} — Titan Leap{% endblock %}
+
+{% block extra_css %}
+  /* ── AUDIT-SPECIFIC ──────────────────────────────────────────────────── */
+
+  /* HEADER */
   header{
     padding:64px 0 0;
     background:
@@ -39,77 +13,38 @@
       var(--bg-deep);
     border-bottom:1px solid var(--line);
   }
-  .eyebrow{
-    font-family:'JetBrains Mono',monospace;
-    font-size:11px;letter-spacing:.22em;text-transform:uppercase;
-    color:var(--gold);
-    display:flex;align-items:center;gap:10px;margin-bottom:22px;
-  }
-  .eyebrow::before{content:"";width:26px;height:1px;background:var(--gold)}
-  h1{
-    font-size:clamp(34px,7vw,52px);
-    font-weight:800;line-height:1.04;letter-spacing:-.02em;
-    margin-bottom:14px;
-  }
+  h1{font-size:clamp(34px,7vw,52px);font-weight:800;line-height:1.04;letter-spacing:-.02em;margin-bottom:14px}
   .sub{color:var(--ink-dim);font-size:16px;max-width:50ch;margin-bottom:36px}
-  .meta-row{
-    display:flex;flex-wrap:wrap;gap:0;
-    border-top:1px solid var(--line);
-    margin-top:8px;
-  }
-  .meta{
-    flex:1;min-width:140px;
-    padding:18px 20px 22px 0;
-    border-right:1px solid var(--line);
-  }
+  .meta-row{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--line);margin-top:8px}
+  .meta{flex:1;min-width:140px;padding:18px 20px 22px 0;border-right:1px solid var(--line)}
   .meta:last-child{border-right:none;padding-right:0}
   .meta .k{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:7px}
   .meta .v{font-size:15px;font-weight:600}
   .meta .v.flag{color:var(--gold)}
 
-  /* ---------- THE TRUTH ---------- */
-  .truth{
-    margin:0;
-    padding:44px 0;
-    background:var(--bg);
-    border-bottom:1px solid var(--line);
-  }
+  /* THE UNCOMFORTABLE TRUTH */
+  .truth{margin:0;padding:44px 0;background:var(--bg);border-bottom:1px solid var(--line)}
   .truth-card{
-    border:1px solid var(--line-bright);
-    border-left:3px solid var(--gold);
+    border:1px solid var(--line-bright);border-left:3px solid var(--gold);
     background:linear-gradient(180deg,var(--card-hi),var(--card));
-    padding:30px 32px;
-    border-radius:4px;
+    padding:30px 32px;border-radius:4px;
   }
-  .truth-card .lbl{
-    font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;
-    text-transform:uppercase;color:var(--gold);margin-bottom:14px;
-  }
+  .truth-card .lbl{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
   .truth-card p{font-size:21px;line-height:1.45;font-weight:600;letter-spacing:-.01em}
   .truth-card .by{margin-top:18px;font-size:13px;color:var(--ink-dim)}
 
-  /* ---------- LEAKS ---------- */
+  /* LEAKS SECTION */
   section{padding:52px 0;border-bottom:1px solid var(--line);background:var(--bg-deep)}
   .sec-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px}
   .sec-title{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint)}
   .sec-sum{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--gold);font-weight:600}
   .sec-lead{font-size:15px;color:var(--ink-dim);margin-bottom:34px;max-width:54ch}
 
-  .leak{
-    background:var(--card);
-    border:1px solid var(--line);
-    border-radius:6px;
-    padding:0;
-    margin-bottom:20px;
-    overflow:hidden;
-  }
-  .leak-top{
-    display:flex;gap:18px;align-items:flex-start;
-    padding:24px 26px 20px;
-  }
+  /* LEAK CARDS */
+  .leak{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:0;margin-bottom:20px;overflow:hidden}
+  .leak-top{display:flex;gap:18px;align-items:flex-start;padding:24px 26px 20px}
   .leak-no{
-    font-family:'JetBrains Mono',monospace;
-    font-size:13px;font-weight:700;color:var(--purple);
+    font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--purple);
     border:1px solid var(--line-bright);border-radius:6px;
     width:40px;height:40px;display:flex;align-items:center;justify-content:center;
     flex-shrink:0;background:var(--bg-deep);
@@ -117,11 +52,7 @@
   .leak-h{flex:1}
   .leak-h h3{font-size:20px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px}
   .leak-h .where{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-faint)}
-  .sev{
-    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;
-    text-transform:uppercase;padding:5px 9px;border-radius:4px;flex-shrink:0;
-    font-weight:600;
-  }
+  .sev{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:5px 9px;border-radius:4px;flex-shrink:0;font-weight:600}
   .sev.high{background:rgba(255,90,90,.12);color:var(--danger);border:1px solid rgba(255,90,90,.3)}
   .sev.med{background:rgba(245,197,24,.1);color:var(--gold);border:1px solid rgba(245,197,24,.28)}
 
@@ -129,73 +60,41 @@
   .leak-body p{font-size:15px;color:var(--ink-dim);margin-bottom:18px;max-width:58ch}
   .leak-body p strong{color:var(--ink);font-weight:600}
 
-  .cost{
-    display:flex;align-items:stretch;gap:0;
-    border:1px solid var(--line-bright);border-radius:6px;
-    margin:4px 0 20px;overflow:hidden;
-  }
-  .cost-fig{
-    padding:18px 22px;background:var(--bg-deep);
-    border-right:1px solid var(--line-bright);
-  }
+  /* COST BOX */
+  .cost{display:flex;align-items:stretch;gap:0;border:1px solid var(--line-bright);border-radius:6px;margin:4px 0 20px;overflow:hidden}
+  .cost-fig{padding:18px 22px;background:var(--bg-deep);border-right:1px solid var(--line-bright)}
   .cost-fig .k{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:6px}
   .cost-fig .v{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--danger);letter-spacing:-.01em}
   .cost-note{padding:18px 22px;font-size:13px;color:var(--ink-faint);display:flex;align-items:center;flex:1}
 
-  .fix{
-    border-top:1px solid var(--line);
-    padding:18px 26px 24px;
-    display:flex;gap:14px;align-items:flex-start;
-    background:linear-gradient(180deg,transparent,rgba(107,33,232,.05));
-  }
+  /* FIX FOOTER */
+  .fix{border-top:1px solid var(--line);padding:18px 26px 24px;display:flex;gap:14px;align-items:flex-start;background:linear-gradient(180deg,transparent,rgba(107,33,232,.05))}
   .fix .tag{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--purple);font-weight:700;padding-top:2px;flex-shrink:0}
   .fix p{font-size:14px;color:var(--ink);margin:0}
   .fix .eff{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-faint);margin-top:6px}
 
-  /* ---------- TOTAL ---------- */
-  .total{
-    background:var(--bg);
-    text-align:center;
-    padding:48px 0;
-  }
+  /* TOTAL */
+  .total{background:var(--bg);text-align:center;padding:48px 0}
   .total .k{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:14px}
   .total .v{font-family:'JetBrains Mono',monospace;font-size:clamp(34px,8vw,52px);font-weight:800;color:var(--gold);letter-spacing:-.02em}
   .total .cap{font-size:14px;color:var(--ink-faint);margin-top:14px;max-width:46ch;margin-left:auto;margin-right:auto}
 
-  /* ---------- WEEK ---------- */
-  .week-item{
-    display:flex;gap:18px;align-items:flex-start;
-    padding:20px 0;border-top:1px solid var(--line);
-  }
+  /* THIS WEEK'S MOVES */
+  .week-item{display:flex;gap:18px;align-items:flex-start;padding:20px 0;border-top:1px solid var(--line)}
   .week-item:first-of-type{border-top:none}
   .week-no{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--gold);font-weight:700;flex-shrink:0;padding-top:1px}
   .week-c h4{font-size:16px;font-weight:600;margin-bottom:4px}
   .week-c p{font-size:14px;color:var(--ink-dim)}
   .week-c .t{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-faint);margin-top:6px}
 
-  /* ---------- CTA ---------- */
+  /* CTA */
   .cta{
-    background:
-      radial-gradient(120% 100% at 50% 0%, rgba(107,33,232,.3), transparent 65%),
-      var(--bg-deep);
-    text-align:center;padding:60px 0 70px;border-bottom:none;
+    background:radial-gradient(120% 100% at 50% 0%, rgba(107,33,232,.3), transparent 65%),var(--bg-deep);
+    text-align:center;padding:60px 0 70px;
   }
   .cta h2{font-size:clamp(26px,5vw,34px);font-weight:800;letter-spacing:-.02em;margin-bottom:14px}
   .cta p{color:var(--ink-dim);font-size:16px;max-width:48ch;margin:0 auto 30px}
-  .btn{
-    display:inline-block;background:var(--gold);color:#1a1205;
-    font-weight:700;font-size:15px;padding:15px 34px;border-radius:8px;
-    text-decoration:none;letter-spacing:.01em;
-    box-shadow:0 8px 30px rgba(245,197,24,.2);
-    transition:transform .15s ease,box-shadow .15s ease;
-  }
-  .btn:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(245,197,24,.3)}
   .cta .fine{margin-top:18px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-faint)}
-
-  footer{padding:30px 0 40px;text-align:center;background:var(--bg-deep)}
-  footer .logo{font-weight:800;font-size:15px;letter-spacing:-.01em}
-  footer .logo span{color:var(--purple)}
-  footer .dis{font-size:11px;color:var(--ink-faint);margin-top:8px;max-width:52ch;margin-left:auto;margin-right:auto;line-height:1.5}
 
   @media (max-width:560px){
     .cost{flex-direction:column}
@@ -203,11 +102,9 @@
     .meta{min-width:50%;flex:0 0 50%;border-right:none}
     .leak-top{flex-wrap:wrap}
   }
-  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
-</style>
-</head>
-<body>
+{% endblock %}
 
+{% block content %}
 <header>
   <div class="wrap">
     <div class="eyebrow">Revenue Leak Audit</div>
@@ -222,7 +119,6 @@
   </div>
 </header>
 
-<!-- THE UNCOMFORTABLE TRUTH -->
 <div class="truth">
   <div class="wrap">
     <div class="truth-card">
@@ -233,7 +129,6 @@
   </div>
 </div>
 
-<!-- LEAKS -->
 <section>
   <div class="wrap">
     <div class="sec-head">
@@ -274,7 +169,6 @@
   </div>
 </section>
 
-<!-- TOTAL -->
 <div class="total">
   <div class="wrap">
     <div class="k">Total estimated monthly leak</div>
@@ -283,7 +177,6 @@
   </div>
 </div>
 
-<!-- THIS WEEK -->
 <section>
   <div class="wrap">
     <div class="sec-head">
@@ -305,7 +198,6 @@
   </div>
 </section>
 
-<!-- CTA -->
 <div class="cta">
   <div class="wrap">
     <h2>{{ cta_headline }}</h2>
@@ -314,13 +206,4 @@
     <div class="fine">Or reply to this report — we read every one.</div>
   </div>
 </div>
-
-<footer>
-  <div class="wrap">
-    <div class="logo">Titan<span>Leap</span></div>
-    <div class="dis">Dollar ranges are directional estimates based on observed funnel structure and typical conversion benchmarks, not guarantees. Your actual numbers depend on traffic quality and offer fit.</div>
-  </div>
-</footer>
-
-</body>
-</html>
+{% endblock %}

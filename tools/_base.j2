@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Titan Leap{% endblock %}</title>
+<style>
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     SHARED DESIGN TOKENS
+     Do NOT change values here — they propagate to every rendered document.
+     To brand-adjust, change these and regenerate.
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  :root{
+    --purple:      #6B21E8;
+    --purple-soft: #8B4DF0;
+    --gold:        #F5C518;
+    --bg:          #0B0418;
+    --bg-deep:     #06030D;
+    --ink:         #EDE9F5;
+    --ink-dim:     #9B91B4;
+    --ink-faint:   #665C7E;
+    --line:        #1F1430;
+    --line-bright: #2E1F47;
+    --card:        #100823;
+    --card-hi:     #160B30;
+    --danger:      #FF5A5A;
+    --green:       #4ADE80;
+  }
+
+  /* ── RESET ── */
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg-deep);color:var(--ink);
+    font-family:-apple-system,'SF Pro Display','Archivo',system-ui,sans-serif;
+    line-height:1.5;-webkit-font-smoothing:antialiased;
+  }
+
+  /* ── SHARED HELPERS ── */
+  .mono{font-family:'JetBrains Mono','SF Mono',ui-monospace,monospace}
+
+  /* Default wrap — audit overrides to 760px, roadmap to 780px */
+  .wrap{max-width:760px;margin:0 auto;padding:0 24px}
+
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--gold);
+    display:flex;align-items:center;gap:10px;margin-bottom:22px;
+  }
+  .eyebrow::before{content:"";width:26px;height:1px;background:var(--gold)}
+
+  .btn{
+    display:inline-block;background:var(--gold);color:#1a1205;
+    font-weight:700;font-size:15px;padding:15px 34px;border-radius:8px;
+    text-decoration:none;letter-spacing:.01em;
+    box-shadow:0 8px 30px rgba(245,197,24,.2);
+    transition:transform .15s ease,box-shadow .15s ease;
+  }
+  .btn:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(245,197,24,.3)}
+
+  /* ── FOOTER ── */
+  footer{padding:30px 0 44px;text-align:center;background:var(--bg-deep)}
+  footer .logo{font-weight:800;font-size:15px;letter-spacing:-.01em}
+  footer .logo span{color:var(--purple)}
+  footer .dis{
+    font-size:11px;color:var(--ink-faint);margin-top:8px;
+    max-width:52ch;margin-left:auto;margin-right:auto;line-height:1.5;
+  }
+
+  /* ── ACCESSIBILITY ── */
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     RENDERER-SPECIFIC CSS — injected by each child template (extra_css block).
+     Everything above stays locked across all documents.
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+{% block extra_css %}{% endblock %}
+</style>
+</head>
+<body>
+
+{% block content %}{% endblock %}
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Titan<span>Leap</span></div>
+    <div class="dis">{{ footer_dis }}</div>
+  </div>
+</footer>
+
+</body>
+</html>
