@@ -1435,7 +1435,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                       className="flex items-center gap-2 text-secondary font-black text-[10px] md:text-xs uppercase tracking-widest hover:underline"
                     >
                       <Sparkles size={16} />
-                      Refine with Gemini
+                      Refine with Claude
                     </button>
                     <button 
                       onClick={() => toast.success('PDF Export started...')}
