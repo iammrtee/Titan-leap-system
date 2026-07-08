@@ -1266,9 +1266,22 @@ const RevenueLeakBlueprint: React.FC<{
 
   return (
     <div style={{ background: BG_DEEP, color: INK, fontFamily: "-apple-system,'SF Pro Display','Archivo',system-ui,sans-serif", lineHeight: 1.5, WebkitFontSmoothing: 'antialiased' }}>
+      <style>{`
+        @media (max-width: 540px) {
+          .rlb-topbar   { flex-direction: column; gap: 10px; align-items: flex-start !important; }
+          .rlb-meta-row { flex-direction: column !important; }
+          .rlb-meta-row > div { border-right: none !important; border-bottom: 1px solid ${LINE}; padding: 14px 0 !important; min-width: unset !important; }
+          .rlb-meta-row > div:last-child { border-bottom: none; }
+          .rlb-sec-head { flex-direction: column !important; gap: 4px; }
+          .rlb-cost     { flex-direction: column !important; }
+          .rlb-cost > div:first-child { border-right: none !important; border-bottom: 1px solid ${LINE_BR}; }
+          .rlb-leak-top { flex-wrap: wrap; }
+          .rlb-footer-btns { flex-direction: column !important; }
+        }
+      `}</style>
 
       {/* ── TOP BAR ── */}
-      <div style={{ padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${LINE}`, maxWidth: 760, margin: '0 auto' }}>
+      <div className="rlb-topbar" style={{ padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${LINE}`, maxWidth: 760, margin: '0 auto' }}>
         <span style={{ ...M, fontSize: 11, color: INK_FAINT, letterSpacing: '0.12em' }}>TitanLeap · Revenue Leak Audit</span>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={onBack} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_FAINT, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>← Edit</button>
@@ -1291,7 +1304,7 @@ const RevenueLeakBlueprint: React.FC<{
           <p style={{ color: INK_DIM, fontSize: 16, maxWidth: '50ch', marginBottom: 36 }}>
             A focused teardown of where revenue is escaping — and what each leak is worth when you fix it.
           </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', borderTop: `1px solid ${LINE}`, marginTop: 8 }}>
+          <div className="rlb-meta-row" style={{ display: 'flex', flexWrap: 'wrap', borderTop: `1px solid ${LINE}`, marginTop: 8 }}>
             {[
               { k: 'Prepared for', v: auditReport.businessName || formData.businessName || '—' },
               { k: 'Date', v: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) },
@@ -1327,7 +1340,7 @@ const RevenueLeakBlueprint: React.FC<{
       {/* ── LEAKS ── */}
       <section style={{ padding: '52px 24px', borderBottom: `1px solid ${LINE}`, background: BG_DEEP }}>
         <div style={W}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+          <div className="rlb-sec-head" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
             <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_FAINT }}>The Leaks</div>
             <div style={{ ...M, fontSize: 13, color: GOLD, fontWeight: 600 }}>{leaks.length} found · ranked by $ impact</div>
           </div>
@@ -1360,7 +1373,7 @@ const RevenueLeakBlueprint: React.FC<{
                   {data.whyItMatters && <p style={{ fontSize: 14, color: INK_DIM, margin: '0 0 18px', maxWidth: '58ch' }}>{data.whyItMatters}</p>}
 
                   {/* cost box */}
-                  <div style={{ display: 'flex', alignItems: 'stretch', border: `1px solid ${LINE_BR}`, borderRadius: 6, margin: '4px 0 20px', overflow: 'hidden' }}>
+                  <div className="rlb-cost" style={{ display: 'flex', alignItems: 'stretch', border: `1px solid ${LINE_BR}`, borderRadius: 6, margin: '4px 0 20px', overflow: 'hidden' }}>
                     <div style={{ padding: '18px 22px', background: BG_DEEP, borderRight: `1px solid ${LINE_BR}`, flexShrink: 0 }}>
                       <div style={{ ...M, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 6 }}>Est. monthly loss</div>
                       <div style={{ ...M, fontSize: 22, fontWeight: 700, color: DANGER, letterSpacing: '-0.01em' }}>${cost.low.toLocaleString()}–${cost.high.toLocaleString()}</div>
@@ -1401,7 +1414,7 @@ const RevenueLeakBlueprint: React.FC<{
       {moves.length > 0 && (
         <section style={{ padding: '52px 24px', borderBottom: `1px solid ${LINE}`, background: BG_DEEP }}>
           <div style={W}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div className="rlb-sec-head" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
               <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_FAINT }}>This Week's Moves</div>
               <div style={{ ...M, fontSize: 13, color: GOLD, fontWeight: 600 }}>in order</div>
             </div>
@@ -1444,7 +1457,7 @@ const RevenueLeakBlueprint: React.FC<{
           <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 8, maxWidth: '52ch', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
             Dollar ranges are directional estimates based on reported revenue and typical conversion benchmarks — not guarantees. Actual results depend on traffic quality and offer fit.
           </div>
-          <div style={{ marginTop: 20, display: 'flex', gap: 12, justifyContent: 'center' }}>
+          <div className="rlb-footer-btns" style={{ marginTop: 20, display: 'flex', gap: 12, justifyContent: 'center' }}>
             <button onClick={onBack} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_FAINT, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 4, padding: '7px 16px', cursor: 'pointer' }}>← Edit Assessment</button>
             <button onClick={onClear} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_FAINT, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 4, padding: '7px 16px', cursor: 'pointer' }}>Clear & Restart</button>
           </div>
