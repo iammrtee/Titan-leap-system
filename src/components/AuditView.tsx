@@ -424,140 +424,92 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
   };
 
   return (
-    <div className="w-full space-y-8 md:space-y-16">
-      {/* Top Header - Consistent with rest of system */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-8 relative">
-        <div className="space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full border border-primary/10">
-            <Sparkles size={14} className="text-primary" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-primary">Growth Blueprint</span>
+    <div className="w-full flex flex-col gap-3">
+      {/* ── Compact Control Bar ── */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        {/* Left: label + progress */}
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 rounded-full border border-primary/10 shrink-0">
+            <Sparkles size={12} className="text-primary" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-primary">Audit</span>
           </div>
-          <h1 className="text-3xl md:text-[38px] font-black tracking-tight text-on-surface">Business Growth Assessment</h1>
-          <p className="text-sm md:text-[17px] text-on-surface-variant font-sans font-normal max-w-2xl leading-relaxed">
-            Tell us about your business — we'll show you exactly where you're getting the growth your business deserves.
-          </p>
+          {progress > 0 && (
+            <div className="flex items-center gap-2 min-w-0">
+              {isAuditing && <Loader2 size={12} className="animate-spin text-primary shrink-0" />}
+              <div className="w-28 h-1.5 bg-surface-container-highest rounded-full overflow-hidden shrink-0">
+                <motion.div
+                  className="h-full bg-primary rounded-full"
+                  animate={{ width: isAuditing ? '100%' : `${progress}%` }}
+                  transition={{ duration: isAuditing ? 15 : 0.8, ease: isAuditing ? 'easeOut' : 'circOut' }}
+                />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 shrink-0">
+                {isAuditing ? 'Building…' : `${progress}%`}
+              </span>
+            </div>
+          )}
         </div>
-        
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
-          <div className="flex flex-col gap-2 w-full sm:w-auto">
+
+        {/* Right: engine toggle + smart fill */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Engine toggle */}
+          <div className="flex items-center gap-1 p-1 bg-surface-container-highest/50 rounded-xl border border-outline-variant/10">
             <button
-              onClick={() => {
-                if (isSmartFilling) return;
-                if (formData.websiteUrl && !showSmartFillInput) {
-                  handleSmartFill(formData.websiteUrl);
-                } else {
-                  setShowSmartFillInput(v => !v);
-                }
-              }}
-              disabled={isSmartFilling}
-              className="w-full sm:w-auto bg-secondary text-on-secondary px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-secondary/20 flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 group"
+              onClick={() => { setAIEngine('gemini'); setEngine('gemini'); toast.success("Switched to Gemini", { icon: <Wand2 size={12} /> }); }}
+              className={cn("w-7 h-7 rounded-lg flex items-center justify-center transition-all", engine === 'gemini' ? "bg-primary text-white shadow-lg shadow-primary/20 scale-105" : "text-on-surface-variant/40 hover:text-on-surface-variant hover:bg-surface-container-highest")}
+              title="Gemini Flash (Fast)"
             >
-              {isSmartFilling ? <Loader2 size={18} className="animate-spin" /> : <Wand2 size={18} className="group-hover:rotate-12 transition-transform" />}
-              {isSmartFilling ? 'Analyzing Site...' : 'Smart Fill with AI'}
-              <span className="px-1.5 py-0.5 bg-white/20 text-white rounded-md text-[8px] font-black uppercase tracking-widest shrink-0">Pro</span>
+              <Zap size={12} fill={engine === 'gemini' ? 'currentColor' : 'none'} />
             </button>
-            {showSmartFillInput && !isSmartFilling && (
-              <div className="flex gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                <input
-                  autoFocus
-                  type="url"
-                  value={smartFillUrl}
-                  onChange={e => setSmartFillUrl(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && smartFillUrl.trim()) handleSmartFill(smartFillUrl.trim());
-                    if (e.key === 'Escape') setShowSmartFillInput(false);
-                  }}
-                  placeholder="https://yourwebsite.com"
-                  className="flex-1 px-4 py-2.5 rounded-xl border border-outline-variant bg-surface text-on-surface text-sm placeholder:text-on-surface-variant/50 focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary/30"
-                />
-                <button
-                  onClick={() => { if (smartFillUrl.trim()) handleSmartFill(smartFillUrl.trim()); }}
-                  disabled={!smartFillUrl.trim()}
-                  className="px-4 py-2.5 rounded-xl bg-secondary text-on-secondary text-sm font-bold disabled:opacity-40 hover:opacity-90 transition-opacity"
-                >
-                  Go
-                </button>
-              </div>
-            )}
+            <button
+              onClick={() => { setAIEngine('claude'); setEngine('claude'); toast.success("Switched to Claude", { icon: <Sparkles size={12} /> }); }}
+              className={cn("w-7 h-7 rounded-lg flex items-center justify-center transition-all", engine === 'claude' ? "bg-secondary text-white shadow-lg shadow-secondary/20 scale-105" : "text-on-surface-variant/40 hover:text-on-surface-variant hover:bg-surface-container-highest")}
+              title="Claude (Elite)"
+            >
+              <Sparkles size={12} fill={engine === 'claude' ? 'currentColor' : 'none'} />
+            </button>
           </div>
-          
-          {/* Floating Progress Card - Compact */}
-          <div className="w-full sm:w-auto bg-surface-container-low p-6 rounded-[24px] border border-outline-variant/10 shadow-xl flex flex-col gap-3 min-w-[280px] relative overflow-hidden group">
-            <div className="flex justify-between items-center relative z-10">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">
-                  {isAuditing ? 'AI Building Growth Blueprint...' : `Blueprint Progress: ${progress}%`}
-                </span>
-                <span className="text-[8px] font-medium text-on-surface-variant/40 uppercase tracking-widest">
-                  Powered by {engine === 'gemini' ? 'Gemini 1.5 Flash' : 'Claude 3.5 Sonnet'}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 p-1 bg-surface-container-highest/50 rounded-xl border border-outline-variant/10">
-                <button 
-                  onClick={() => {
-                    setAIEngine('gemini');
-                    setEngine('gemini');
-                    toast.success("Switched to Gemini", { icon: <Wand2 size={12} /> });
-                  }}
-                  className={cn(
-                    "w-7 h-7 rounded-lg flex items-center justify-center transition-all",
-                    engine === 'gemini' 
-                      ? "bg-primary text-white shadow-lg shadow-primary/20 scale-105" 
-                      : "text-on-surface-variant/40 hover:text-on-surface-variant hover:bg-surface-container-highest"
-                  )}
-                  title="Flash Engine (Fast)"
-                >
-                  <Zap size={12} fill={engine === 'gemini' ? "currentColor" : "none"} />
-                </button>
-                <button 
-                  onClick={() => {
-                    setAIEngine('claude');
-                    setEngine('claude');
-                    toast.success("Switched to Claude", { icon: <Sparkles size={12} /> });
-                  }}
-                  className={cn(
-                    "w-7 h-7 rounded-lg flex items-center justify-center transition-all",
-                    engine === 'claude' 
-                      ? "bg-secondary text-white shadow-lg shadow-secondary/20 scale-105" 
-                      : "text-on-surface-variant/40 hover:text-on-surface-variant hover:bg-surface-container-highest"
-                  )}
-                  title="Claude Engine (Elite)"
-                >
-                  <Sparkles size={12} fill={engine === 'claude' ? "currentColor" : "none"} />
-                </button>
-              </div>
-              {isAuditing && <Loader2 size={12} className="animate-spin text-primary ml-2" />}
-            </div>
-            <div className="h-2 bg-surface-container-highest rounded-full overflow-hidden relative z-10">
-              {isAuditing ? (
-                <div className="h-full w-full bg-surface-container-highest relative overflow-hidden">
-                  <motion.div 
-                    className="absolute inset-0 bg-primary opacity-30"
-                    animate={{ x: ['-100%', '100%'] }}
-                    transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                  />
-                  <motion.div 
-                    className="h-full bg-primary shadow-[0_0_15px_rgba(var(--primary-rgb),0.5)]"
-                    initial={{ width: `${progress}%` }}
-                    animate={{ width: "100%" }}
-                    transition={{ duration: 15, ease: "easeOut" }}
-                  />
-                </div>
-              ) : (
-                <motion.div 
-                  className="h-full bg-primary shadow-[0_0_15px_rgba(var(--primary-rgb),0.5)]"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.8, ease: "circOut" }}
-                />
-              )}
-            </div>
-          </div>
+          {/* Smart Fill button */}
+          <button
+            onClick={() => {
+              if (isSmartFilling) return;
+              if (formData.websiteUrl && !showSmartFillInput) { handleSmartFill(formData.websiteUrl); }
+              else { setShowSmartFillInput(v => !v); }
+            }}
+            disabled={isSmartFilling}
+            className="bg-secondary text-on-secondary px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-secondary/20 flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
+          >
+            {isSmartFilling ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
+            {isSmartFilling ? 'Analyzing…' : 'Smart Fill'}
+          </button>
         </div>
       </div>
 
-      {/* Mini Tab Navigation */}
-      <div className="flex items-center justify-between mb-8 md:mb-12">
+      {/* Smart Fill URL input - drops inline when open */}
+      {showSmartFillInput && !isSmartFilling && (
+        <div className="flex gap-2 animate-in fade-in slide-in-from-top-1 duration-150">
+          <input
+            autoFocus
+            type="url"
+            value={smartFillUrl}
+            onChange={e => setSmartFillUrl(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && smartFillUrl.trim()) handleSmartFill(smartFillUrl.trim());
+              if (e.key === 'Escape') setShowSmartFillInput(false);
+            }}
+            placeholder="https://yourwebsite.com"
+            className="flex-1 px-4 py-2.5 rounded-xl border border-outline-variant bg-surface text-on-surface text-sm placeholder:text-on-surface-variant/50 focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary/30"
+          />
+          <button
+            onClick={() => { if (smartFillUrl.trim()) handleSmartFill(smartFillUrl.trim()); }}
+            disabled={!smartFillUrl.trim()}
+            className="px-4 py-2.5 rounded-xl bg-secondary text-on-secondary text-sm font-bold disabled:opacity-40 hover:opacity-90 transition-opacity"
+          >Go</button>
+        </div>
+      )}
+
+      {/* ── Tab Navigation ── */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 p-1.5 bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-x-auto no-scrollbar w-full lg:w-auto">
           <button
             onClick={() => setActiveTab('intake')}
@@ -602,19 +554,21 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
         </div>
       </div>
 
+      {/* ── Scrollable Tab Content ── */}
+      <div className="overflow-y-auto rounded-2xl" style={{ maxHeight: 'calc(100vh - 200px)' }}>
       <AnimatePresence mode="wait">
         <motion.div
           key={activeTab}
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.2 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.15 }}
         >
           {activeTab === 'intake' ? (
-            <div className="w-full space-y-8 md:space-y-10">
-          <div className="flex items-center justify-between">
+            <div className="w-full space-y-4">
+          <div className="flex items-center justify-between pt-1">
             <h2 className="text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant/40">Business Assessment</h2>
-            <button 
+            <button
               onClick={handleClearAudit}
               className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 hover:text-destructive transition-colors"
             >
@@ -622,9 +576,9 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
               Clear Data
             </button>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
             {/* Left Column */}
-            <div className="space-y-6 md:space-y-8">
+            <div className="space-y-4">
               {/* Section 1 */}
               <CollapsibleSection 
                 id={1} 
@@ -633,7 +587,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                 isComplete={isSectionComplete(1)}
                 onToggle={() => toggleSection(1)}
               >
-                <div className="space-y-8 p-8">
+                <div className="space-y-5 p-5">
                   <InputGroup label="Business Name" tooltip="Your brand identity. We use this to personalize your report and analyze brand consistency across platforms.">
                     <input 
                       type="text" 
@@ -848,7 +802,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
             </div>
 
             {/* Right Column */}
-            <div className="space-y-6 md:space-y-8">
+            <div className="space-y-4">
               {/* Section 2 */}
               <CollapsibleSection 
                 id={2} 
@@ -1138,6 +1092,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
         ) : null}
       </motion.div>
       </AnimatePresence>
+      </div>{/* end scrollable container */}
     </div>
   );
 };
@@ -1151,11 +1106,11 @@ const CollapsibleSection = ({ id, title, isOpen, isComplete, onToggle, children 
       ? "bg-surface-container-low border-primary/20 shadow-xl shadow-primary/5" 
       : "bg-surface-container-lowest border-outline-variant/10 shadow-sm"
   )}>
-    <button 
+    <button
       onClick={onToggle}
-      className="w-full flex items-center justify-between p-8 hover:bg-primary/5 transition-colors group"
+      className="w-full flex items-center justify-between p-5 hover:bg-primary/5 transition-colors group"
     >
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-4">
         <div className={cn(
           "w-2.5 h-2.5 rounded-full transition-all duration-500",
           isComplete ? "bg-[#00ff85] shadow-[0_0_10px_rgba(0,255,133,0.5)]" : 
