@@ -38,6 +38,7 @@ import { Sparkles, Wand2, Loader2, FileDown, Printer, RefreshCw } from 'lucide-r
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
 import { Logo } from './Logo';
+import { StrategyHub } from './StrategyHub';
 
 interface FormData {
   // Section 1
@@ -133,7 +134,8 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
   const [smartFillUrl, setSmartFillUrl] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'intake' | 'result'>('intake');
+  const [activeTab, setActiveTab] = useState<'intake' | 'result' | 'strategy'>('intake');
+  const [strategyTimestamp, setStrategyTimestamp] = useState(0);
   const reportRef = React.useRef<HTMLDivElement>(null);
 
   // Persistence: Load saved data on mount
@@ -574,13 +576,27 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
             disabled={!auditReport}
             className={cn(
               "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0",
-              activeTab === 'result' 
-                ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10" 
+              activeTab === 'result'
+                ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10"
                 : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container",
               !auditReport && "opacity-50 cursor-not-allowed"
             )}
           >
-            <Sparkles size={16} />
+            <FileText size={16} />
+            Audit Result
+          </button>
+          <button
+            onClick={() => setActiveTab('strategy')}
+            disabled={!auditReport}
+            className={cn(
+              "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0",
+              activeTab === 'strategy'
+                ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10"
+                : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container",
+              !auditReport && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            <Rocket size={16} />
             Growth Blueprint
           </button>
         </div>
@@ -1080,7 +1096,10 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
               <RevenueLeakBlueprint
                 auditReport={auditReport}
                 formData={formData}
-                onStartStrategy={onStartStrategy}
+                onStartStrategy={(data) => {
+                  setStrategyTimestamp(Date.now());
+                  setActiveTab('strategy');
+                }}
                 onExport={handleExportPDF}
                 isExporting={isExporting}
                 onBack={() => setActiveTab('intake')}
@@ -1090,8 +1109,25 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
               <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:400,gap:24,textAlign:'center',padding:'48px 24px',background:'#06030D',color:'#EDE9F5'}}>
                 <div style={{width:64,height:64,borderRadius:16,background:'#100823',border:'1px solid #1F1430',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>📋</div>
                 <div>
+                  <h3 style={{fontSize:21,fontWeight:800,margin:'0 0 8px'}}>No Audit Yet</h3>
+                  <p style={{fontSize:15,color:'#9B91B4',maxWidth:'36ch',margin:0}}>Complete the assessment and run the analysis to generate your Revenue Leak Audit.</p>
+                </div>
+                <button onClick={() => setActiveTab('intake')} style={{padding:'14px 28px',background:'#6B21E8',color:'#EDE9F5',border:'none',borderRadius:10,fontWeight:700,fontSize:13,textTransform:'uppercase',letterSpacing:'0.1em',cursor:'pointer'}}>
+                  Start Assessment
+                </button>
+              </div>
+            )}
+          </div>
+        ) : activeTab === 'strategy' ? (
+          <div>
+            {auditReport ? (
+              <StrategyHub auditData={auditReport} forceRegenerateTimestamp={strategyTimestamp} />
+            ) : (
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:400,gap:24,textAlign:'center',padding:'48px 24px',background:'#06030D',color:'#EDE9F5'}}>
+                <div style={{width:64,height:64,borderRadius:16,background:'#100823',border:'1px solid #1F1430',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>🚀</div>
+                <div>
                   <h3 style={{fontSize:21,fontWeight:800,margin:'0 0 8px'}}>No Blueprint Yet</h3>
-                  <p style={{fontSize:15,color:'#9B91B4',maxWidth:'36ch',margin:0}}>Complete the assessment and run the analysis to generate your Revenue Leak Blueprint.</p>
+                  <p style={{fontSize:15,color:'#9B91B4',maxWidth:'36ch',margin:0}}>Run your audit first — the Growth Blueprint is built from your audit results.</p>
                 </div>
                 <button onClick={() => setActiveTab('intake')} style={{padding:'14px 28px',background:'#6B21E8',color:'#EDE9F5',border:'none',borderRadius:10,fontWeight:700,fontSize:13,textTransform:'uppercase',letterSpacing:'0.1em',cursor:'pointer'}}>
                   Start Assessment
