@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TitanLeap · Revenue Leak Audit — [Prospect Name]</title>
+<style>
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     DESIGN TOKENS (locked — same as rendered output)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  :root{
+    --purple:      #6B21E8;
+    --purple-soft: #8B4DF0;
+    --gold:        #F5C518;
+    --bg:          #0B0418;
+    --bg-deep:     #06030D;
+    --ink:         #EDE9F5;
+    --ink-dim:     #9B91B4;
+    --ink-faint:   #665C7E;
+    --line:        #1F1430;
+    --line-bright: #2E1F47;
+    --card:        #100823;
+    --card-hi:     #160B30;
+    --danger:      #FF5A5A;
+    --green:       #4ADE80;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg-deep);color:var(--ink);
+    font-family:-apple-system,'SF Pro Display','Archivo',system-ui,sans-serif;
+    line-height:1.5;-webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:'JetBrains Mono','SF Mono',ui-monospace,monospace}
+  .wrap{max-width:760px;margin:0 auto;padding:0 24px}
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--gold);
+    display:flex;align-items:center;gap:10px;margin-bottom:22px;
+  }
+  .eyebrow::before{content:"";width:26px;height:1px;background:var(--gold)}
+
+  /* ── FILL FIELDS ── */
+  .fill{
+    border:none;border-bottom:1px dashed var(--line-bright);
+    background:transparent;color:var(--ink);
+    font-family:inherit;font-size:inherit;font-weight:inherit;
+    width:100%;outline:none;padding:2px 0;
+    cursor:text;
+  }
+  .fill:focus{border-bottom-color:var(--gold);color:var(--gold)}
+  .fill::placeholder{color:var(--ink-faint);font-style:italic}
+  .fill-block{
+    border:1px dashed var(--line-bright);border-radius:4px;
+    background:rgba(107,33,232,.04);
+    color:var(--ink);font-family:inherit;font-size:inherit;
+    width:100%;outline:none;padding:12px 16px;resize:vertical;
+    min-height:80px;
+  }
+  .fill-block:focus{border-color:var(--gold)}
+  .fill-block::placeholder{color:var(--ink-faint);font-style:italic}
+
+  /* HEADER */
+  header{
+    padding:64px 0 0;
+    background:
+      radial-gradient(120% 80% at 80% -10%, rgba(107,33,232,.28), transparent 60%),
+      var(--bg-deep);
+    border-bottom:1px solid var(--line);
+  }
+  h1{font-size:clamp(28px,5vw,44px);font-weight:800;line-height:1.1;letter-spacing:-.02em;margin-bottom:14px;color:var(--ink-dim)}
+  .sub{color:var(--ink-dim);font-size:15px;max-width:50ch;margin-bottom:36px}
+  .meta-row{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--line);margin-top:8px}
+  .meta{flex:1;min-width:140px;padding:18px 20px 22px 0;border-right:1px solid var(--line)}
+  .meta:last-child{border-right:none;padding-right:0}
+  .meta .k{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:7px}
+  .meta .v{font-size:15px;font-weight:600}
+
+  /* TRUTH */
+  .truth{padding:44px 0;background:var(--bg);border-bottom:1px solid var(--line)}
+  .truth-card{
+    border:1px solid var(--line-bright);border-left:3px solid var(--gold);
+    background:linear-gradient(180deg,var(--card-hi),var(--card));
+    padding:30px 32px;border-radius:4px;
+  }
+  .truth-card .lbl{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
+  .truth-card p{font-size:19px;line-height:1.5;font-weight:600;letter-spacing:-.01em;color:var(--ink-dim)}
+  .truth-card .by{margin-top:18px;font-size:13px;color:var(--ink-faint)}
+
+  /* LEAKS */
+  section{padding:52px 0;border-bottom:1px solid var(--line);background:var(--bg-deep)}
+  .sec-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px}
+  .sec-title{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint)}
+  .sec-sum{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--gold);font-weight:600}
+  .sec-lead{font-size:15px;color:var(--ink-dim);margin-bottom:34px;max-width:54ch}
+
+  .leak{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:0;margin-bottom:20px;overflow:hidden}
+  .leak-top{display:flex;gap:18px;align-items:flex-start;padding:24px 26px 20px;flex-wrap:wrap}
+  .leak-no{
+    font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--purple);
+    border:1px solid var(--line-bright);border-radius:6px;
+    width:40px;height:40px;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;background:var(--bg-deep);
+  }
+  .leak-h{flex:1;min-width:160px}
+  .leak-h h3{font-size:20px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px;color:var(--ink-dim)}
+  .leak-h .where{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-faint)}
+  .sev-select{
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    padding:5px 9px;border-radius:4px;flex-shrink:0;font-weight:600;
+    background:rgba(245,197,24,.1);color:var(--gold);border:1px solid rgba(245,197,24,.28);
+    cursor:pointer;appearance:none;outline:none;
+  }
+  .leak-body{padding:0 26px 8px}
+  .leak-body p{font-size:15px;color:var(--ink-dim);margin-bottom:18px;max-width:58ch}
+  .cost{display:flex;align-items:stretch;gap:0;border:1px solid var(--line-bright);border-radius:6px;margin:4px 0 20px;overflow:hidden;flex-wrap:wrap}
+  .cost-fig{padding:18px 22px;background:var(--bg-deep);border-right:1px solid var(--line-bright);min-width:200px}
+  .cost-fig .k{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:6px}
+  .cost-fig .v{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--danger);letter-spacing:-.01em}
+  .cost-note{padding:18px 22px;font-size:13px;color:var(--ink-faint);display:flex;align-items:center;flex:1}
+  .fix-foot{border-top:1px solid var(--line);padding:18px 26px 24px;display:flex;gap:14px;align-items:flex-start;background:linear-gradient(180deg,transparent,rgba(107,33,232,.05))}
+  .fix-foot .tag{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--purple);font-weight:700;padding-top:2px;flex-shrink:0}
+  .fix-foot p{font-size:14px;color:var(--ink);margin:0}
+  .fix-foot .eff{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-faint);margin-top:6px}
+
+  /* TOTAL */
+  .total{background:var(--bg);text-align:center;padding:48px 0}
+  .total .k{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:14px}
+  .total .v{font-family:'JetBrains Mono',monospace;font-size:clamp(32px,6vw,48px);font-weight:800;color:var(--gold);letter-spacing:-.02em}
+
+  /* THIS WEEK'S MOVES */
+  .moves-section{padding:52px 0;border-bottom:1px solid var(--line);background:var(--bg-deep)}
+  .move-row{display:flex;gap:18px;align-items:flex-start;padding:20px 0;border-top:1px solid var(--line)}
+  .move-row:first-of-type{border-top:none}
+  .move-n{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--gold);font-weight:700;flex-shrink:0;padding-top:1px}
+
+  /* PRESCRIPTION */
+  .prescription{background:var(--bg-deep);padding:52px 0;border-top:1px solid var(--line)}
+  .tier-card{background:var(--card);border:1px solid var(--line-bright);border-left:3px solid var(--purple);border-radius:4px;padding:28px 32px;max-width:480px}
+  .tier-card .tier-label{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:8px}
+  .tier-card .tier-name{font-size:22px;font-weight:800;letter-spacing:-.01em;color:var(--ink);margin-bottom:4px}
+  .tier-card .tier-price{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px}
+  .tier-card .tier-tag{font-size:13px;color:var(--ink-dim)}
+
+  /* CTA */
+  .cta{background:radial-gradient(120% 100% at 50% 0%,rgba(107,33,232,.3),transparent 65%),var(--bg-deep);text-align:center;padding:60px 0 70px}
+  .cta h2{font-size:clamp(22px,4vw,30px);font-weight:800;letter-spacing:-.02em;margin-bottom:14px}
+  .cta p{color:var(--ink-dim);font-size:15px;max-width:46ch;margin:0 auto 28px}
+  .btn{display:inline-block;background:var(--gold);color:#1a1205;font-weight:700;font-size:14px;padding:14px 32px;border-radius:8px;text-decoration:none;letter-spacing:.01em}
+
+  /* FOOTER */
+  footer{padding:30px 0 40px;text-align:center;background:var(--bg-deep)}
+  footer .dis{font-size:11px;color:var(--ink-faint);max-width:52ch;margin:8px auto 0;line-height:1.5}
+
+  /* PRINT HINTS */
+  @media print {
+    .fill, .fill-block { border-bottom-color: #444; }
+    .fill:empty::before, .fill-block:empty::before { content: "________________"; color: #444; }
+    body { background: #fff !important; color: #000 !important; }
+  }
+  @media (max-width:540px){
+    .meta-row{flex-direction:column}
+    .meta{border-right:none;border-bottom:1px solid var(--line);min-width:unset}
+    .meta:last-child{border-bottom:none}
+    .cost{flex-direction:column}
+    .cost-fig{border-right:none;border-bottom:1px solid var(--line-bright)}
+  }
+</style>
+</head>
+<body>
+
+<!-- ── TOP BAR ── -->
+<div style="padding:14px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);max-width:760px;margin:0 auto">
+  <span class="mono" style="font-size:11px;color:var(--ink-faint);letter-spacing:.12em">TitanLeap · Revenue Leak Audit</span>
+  <div style="display:flex;gap:8px">
+    <span class="mono" style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);border:1px solid var(--line);border-radius:4px;padding:6px 12px">Manual Fill</span>
+  </div>
+</div>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Revenue Leak Audit</div>
+    <h1>
+      <input class="fill" type="text" placeholder="[ Number ] revenue leaks are quietly holding you back."
+             style="font-size:inherit;font-weight:inherit;line-height:inherit;letter-spacing:inherit">
+    </h1>
+    <p class="sub">A focused teardown of where revenue is escaping — and what each leak is worth when you fix it.</p>
+
+    <div class="meta-row">
+      <div class="meta">
+        <div class="k">Prepared for</div>
+        <div class="v"><input class="fill" type="text" placeholder="Client / Company Name"></div>
+      </div>
+      <div class="meta">
+        <div class="k">Date</div>
+        <div class="v"><input class="fill" type="text" placeholder="DD Mon YYYY" id="fill-date"></div>
+      </div>
+      <div class="meta">
+        <div class="k">Industry</div>
+        <div class="v"><input class="fill" type="text" placeholder="e.g. B2B SaaS"></div>
+      </div>
+      <div class="meta">
+        <div class="k">Leaks found</div>
+        <div class="v" style="color:var(--gold)"><input class="fill" type="text" placeholder="3 critical" style="color:var(--gold)"></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ── UNCOMFORTABLE TRUTH ── -->
+<div class="truth">
+  <div class="wrap">
+    <div class="truth-card">
+      <div class="lbl">The uncomfortable truth</div>
+      <p><textarea class="fill-block" placeholder="Write the one thing the prospect most needs to hear. Make it specific to their site. Example: 'Your buy button doesn't work. Visitors who reach your CTA have already decided to buy — you're losing them at the exact moment they were ready to pay.'"></textarea></p>
+      <div class="by"><input class="fill" type="text" placeholder="— Based on live inspection of [domain]" style="font-size:13px;color:var(--ink-faint)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── LEAKS ── -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-title">The Leaks</div>
+      <div class="sec-sum"><input class="fill" type="text" placeholder="3 found · ranked by $ impact" style="text-align:right;color:var(--gold);font-weight:600;font-family:'JetBrains Mono',monospace;font-size:13px;width:220px"></div>
+    </div>
+    <p class="sec-lead">No fluff. Here are the constraints actually bleeding revenue, biggest first.</p>
+
+    <!-- LEAK 01 -->
+    <div class="leak">
+      <div class="leak-top">
+        <div class="leak-no">01</div>
+        <div class="leak-h">
+          <h3><input class="fill" type="text" placeholder="Leak title — e.g. Dead CTA buttons" style="font-size:inherit;font-weight:inherit"></h3>
+          <div class="where"><input class="fill" type="text" placeholder="Location — e.g. Homepage · primary CTA → href='#'" style="font-size:12px;color:var(--ink-faint)"></div>
+        </div>
+        <select class="sev-select" title="Severity">
+          <option value="med">Med</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div class="leak-body">
+        <p><textarea class="fill-block" placeholder="What you found and why it matters. Be specific — name the actual element, page, or behaviour. Example: 'Your primary "Book a Call" button resolves to href="#" — visitors who are ready to buy literally cannot.'"></textarea></p>
+        <div class="cost">
+          <div class="cost-fig">
+            <div class="k">Est. monthly loss</div>
+            <div class="v"><input class="fill" type="text" placeholder="$X,XXX–$X,XXX" style="font-size:22px;font-weight:700;color:var(--danger);font-family:'JetBrains Mono',monospace"></div>
+          </div>
+          <div class="cost-note"><input class="fill" type="text" placeholder="Assumption note — e.g. Assumes ~500 visitors/mo, 3% CTA intent, $297 offer price."></div>
+        </div>
+      </div>
+      <div class="fix-foot">
+        <div class="tag">Fix</div>
+        <div style="flex:1">
+          <p><textarea class="fill-block" placeholder="Specific fix instruction. e.g. 'Point every CTA button to your live intake form. Open in incognito on mobile and desktop to verify.' Keep it actionable — one person, one afternoon." style="min-height:60px"></textarea></p>
+          <div class="eff"><input class="fill" type="text" placeholder="~X hrs · This week / Today / Do first"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEAK 02 -->
+    <div class="leak">
+      <div class="leak-top">
+        <div class="leak-no">02</div>
+        <div class="leak-h">
+          <h3><input class="fill" type="text" placeholder="Leak title" style="font-size:inherit;font-weight:inherit"></h3>
+          <div class="where"><input class="fill" type="text" placeholder="Location" style="font-size:12px;color:var(--ink-faint)"></div>
+        </div>
+        <select class="sev-select" title="Severity">
+          <option value="med">Med</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div class="leak-body">
+        <p><textarea class="fill-block" placeholder="What you found and why it matters."></textarea></p>
+        <div class="cost">
+          <div class="cost-fig">
+            <div class="k">Est. monthly loss</div>
+            <div class="v"><input class="fill" type="text" placeholder="$X,XXX–$X,XXX" style="font-size:22px;font-weight:700;color:var(--danger);font-family:'JetBrains Mono',monospace"></div>
+          </div>
+          <div class="cost-note"><input class="fill" type="text" placeholder="Assumption note"></div>
+        </div>
+      </div>
+      <div class="fix-foot">
+        <div class="tag">Fix</div>
+        <div style="flex:1">
+          <p><textarea class="fill-block" placeholder="Specific fix instruction." style="min-height:60px"></textarea></p>
+          <div class="eff"><input class="fill" type="text" placeholder="~X hrs · This week"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEAK 03 -->
+    <div class="leak">
+      <div class="leak-top">
+        <div class="leak-no">03</div>
+        <div class="leak-h">
+          <h3><input class="fill" type="text" placeholder="Leak title" style="font-size:inherit;font-weight:inherit"></h3>
+          <div class="where"><input class="fill" type="text" placeholder="Location" style="font-size:12px;color:var(--ink-faint)"></div>
+        </div>
+        <select class="sev-select" title="Severity">
+          <option value="med">Med</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div class="leak-body">
+        <p><textarea class="fill-block" placeholder="What you found and why it matters."></textarea></p>
+        <div class="cost">
+          <div class="cost-fig">
+            <div class="k">Est. monthly loss</div>
+            <div class="v"><input class="fill" type="text" placeholder="$X,XXX–$X,XXX" style="font-size:22px;font-weight:700;color:var(--danger);font-family:'JetBrains Mono',monospace"></div>
+          </div>
+          <div class="cost-note"><input class="fill" type="text" placeholder="Assumption note"></div>
+        </div>
+      </div>
+      <div class="fix-foot">
+        <div class="tag">Fix</div>
+        <div style="flex:1">
+          <p><textarea class="fill-block" placeholder="Specific fix instruction." style="min-height:60px"></textarea></p>
+          <div class="eff"><input class="fill" type="text" placeholder="~X hrs · This week"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── TOTAL ── -->
+<div class="total">
+  <div class="wrap">
+    <div class="k">Total estimated monthly leak</div>
+    <div class="v"><input class="fill" type="text" placeholder="$X,XXX – $X,XXX" style="font-size:inherit;font-weight:inherit;color:var(--gold);font-family:'JetBrains Mono',monospace;text-align:center"></div>
+    <div style="font-size:13px;color:var(--ink-faint);margin-top:14px;max-width:46ch;margin-left:auto;margin-right:auto">
+      <input class="fill" type="text" placeholder="Conservative estimate based on $X,XXX/mo revenue baseline." style="text-align:center;font-size:13px">
+    </div>
+  </div>
+</div>
+
+<!-- ── THIS WEEK'S MOVES ── -->
+<div class="moves-section">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-title">This Week's Moves</div>
+      <div class="sec-sum mono" style="font-size:13px;color:var(--gold);font-weight:600">in order</div>
+    </div>
+    <p class="sec-lead">Do them top to bottom. Highest-dollar fix first.</p>
+
+    <div class="move-row">
+      <div class="move-n">01</div>
+      <div style="flex:1">
+        <p style="font-size:14px;color:var(--ink);margin:0 0 4px"><input class="fill" type="text" placeholder="Move title — mirrors Leak 01 fix"></p>
+        <div class="mono" style="font-size:11px;color:var(--ink-faint)"><input class="fill" type="text" placeholder="Recovers Leak 01 · ~X hrs"></div>
+      </div>
+    </div>
+    <div class="move-row">
+      <div class="move-n">02</div>
+      <div style="flex:1">
+        <p style="font-size:14px;color:var(--ink);margin:0 0 4px"><input class="fill" type="text" placeholder="Move title — mirrors Leak 02 fix"></p>
+        <div class="mono" style="font-size:11px;color:var(--ink-faint)"><input class="fill" type="text" placeholder="Recovers Leak 02 · ~X hrs"></div>
+      </div>
+    </div>
+    <div class="move-row">
+      <div class="move-n">03</div>
+      <div style="flex:1">
+        <p style="font-size:14px;color:var(--ink);margin:0 0 4px"><input class="fill" type="text" placeholder="Move title — mirrors Leak 03 fix"></p>
+        <div class="mono" style="font-size:11px;color:var(--ink-faint)"><input class="fill" type="text" placeholder="Recovers Leak 03 · ~X hrs"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── PRESCRIPTION ── -->
+<div class="prescription">
+  <div class="wrap">
+    <div class="eyebrow">Prescription</div>
+    <h2 style="font-size:clamp(20px,3vw,28px);font-weight:800;letter-spacing:-.02em;margin-bottom:14px">
+      <input class="fill" type="text" placeholder="Prescription headline — e.g. 'The foundation is there. The leaks are bleeding it.'" style="font-size:inherit;font-weight:inherit">
+    </h2>
+    <p style="font-size:15px;color:var(--ink-dim);max-width:54ch;margin-bottom:32px;line-height:1.6">
+      <textarea class="fill-block" placeholder="2–3 sentences explaining WHY this tier fits this prospect. Reference their specific leaks. e.g. 'You have traffic, offers, and intent. The problem isn't getting people in — it's that the funnel is losing them at the exact moments they were ready to convert.'"></textarea>
+    </p>
+    <div class="tier-card">
+      <div class="tier-label">Recommended tier</div>
+      <div class="tier-name"><input class="fill" type="text" placeholder="Scaling System" style="font-size:22px;font-weight:800"></div>
+      <div class="tier-price"><input class="fill" type="text" placeholder="$6,999/mo" style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--gold)"></div>
+      <div class="tier-tag"><input class="fill" type="text" placeholder="We fix the leaks, then build the engine." style="font-size:13px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── CTA ── -->
+<div class="cta">
+  <div class="wrap">
+    <h2><input class="fill" type="text" placeholder="Ready to close these leaks?" style="font-size:inherit;font-weight:inherit;text-align:center"></h2>
+    <p><textarea class="fill-block" placeholder="CTA body — e.g. 'We built this audit to show you exactly where revenue is escaping. The Growth System Sprint closes every leak we found — and builds the machine that keeps compounding after.'" style="text-align:center;font-size:15px;line-height:1.6;min-height:60px;background:transparent;border-color:rgba(107,33,232,.3)"></textarea></p>
+    <a href="#" class="btn" onclick="return false">Get Started →</a>
+  </div>
+</div>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="wrap">
+    <div style="font-weight:800;font-size:15px;letter-spacing:-.01em">Titan<span style="color:var(--purple)">Leap</span></div>
+    <div class="dis">Dollar ranges are directional estimates based on reported revenue and typical conversion benchmarks — not guarantees. Actual results depend on traffic quality and offer fit.</div>
+  </div>
+</footer>
+
+<script>
+  // Auto-fill today's date
+  const dateEl = document.getElementById('fill-date');
+  if (dateEl && !dateEl.value) {
+    const d = new Date();
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    dateEl.value = `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  }
+
+  // Severity badge colour toggle
+  document.querySelectorAll('.sev-select').forEach(sel => {
+    function update() {
+      if (sel.value === 'high') {
+        sel.style.background = 'rgba(255,90,90,.12)';
+        sel.style.color = '#FF5A5A';
+        sel.style.border = '1px solid rgba(255,90,90,.3)';
+      } else {
+        sel.style.background = 'rgba(245,197,24,.1)';
+        sel.style.color = '#F5C518';
+        sel.style.border = '1px solid rgba(245,197,24,.28)';
+      }
+    }
+    sel.addEventListener('change', update);
+    update();
+  });
+</script>
+</body>
+</html>

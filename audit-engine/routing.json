@@ -1,0 +1,87 @@
+{
+  "_comment": "TitanLeap Tier Routing Config — edit this file to change prescriptions without rebuilding.",
+  "_version": "1.0",
+
+  "tiers": {
+    "launch_accelerator": {
+      "name": "Launch Accelerator",
+      "price_mo": 2999,
+      "tagline": "We build the funnel from scratch.",
+      "description": "For businesses with no working funnel or pre-revenue stage. We build the foundation: messaging, CTA, landing page, email sequence, and first offer — so you have something that actually converts before you spend a dollar on ads.",
+      "ideal_for": "Pre-revenue, no funnel, broken site fundamentals"
+    },
+    "scaling_system": {
+      "name": "Scaling System",
+      "price_mo": 6999,
+      "tagline": "We fix the leaks, then build the engine.",
+      "description": "For businesses with a working but leaky funnel — traffic exists, offers exist, but conversion is bleeding. We close the leaks, build the content and paid acquisition system, and automate lead flow.",
+      "ideal_for": "Working funnel with dead CTAs, missing pixel, no pricing, or weak messaging"
+    },
+    "authority_domination": {
+      "name": "Authority Domination",
+      "price_mo": 9999,
+      "tagline": "We scale what's already working.",
+      "description": "For funded or scaling businesses with solid fundamentals who need to dominate their category. Content machine, paid acquisition at scale, authority positioning, and a fully automated growth system.",
+      "ideal_for": "Funded, scaling, or established with revenue > $10k/mo"
+    }
+  },
+
+  "rules": [
+    {
+      "id": "no_funnel_pre_revenue",
+      "priority": 1,
+      "label": "No funnel / pre-revenue",
+      "description": "Site has no working CTA path AND no visible pricing AND no tracking pixel.",
+      "match_all": ["signup_friction_red", "pricing_clarity_red", "analytics_tracking_red"],
+      "match_any": [],
+      "tier": "launch_accelerator"
+    },
+    {
+      "id": "broken_fundamentals",
+      "priority": 2,
+      "label": "Broken fundamentals",
+      "description": "Multiple Section A (messaging) checks are red — site exists but can't convert.",
+      "match_all": [],
+      "match_any": ["value_prop_clarity_red", "headline_cta_alignment_red", "signup_friction_red"],
+      "min_red_count": 2,
+      "tier": "launch_accelerator"
+    },
+    {
+      "id": "working_leaky_funnel",
+      "priority": 3,
+      "label": "Working but leaky funnel",
+      "description": "Funnel exists (pricing visible or some CTAs work) but leaks present in conversion or retention.",
+      "match_all": [],
+      "match_any": ["signup_friction_red", "reengagement_catch_red", "analytics_tracking_red", "pricing_clarity_red"],
+      "requires_not": ["no_funnel_pre_revenue"],
+      "tier": "scaling_system"
+    },
+    {
+      "id": "funded_scaling",
+      "priority": 4,
+      "label": "Funded / scaling",
+      "description": "Site has pricing, working CTAs, and analytics in place — scaling stage.",
+      "match_all": ["signup_friction_green_or_yellow", "pricing_clarity_green", "analytics_tracking_green"],
+      "match_any": [],
+      "tier": "authority_domination"
+    }
+  ],
+
+  "default_tier": "scaling_system",
+  "default_reason": "Most prospects sit in the working-but-leaky-funnel category. If the routing rules don't match cleanly, Scaling System is the right default.",
+
+  "prescription_copy": {
+    "launch_accelerator": {
+      "headline": "Before we scale anything, we need a foundation.",
+      "body": "Right now, traffic is hitting the site and bouncing with nowhere to go. The leaks we found aren't optimisation problems — they're foundation problems. The Launch Accelerator builds the funnel from scratch: messaging, offer, CTA, landing page, and email sequence. Then we close the leaks. Then we scale."
+    },
+    "scaling_system": {
+      "headline": "The foundation is there. The leaks are bleeding it.",
+      "body": "You have traffic, offers, and intent. The problem isn't getting people in — it's that the funnel is losing them at the exact moments they were ready to convert. The Scaling System closes every leak in this report, then builds the content and acquisition engine that compounds underneath it."
+    },
+    "authority_domination": {
+      "headline": "The machine is working. Now we pour fuel on it.",
+      "body": "Your fundamentals are solid. The opportunity is in scaling what's already converting: more traffic, more authority content, more aggressive acquisition — with full automation so growth doesn't depend on your daily attention."
+    }
+  }
+}
