@@ -138,6 +138,7 @@ export const ContentManager: React.FC = () => {
 
   const [newTask, setNewTask] = useState<Partial<Task>>({
     title: '',
+    type: 'video',
     platform: 'youtube',
     brief: '',
     assignee: '',
@@ -184,7 +185,7 @@ export const ContentManager: React.FC = () => {
   const handleAddTask = () => {
     if (!newTask.title) return;
     
-    const type = ['youtube', 'tiktok', 'instagram'].includes(newTask.platform as string) ? 'video' : 'design';
+    const type = newTask.type || (['youtube', 'tiktok', 'instagram'].includes(newTask.platform as string) ? 'video' : 'design');
     const total = getTotalChecks(type as TaskType);
     const checks: Record<number, boolean> = {};
     for (let i = 0; i < total; i++) checks[i] = false;
@@ -207,7 +208,7 @@ export const ContentManager: React.FC = () => {
 
     setTasks([task, ...tasks]);
     setIsModalOpen(false);
-    setNewTask({ title: '', platform: 'youtube', brief: '', assignee: '', due: '' });
+    setNewTask({ title: '', type: 'video', platform: 'youtube', brief: '', assignee: '', due: '' });
     setCurrentTab('all');
   };
 
@@ -518,7 +519,7 @@ export const ContentManager: React.FC = () => {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-lg bg-surface-container-low rounded-3xl shadow-2xl border border-outline-variant/10 p-6 md:p-8"
+              className="relative w-full max-w-lg bg-surface-container-low rounded-3xl shadow-2xl border border-outline-variant/10 p-6 md:p-8 max-h-[90vh] overflow-y-auto"
             >
               <div className="mb-6">
                 <h3 className="text-xl font-black tracking-tight text-on-surface">Send to Production</h3>
@@ -541,7 +542,11 @@ export const ContentManager: React.FC = () => {
                   <label className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 ml-1">Platform</label>
                   <select 
                     value={newTask.platform}
-                    onChange={(e) => setNewTask({...newTask, platform: e.target.value as Platform})}
+                    onChange={(e) => {
+                      const p = e.target.value as Platform;
+                      const suggestedType = ['youtube', 'tiktok', 'instagram'].includes(p) ? 'video' : 'design';
+                      setNewTask({...newTask, platform: p, type: suggestedType as TaskType});
+                    }}
                     className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-3 py-2.5 text-sm font-medium focus:outline-none focus:border-primary transition-all appearance-none"
                   >
                     <option value="youtube">YouTube</option>
@@ -551,6 +556,38 @@ export const ContentManager: React.FC = () => {
                     <option value="flyer">Flyer</option>
                     <option value="poster">Poster</option>
                   </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 ml-1">Queue / Role</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewTask({...newTask, type: 'video'})}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold border transition-all",
+                        newTask.type === 'video'
+                          ? "bg-red-500/10 border-red-500/40 text-red-500"
+                          : "bg-surface-container-lowest border-outline-variant/20 text-on-surface-variant hover:border-outline-variant/40"
+                      )}
+                    >
+                      <Play size={14} />
+                      Video Editor
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewTask({...newTask, type: 'design'})}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold border transition-all",
+                        newTask.type === 'design'
+                          ? "bg-blue-500/10 border-blue-500/40 text-blue-500"
+                          : "bg-surface-container-lowest border-outline-variant/20 text-on-surface-variant hover:border-outline-variant/40"
+                      )}
+                    >
+                      <Image size={14} />
+                      Designer
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
