@@ -1,6 +1,18 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-console.log("[Claude Service] File loaded. Model: claude-3-5-sonnet-20241022");
+// Cached API secret fetched from server
+let _apiSecret: string | null = null;
+const getApiSecret = async (): Promise<string> => {
+  if (_apiSecret) return _apiSecret;
+  try {
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    _apiSecret = data.apiSecret || '';
+    return _apiSecret;
+  } catch {
+    return '';
+  }
+};
 
 let anthropicClient: Anthropic | null = null;
 
@@ -12,8 +24,6 @@ const getAnthropicClient = () => {
   if (typeof window === 'undefined') {
     if (!apiKey || apiKey === 'undefined' || apiKey === 'your-claude-api-key') {
       console.warn("SERVER: CLAUDE_API_KEY is missing or using placeholder.");
-    } else {
-      console.log("SERVER: CLAUDE_API_KEY is present (length: " + apiKey.length + ")");
     }
   }
 
@@ -34,16 +44,18 @@ export const generateClaudeContent = async (params: {
   systemPrompt?: string;
   responseMimeType?: string;
   temperature?: number;
-  apiKey?: string; // Optional override
-  model?: string;  // Optional model override
+  apiKey?: string;
+  model?: string;
 }) => {
   // If in browser, call the server proxy
   if (typeof window !== 'undefined') {
     try {
+      const secret = await getApiSecret();
       const response = await fetch('/api/ai/claude', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-api-key': secret,
         },
         body: JSON.stringify(params),
       });
@@ -80,7 +92,7 @@ export const generateClaudeContent = async (params: {
     
     const modelId = params.model || "claude-sonnet-4-5";
     
-    console.log(`[CLAUDE_SERVER_V4] Executing with model: ${modelId}`);
+    console.log(`[Claude] Executing with model: ${modelId}`);
     
     const response = await client.messages.create({
       model: modelId,
@@ -108,7 +120,6 @@ export const generateClaudeContent = async (params: {
     };
   } catch (error: any) {
     console.error("Claude API Error:", error);
-    // Extract the most useful error message
     const cleanError = error.message || error.error?.message || String(error);
     throw new Error(cleanError);
   }
