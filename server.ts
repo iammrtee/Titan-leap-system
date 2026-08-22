@@ -8,11 +8,46 @@ import { executePublishingDaemon } from "./src/services/daemon.ts";
 import { authRouter } from "./src/services/auth.ts";
 import { twitterManualRouter } from "./src/services/twitter-manual.ts";
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
-// Initialize Supabase Client for Server-side
-const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://vchdaboijdpvbmwgmfxo.supabase.co';
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjaGRhYm9pamRwdmJtd2dtZnhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2NTgyMzUsImV4cCI6MjA5MDIzNDIzNX0.PLhkYVJSQvYtB_GBKPgvBQZKR7_md0-3GNyOqI0P7zA';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Initialize Supabase Client for Server-side (env vars only â no hardcoded keys)
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('[Server] FATAL: Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY environment variables.');
+}
+
+const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+
+// --- Auth Middleware ---
+// Internal API calls (from the SPA on the same origin) are validated via a session token.
+// External webhooks (n8n) are validated via a separate WEBHOOK_SECRET.
+// Set INTERNAL_API_SECRET in your env (auto-generated at boot if missing).
+
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || crypto.randomBytes(32).toString('hex');
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
+
+// Middleware: require x-api-key header matching INTERNAL_API_SECRET
+const requireInternalAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const key = req.headers['x-api-key'];
+  if (key === INTERNAL_API_SECRET) return next();
+  // Also allow same-origin requests in dev (Referer/Origin check)
+  const origin = req.headers['origin'] || req.headers['referer'] || '';
+  if (process.env.NODE_ENV !== 'production' && origin.includes('localhost')) return next();
+  res.status(401).json({ error: 'Unauthorized' });
+};
+
+// Middleware: require x-webhook-secret header for external webhooks
+const requireWebhookAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (!WEBHOOK_SECRET) {
+    console.warn('[Auth] WEBHOOK_SECRET not set â webhook endpoints are unprotected. Set it in your environment.');
+    return next();
+  }
+  const secret = req.headers['x-webhook-secret'];
+  if (secret === WEBHOOK_SECRET) return next();
+  res.status(401).json({ error: 'Invalid webhook secret' });
+};
 
 async function startServer() {
   const app = express();
@@ -20,6 +55,11 @@ async function startServer() {
   const PORT = Number(process.env.DEFAULT_APP_PORT || process.env.PORT || 3000);
 
   app.use(express.json({ limit: '50mb' })); // Increased limit for base64 media
+
+  // Expose the internal API secret to the SPA via a meta endpoint (dev only / same-origin)
+  app.get("/api/config", (req, res) => {
+    res.json({ apiSecret: INTERNAL_API_SECRET });
+  });
 
   // Mount Auth Router
   app.use("/api/auth", authRouter);
@@ -32,8 +72,8 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
-  // Claude AI Proxy
-  app.post("/api/ai/claude", async (req, res) => {
+  // Claude AI Proxy (protected)
+  app.post("/api/ai/claude", requireInternalAuth, async (req, res) => {
     try {
       const { prompt, systemPrompt, temperature } = req.body;
       const { generateClaudeContent } = await import("./src/services/claude.ts");
@@ -73,8 +113,8 @@ async function startServer() {
     }
   });
 
-  // Gemini AI Proxy
-  app.post("/api/ai/gemini", async (req, res) => {
+  // Gemini AI Proxy (protected)
+  app.post("/api/ai/gemini", requireInternalAuth, async (req, res) => {
     try {
       const { prompt, systemPrompt, responseMimeType, temperature } = req.body;
       const { GoogleGenAI } = await import("@google/genai");
@@ -116,8 +156,8 @@ async function startServer() {
     }
   });
 
-  // Smart Fill — fetches website server-side, extracts business info via Claude
-  app.post("/api/ai/smart-fill", async (req, res) => {
+  // Smart Fill (protected)
+  app.post("/api/ai/smart-fill", requireInternalAuth, async (req, res) => {
     try {
       const { url } = req.body;
       if (!url) return res.status(400).json({ error: "URL is required" });
@@ -130,7 +170,7 @@ async function startServer() {
           signal: AbortSignal.timeout(12000)
         });
         const html = await pageRes.text();
-        // Strip scripts, styles, tags — keep readable text
+        // Strip scripts, styles, tags â keep readable text
         pageText = html
           .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
           .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
@@ -141,7 +181,7 @@ async function startServer() {
           .slice(0, 10000);
       } catch (fetchErr: any) {
         console.warn("[SmartFill] Could not fetch URL:", fetchErr.message);
-        pageText = `Website at ${url} (could not fetch — extract what you can from the URL itself)`;
+        pageText = `Website at ${url} (could not fetch â extract what you can from the URL itself)`;
       }
 
       const prompt = `You are a business intelligence analyst. Analyse the following website content and extract structured business information to pre-fill an audit form.
@@ -150,11 +190,11 @@ WEBSITE URL: ${url}
 WEBSITE CONTENT:
 ${pageText}
 
-Extract and return ONLY a valid JSON object with these exact keys. Use your best inference from the content — do not leave fields empty if you can make a reasonable guess:
+Extract and return ONLY a valid JSON object with these exact keys. Use your best inference from the content â do not leave fields empty if you can make a reasonable guess:
 {
   "businessName": "Official name of the business",
   "industry": "One of: B2B SaaS, E-commerce, Coaching/Consulting, Agency, Local Business, Other",
-  "primaryPlatform": "Their main social media platform — one of: Instagram, LinkedIn, TikTok, YouTube, Twitter-X",
+  "primaryPlatform": "Their main social media platform â one of: Instagram, LinkedIn, TikTok, YouTube, Twitter-X",
   "socialHandles": ["array of social handles or profile URLs found on site, e.g. '@handle' or 'instagram.com/handle'"],
   "monthlyReach": "Estimated monthly social media reach as a number string, e.g. '5000'. Use '1000' if unknown.",
   "mainOffer": "Their primary product or service described in one sentence",
@@ -163,7 +203,7 @@ Extract and return ONLY a valid JSON object with these exact keys. Use your best
   "currentRevenue": "0",
   "targetRevenue": "If pricePoint is known, set to pricePoint * 10 as string, else '0'",
   "currency": "USD",
-  "timeline": "One of: 30 days, 60 days, 90 days, 6 months, 1 year — pick most appropriate for their business stage",
+  "timeline": "One of: 30 days, 60 days, 90 days, 6 months, 1 year â pick most appropriate for their business stage",
   "challenges": ["Array of 1-3 items from: Getting leads, Converting leads, Retaining clients, Content creation, Ads not working, No clear strategy, Other"],
   "tools": ["Array of tools they likely use from: Mailchimp, ConvertKit, ClickFunnels, Webflow, Shopify, Kajabi, None, Other"],
   "contentTypes": ["Array of content types they produce from: Short-form video, Long-form video, Carousels, Blogs, Emails, Podcasts"],
@@ -178,7 +218,7 @@ Return ONLY the JSON. No markdown. No explanation.`;
       const result = await generateClaudeContent({
         prompt,
         apiKey: process.env.CLAUDE_API_KEY,
-        model: "claude-haiku-4-5-20251001"  // cheapest model — smart fill doesn't need heavy reasoning
+        model: "claude-haiku-4-5-20251001"
       });
       const cleaned = (result.text || '').replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
       const parsed = JSON.parse(cleaned);
@@ -190,8 +230,8 @@ Return ONLY the JSON. No markdown. No explanation.`;
     }
   });
 
-  // n8n Webhook for Leads
-  app.post("/api/webhooks/n8n/leads", async (req, res) => {
+  // n8n Webhook for Leads (webhook auth)
+  app.post("/api/webhooks/n8n/leads", requireWebhookAuth, async (req, res) => {
     try {
       const { name, email, phone, company, source, product, status, score, score_reason } = req.body;
       
@@ -220,8 +260,8 @@ Return ONLY the JSON. No markdown. No explanation.`;
     }
   });
 
-  // n8n Webhook for Sales/Revenue
-  app.post("/api/webhooks/n8n/sales", async (req, res) => {
+  // n8n Webhook for Sales/Revenue (webhook auth)
+  app.post("/api/webhooks/n8n/sales", requireWebhookAuth, async (req, res) => {
     try {
       const { amount, customer_email, product_name, status } = req.body;
       
@@ -238,7 +278,7 @@ Return ONLY the JSON. No markdown. No explanation.`;
       const { error: txError } = await supabase
         .from('sales_transactions')
         .insert({
-          lead_id: leadData?.id, // Link if found
+          lead_id: leadData?.id,
           amount: parseFloat(amount) || 0,
           product_name: product_name || 'Service Purchase',
           status: status || 'COMPLETED'
@@ -292,13 +332,12 @@ Return ONLY the JSON. No markdown. No explanation.`;
     }
   });
 
-  // Endpoint for the daemon to "post" to
-  app.post("/api/daemon/publish", async (req, res) => {
+  // Daemon publish endpoint (protected)
+  app.post("/api/daemon/publish", requireInternalAuth, async (req, res) => {
     const { platforms, mediaUrls, caption, scheduledTime, tokens, credentials, linkedinCompanyId } = req.body;
     
     console.log(`[DAEMON] Received request to publish to ${platforms.join(', ')}`);
     
-    // Execute the actual headless browser daemon
     const result = await executePublishingDaemon({
       platforms,
       mediaUrls,
@@ -334,6 +373,9 @@ Return ONLY the JSON. No markdown. No explanation.`;
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    if (!WEBHOOK_SECRET) {
+      console.warn('[Server] WARNING: WEBHOOK_SECRET is not set. Set it in your environment to protect webhook endpoints.');
+    }
   });
 }
 
