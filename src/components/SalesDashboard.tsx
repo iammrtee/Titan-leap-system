@@ -176,6 +176,7 @@ export const SalesDashboard: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {import.meta.env.DEV && (
             <button 
               onClick={async () => {
                 const { data: lead } = await supabase.from('leads').insert({
@@ -204,6 +205,7 @@ export const SalesDashboard: React.FC = () => {
               <Zap size={14} />
               <span>Test Sync</span>
             </button>
+            )}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={14} />
               <input 
