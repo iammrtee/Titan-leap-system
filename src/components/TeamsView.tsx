@@ -178,16 +178,14 @@ export const TeamsView: React.FC = () => {
         </div>
         
         <div className="h-48 flex items-end gap-2 px-4">
-          {Array.from({ length: 30 }).map((_, i) => {
-            const height = 20 + Math.random() * 80;
-            return (
+          {[45,72,38,85,56,91,67,42,78,53,88,61,35,74,49,93,58,82,40,69,55,87,46,76,62,95,51,71,44,80].map((height, i) => (
               <div 
                 key={i} 
                 className="flex-1 bg-primary/10 rounded-t-sm group relative"
                 style={{ height: `${height}%` }}
               >
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-on-surface text-surface text-[8px] font-black px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  ${(height * 100).toFixed(0)}
+                  ${(height * 100)}
                 </div>
                 {i % 5 === 0 && (
                   <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 text-[8px] font-bold text-on-surface-variant/40">
@@ -195,8 +193,7 @@ export const TeamsView: React.FC = () => {
                   </div>
                 )}
               </div>
-            );
-          })}
+            ))}
         </div>
       </div>
     </div>
