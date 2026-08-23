@@ -12,6 +12,7 @@ import { EmailCampaigns } from './components/EmailCampaigns';
 import { AIAutomation } from './components/AIAutomation';
 import { TeamsView } from './components/TeamsView';
 import { Logo } from './components/Logo';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { motion, AnimatePresence } from 'motion/react';
 import { Instagram, Twitter, Linkedin, Youtube, Github, Globe, Plus } from 'lucide-react';
 import { Toaster } from 'sonner';
@@ -132,6 +133,8 @@ export default function App() {
   const config = getViewConfig();
 
   return (
+    <ErrorBoundary>
+    
     <div className="min-h-screen bg-surface transition-colors duration-700 relative overflow-hidden">
       {/* Atmospheric Background Effects for Dark Mode */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
@@ -204,5 +207,6 @@ export default function App() {
         </footer>
       </main>
     </div>
+    </ErrorBoundary>
   );
 }
