@@ -459,6 +459,7 @@ const ProductionQueue: React.FC = () => {
                     <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded-xl text-sm font-bold text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all">Cancel</button>
                     <button onClick={handleAddTask} className="bg-primary text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md hover:bg-primary/90 transition-all">Send to Queue</button>
                 </div>
+                </div>
               </motion.div>
             </div>
           )}
