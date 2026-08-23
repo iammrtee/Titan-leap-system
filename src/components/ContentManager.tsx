@@ -453,6 +453,7 @@ const ProductionQueue: React.FC = () => {
                       <label className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 ml-1">Due Date</label>
                       <input type="date" value={newTask.due} onChange={(e) => setNewTask({...newTask, due: e.target.value})}
                         className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-3 py-2.5 text-sm font-medium focus:outline-none focus:border-primary transition-all" />
+                    </div>
                   </div>
                   <div className="flex justify-end gap-3 pt-4">
                     <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded-xl text-sm font-bold text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all">Cancel</button>
