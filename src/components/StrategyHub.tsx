@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anchor, Network, LineChart, Download, Clapperboard, Info, Bolt, Search, Users, TrendingUp, Calendar, Upload, Clock, CheckCircle2, List, LayoutGrid, Filter, Plus, ChevronRight, Share2, MoreHorizontal, Instagram, Twitter, Linkedin, Youtube, Facebook, Play, Zap, Rocket, Loader2, Sparkles, AlertCircle, FileText, ExternalLink, MoreVertical, Target, RefreshCw, X, Terminal } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent } from '@/src/services/ai';
+import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent, generateCalendarFromBlueprint } from '@/src/services/ai';
 import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured } from '@/src/lib/supabase';
 import localforage from 'localforage';
@@ -644,6 +644,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   const [showRegenModal, setShowRegenModal] = useState(false);
   const [regenPrompt, setRegenPrompt] = useState('');
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isDraftingCalendar, setIsDraftingCalendar] = useState(false);
 
   // Queue / History State
   const [distributionJobs, setDistributionJobs] = useState<DistributionJob[]>([]);
@@ -1146,6 +1147,52 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     }
   };
 
+  const handleDraftCalendarFromBlueprint = async () => {
+    if (!thirtyDayPlan) {
+      toast.error("Generate the 30-Day Plan first");
+      return;
+    }
+    setIsDraftingCalendar(true);
+    try {
+      const generatedItems = await generateCalendarFromBlueprint(auditData, thirtyDayPlan);
+
+      if (generatedItems && generatedItems.length > 0) {
+        const newCalendarItems: CalendarItem[] = generatedItems.map((item: any, index: number) => {
+          const date = new Date();
+          const offset = item.dayOffset ?? index;
+          date.setDate(date.getDate() + offset);
+
+          return {
+            id: `blueprint-${Math.random().toString(36).substr(2, 9)}`,
+            day: date.getDate(),
+            month: date.getMonth(),
+            year: date.getFullYear(),
+            platform: item.platform || 'LinkedIn',
+            title: item.title || 'Generated Content',
+            description: item.description || '',
+            status: 'draft',
+            type: item.type || 'post',
+            time: item.time || '09:00 AM',
+            tags: item.tags || ['blueprint']
+          } as CalendarItem;
+        });
+
+        setCalendarItems(prev => [...prev, ...newCalendarItems]);
+        setActiveTab('calendar');
+        toast.success("30-Day Calendar Drafted!", {
+          description: `Added ${newCalendarItems.length} items mapped from your Growth Blueprint.`
+        });
+      } else {
+        toast.error("Failed to draft calendar. Please try again.");
+      }
+    } catch (error: any) {
+      console.error("Failed to draft calendar from blueprint:", error);
+      toast.error(`Error drafting calendar: ${error?.message || 'Please try again.'}`);
+    } finally {
+      setIsDraftingCalendar(false);
+    }
+  };
+
   useEffect(() => {
     if (forceRegenerateTimestamp && forceRegenerateTimestamp > 0) {
       setActiveTab('plan');
@@ -1475,6 +1522,14 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                     >
                       <Download size={16} />
                       Export Full PDF
+                    </button>
+                    <button 
+                      onClick={handleDraftCalendarFromBlueprint}
+                      disabled={isDraftingCalendar || !thirtyDayPlan}
+                      className="flex items-center gap-2 text-emerald-600 font-black text-[10px] md:text-xs uppercase tracking-widest hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {isDraftingCalendar ? <Loader2 size={16} className="animate-spin" /> : <Calendar size={16} />}
+                      Draft 30-Day Calendar
                     </button>
                   </div>
                 </div>
