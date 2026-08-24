@@ -1075,7 +1075,16 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
         ) : activeTab === 'strategy' ? (
           <div>
             {auditReport ? (
-              <StrategyHub auditData={auditReport} forceRegenerateTimestamp={strategyTimestamp} />
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:400,gap:24,textAlign:'center',padding:'48px 24px',background:'#06030D',color:'#EDE9F5'}}>
+                <div style={{width:64,height:64,borderRadius:16,background:'#100823',border:'1px solid #1F1430',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>🚀</div>
+                <div>
+                  <h3 style={{fontSize:21,fontWeight:800,margin:'0 0 8px'}}>Growth Blueprint Ready</h3>
+                  <p style={{fontSize:15,color:'#9B91B4',maxWidth:'40ch',margin:0}}>Your 30-day strategy, content calendar, and blueprint live in Strategy Hub — not here.</p>
+                </div>
+                <button onClick={() => onStartStrategy && onStartStrategy(auditReport)} style={{padding:'14px 28px',background:'#6B21E8',color:'#EDE9F5',border:'none',borderRadius:10,fontWeight:700,fontSize:13,textTransform:'uppercase',letterSpacing:'0.1em',cursor:'pointer'}}>
+                  Open in Strategy Hub
+                </button>
+              </div>
             ) : (
               <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:400,gap:24,textAlign:'center',padding:'48px 24px',background:'#06030D',color:'#EDE9F5'}}>
                 <div style={{width:64,height:64,borderRadius:16,background:'#100823',border:'1px solid #1F1430',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>🚀</div>
