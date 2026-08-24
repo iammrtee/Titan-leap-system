@@ -186,7 +186,22 @@ export const ContentManager: React.FC = () => {
 //  PRODUCTION QUEUE (original ContentManager)
 // ═══════════════════════════════════════════
 const ProductionQueue: React.FC = () => {
-  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    try {
+      const saved = localStorage.getItem('titanleap_production_tasks');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_TASKS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('titanleap_production_tasks', JSON.stringify(tasks));
+    } catch {}
+  }, [tasks]);
   const [currentTab, setCurrentTab] = useState<'all' | TaskStatus>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [expandedCardId, setExpandedCardId] = useState<number | null>(null);
