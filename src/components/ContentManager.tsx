@@ -133,6 +133,7 @@ function getProgressPct(card: Task) { return Math.round((getCountChecked(card) /
 // ═══════════════════════════════════════════
 export const ContentManager: React.FC = () => {
   const [managerTab, setManagerTab] = useState<ContentManagerTab>('production');
+  const [sendToProductionSignal, setSendToProductionSignal] = useState<number>(0);
 
   return (
     <div className="space-y-8">
@@ -145,25 +146,33 @@ export const ContentManager: React.FC = () => {
       </div>
 
       {/* Top-Level Tabs */}
-      <div className="flex gap-2 p-1 bg-surface-container-highest/30 rounded-2xl w-fit">
-        {([
-          { id: 'production' as const, label: 'Production Queue', icon: <Play size={14} /> },
-          { id: 'autopost' as const, label: 'Auto Post', icon: <Send size={14} /> },
-        ]).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setManagerTab(tab.id)}
-            className={cn(
-              "flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all",
-              managerTab === tab.id
-                ? "bg-primary text-white shadow-md"
-                : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container-low"
-            )}
-          >
-            {tab.icon}
-            {tab.label}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex gap-2 p-1 bg-surface-container-highest/30 rounded-2xl w-fit">
+          {([
+            { id: 'production' as const, label: 'Production Queue', icon: <Play size={14} /> },
+            { id: 'autopost' as const, label: 'Auto Post', icon: <Send size={14} /> },
+          ]).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setManagerTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all",
+                managerTab === tab.id
+                  ? "bg-primary text-white shadow-md"
+                  : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container-low"
+              )}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {managerTab === 'production' && (
+          <button onClick={() => setSendToProductionSignal(Date.now())}
+            className="bg-surface-container-low border border-outline-variant/20 text-on-surface px-4 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:bg-surface-container transition-all whitespace-nowrap shrink-0">
+            <Plus size={16} /> Send to Production
           </button>
-        ))}
+        )}
       </div>
 
       {/* Tab Content */}
@@ -175,7 +184,7 @@ export const ContentManager: React.FC = () => {
           exit={{ opacity: 0, y: -12 }}
           transition={{ duration: 0.25 }}
         >
-          {managerTab === 'production' ? <ProductionQueue /> : <AutoPostTab />}
+          {managerTab === 'production' ? <ProductionQueue externalOpenSignal={sendToProductionSignal} /> : <AutoPostTab />}
         </motion.div>
       </AnimatePresence>
     </div>
@@ -185,7 +194,7 @@ export const ContentManager: React.FC = () => {
 // ═══════════════════════════════════════════
 //  PRODUCTION QUEUE (original ContentManager)
 // ═══════════════════════════════════════════
-const ProductionQueue: React.FC = () => {
+const ProductionQueue: React.FC<{ externalOpenSignal?: number }> = ({ externalOpenSignal }) => {
   const [tasks, setTasks] = useState<Task[]>(() => {
     try {
       const saved = localStorage.getItem('titanleap_production_tasks');
@@ -204,6 +213,9 @@ const ProductionQueue: React.FC = () => {
   }, [tasks]);
   const [currentTab, setCurrentTab] = useState<'all' | TaskStatus>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  useEffect(() => {
+    if (externalOpenSignal) setIsModalOpen(true);
+  }, [externalOpenSignal]);
   const [expandedCardId, setExpandedCardId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -391,12 +403,6 @@ const ProductionQueue: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-end">
-        <button onClick={() => setIsModalOpen(true)}
-          className="bg-surface-container-low border border-outline-variant/20 text-on-surface px-4 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:bg-surface-container transition-all whitespace-nowrap shrink-0">
-          <Plus size={16} /> Send to Production
-        </button>
-      </div>
       <div className="flex gap-1 border-b border-outline-variant/10">
         {(['all', 'inprogress', 'review', 'done'] as const).map(tab => (
           <button key={tab} onClick={() => setCurrentTab(tab)}
