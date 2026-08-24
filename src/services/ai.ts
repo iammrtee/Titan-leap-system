@@ -480,6 +480,86 @@ export const generate30DayPlan = async (auditData: any) => {
   }
 };
 
+export const generate90DayBlueprint = async (auditData: any) => {
+  const prompt = `
+    You are an elite growth consultant expanding a 90-day roadmap into a detailed, week-by-week execution blueprint.
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    BRAND PROFILE
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Brand: ${auditData?.businessName || 'The Brand'}
+    Industry: ${auditData?.industry || 'B2B SaaS'}
+    Main Offer: ${auditData?.mainOffer || 'Premium Service'}
+    Current Revenue: ${auditData?.currentRevenue || 'Unknown'}
+    Target Revenue: ${auditData?.targetRevenue || 'Unknown'}
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    EXISTING DIAGNOSIS — YOUR STRATEGIC FOUNDATION
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Primary Constraint: ${auditData?.primaryConstraint?.category || 'Unknown'} — ${auditData?.primaryConstraint?.whatWeFound || ''}
+    Secondary Constraint: ${auditData?.secondaryConstraint?.category || 'Unknown'} — ${auditData?.secondaryConstraint?.whatWeFound || ''}
+    Third Constraint: ${auditData?.thirdConstraint?.category || 'Unknown'} — ${auditData?.thirdConstraint?.whatWeFound || ''}
+
+    High-level 90-day roadmap already given to the client:
+    Month 1 focus: ${auditData?.roadmap?.month1?.focus || 'Unknown'}
+    Month 1 actions: ${auditData?.roadmap?.month1?.actions?.join('; ') || 'Unknown'}
+    Month 2 focus: ${auditData?.roadmap?.month2?.focus || 'Unknown'}
+    Month 2 actions: ${auditData?.roadmap?.month2?.actions?.join('; ') || 'Unknown'}
+    Month 3 focus: ${auditData?.roadmap?.month3?.focus || 'Unknown'}
+    Month 3 actions: ${auditData?.roadmap?.month3?.actions?.join('; ') || 'Unknown'}
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    YOUR TASK
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Expand the high-level roadmap above into a detailed, week-by-week 90-day execution blueprint (weeks 1-13). Each month must build logically on the constraints and stay consistent with the high-level focus/actions already given — do not contradict them, elaborate on them.
+
+    Be concrete and specific to this business. No generic filler like "post consistently" — tie every milestone to the diagnosed constraints.
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    OUTPUT FORMAT
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    BE CONCISE. Every field has a length limit — do not write paragraphs.
+
+    Output ONLY valid JSON matching this exact structure:
+    {
+      "phases": [
+        {
+          "month": 1,
+          "theme": "string (max 8 words)",
+          "objective": "string (1 sentence)",
+          "weeks": [
+            { "week": 1, "focus": "string (max 8 words)", "milestones": ["string (max 12 words)", "string (max 12 words)"] },
+            { "week": 2, "focus": "string (max 8 words)", "milestones": ["string (max 12 words)", "string (max 12 words)"] },
+            { "week": 3, "focus": "string (max 8 words)", "milestones": ["string (max 12 words)", "string (max 12 words)"] },
+            { "week": 4, "focus": "string (max 8 words)", "milestones": ["string (max 12 words)", "string (max 12 words)"] }
+          ],
+          "kpis": [
+            { "metric": "string", "target": "string" }
+          ]
+        }
+      ],
+      "milestones90Day": ["string (max 12 words)", "string (max 12 words)", "string (max 12 words)"],
+      "risksAndMitigations": [
+        { "risk": "string (max 12 words)", "mitigation": "string (max 15 words)" }
+      ]
+    }
+
+    "phases" must contain exactly 3 objects (month 1, 2, 3), each with exactly 4 weeks and exactly 2-3 kpis. "milestones90Day" must contain exactly 3 items. "risksAndMitigations" must contain exactly 2-3 items.
+  `;
+
+  try {
+    const response = await unifiedGenerateContent({
+      prompt,
+      responseMimeType: "application/json",
+    });
+
+    return parseJSON(response.text, {});
+  } catch (error) {
+    console.error("AI Blueprint Error:", error);
+    throw error;
+  }
+};
+
 export const smartFillForm = async (url: string) => {
   // Try server-side endpoint first (it can actually fetch the page)
   try {
