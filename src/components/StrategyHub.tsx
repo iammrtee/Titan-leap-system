@@ -617,7 +617,22 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   };
 
   // Calendar State
-  const [calendarItems, setCalendarItems] = useState<CalendarItem[]>(INITIAL_CALENDAR_ITEMS);
+  const [calendarItems, setCalendarItems] = useState<CalendarItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('titanleap_calendar_items');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_CALENDAR_ITEMS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('titanleap_calendar_items', JSON.stringify(calendarItems));
+    } catch {}
+  }, [calendarItems]);
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date();
     return { day: today.getDate(), month: today.getMonth(), year: today.getFullYear() };
