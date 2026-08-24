@@ -205,6 +205,24 @@ const ProductionQueue: React.FC = () => {
     });
   }, []);
 
+  useEffect(() => {
+    try {
+      const pendingRaw = localStorage.getItem('titanleap_pending_production');
+      if (pendingRaw) {
+        const pending: Task[] = JSON.parse(pendingRaw);
+        if (Array.isArray(pending) && pending.length > 0) {
+          setTasks(prevTasks => [
+            ...prevTasks,
+            ...pending.map((item, index) => ({ ...item, id: Date.now() + index })),
+          ]);
+        }
+        localStorage.removeItem('titanleap_pending_production');
+      }
+    } catch (err) {
+      console.error('Failed to import pending production tasks:', err);
+    }
+  }, []);
+
   const [newTask, setNewTask] = useState<Partial<Task>>({ title: '', platform: 'youtube', brief: '', assignee: '', due: '' });
 
   const filteredTasks = tasks.filter(t => currentTab === 'all' || t.status === currentTab);
