@@ -124,7 +124,7 @@ const CHALLENGES = ['Getting leads', 'Converting leads', 'Retaining clients', 'C
 const TOOLS = ['Mailchimp', 'ConvertKit', 'ClickFunnels', 'Webflow', 'Shopify', 'Kajabi', 'None', 'Other'];
 const CONTENT_TYPES = ['Short-form video', 'Long-form video', 'Carousels', 'Blogs', 'Emails', 'Podcasts'];
 
-export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({ onStartStrategy }) => {
+export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onViewStrategy?: (data: any) => void }> = ({ onStartStrategy, onViewStrategy }) => {
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM_DATA);
   const [expandedSections, setExpandedSections] = useState<number[]>([1]);
   const [isAuditing, setIsAuditing] = useState(false);
@@ -1081,7 +1081,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void }> = ({
                   <h3 style={{fontSize:21,fontWeight:800,margin:'0 0 8px'}}>Growth Blueprint Ready</h3>
                   <p style={{fontSize:15,color:'#9B91B4',maxWidth:'40ch',margin:0}}>Your 30-day strategy, content calendar, and blueprint live in Strategy Hub — not here.</p>
                 </div>
-                <button onClick={() => onStartStrategy && onStartStrategy(auditReport)} style={{padding:'14px 28px',background:'#6B21E8',color:'#EDE9F5',border:'none',borderRadius:10,fontWeight:700,fontSize:13,textTransform:'uppercase',letterSpacing:'0.1em',cursor:'pointer'}}>
+                <button onClick={() => (onViewStrategy || onStartStrategy) && (onViewStrategy || onStartStrategy)(auditReport)} style={{padding:'14px 28px',background:'#6B21E8',color:'#EDE9F5',border:'none',borderRadius:10,fontWeight:700,fontSize:13,textTransform:'uppercase',letterSpacing:'0.1em',cursor:'pointer'}}>
                   Open in Strategy Hub
                 </button>
               </div>
