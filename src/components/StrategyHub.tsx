@@ -2140,12 +2140,21 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                                   </div>
                                   <span className="text-sm font-black tracking-tight">{item.time}</span>
                                 </div>
-                                <button 
-                                  onClick={() => handleEditClick(item)}
-                                  className="p-3 text-on-surface-variant/40 hover:text-primary hover:bg-primary/10 rounded-xl transition-all"
-                                >
-                                  <Sparkles size={18} />
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => handleSendToProduction(item)}
+                                    title="Send to Production"
+                                    className="p-3 text-on-surface-variant/40 hover:text-primary hover:bg-primary/10 rounded-xl transition-all"
+                                  >
+                                    <Rocket size={18} />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleEditClick(item)}
+                                    className="p-3 text-on-surface-variant/40 hover:text-primary hover:bg-primary/10 rounded-xl transition-all"
+                                  >
+                                    <Sparkles size={18} />
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           ))
