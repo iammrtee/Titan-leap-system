@@ -96,7 +96,7 @@ export const generateClaudeContent = async (params: {
     
     const response = await client.messages.create({
       model: modelId,
-      max_tokens: 4096,
+      max_tokens: 16000,
       temperature: params.temperature ?? 0.7,
       system: params.systemPrompt,
       messages: [
