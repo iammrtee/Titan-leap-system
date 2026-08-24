@@ -69,12 +69,17 @@ export default function App() {
     setActiveView('strategy');
   };
 
+  const handleViewStrategy = (data: any) => {
+    setAuditData(data);
+    setActiveView('strategy');
+  };
+
   const renderView = () => {
     switch (activeView) {
       case 'dashboard':
         return <DashboardOverview />;
       case 'audit':
-        return <AuditView onStartStrategy={handleStartStrategy} />;
+        return <AuditView onStartStrategy={handleStartStrategy} onViewStrategy={handleViewStrategy} />;
       case 'strategy':
         return <StrategyHub auditData={auditData} forceRegenerateTimestamp={forceRegenerateTimestamp} />;
       case 'content':
