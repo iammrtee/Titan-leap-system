@@ -883,6 +883,43 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     setShowAddModal(true);
   };
 
+  const handleSendToProduction = (item: CalendarItem) => {
+    const platformMap: Record<CalendarItem['platform'], { platform: string; forceType?: 'video' | 'design' }> = {
+      'TikTok': { platform: 'tiktok', forceType: 'video' },
+      'YouTube': { platform: 'youtube', forceType: 'video' },
+      'Instagram': { platform: 'instagram' },
+      'LinkedIn': { platform: 'linkedin' },
+      'Twitter': { platform: 'poster', forceType: 'design' },
+    };
+    const mapping = platformMap[item.platform] || { platform: 'poster' };
+    const taskType: 'video' | 'design' = mapping.forceType || (item.type === 'video' ? 'video' : 'design');
+    const dueDate = new Date(item.year, item.month, item.day);
+    const task = {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      type: taskType,
+      platform: mapping.platform,
+      title: item.title,
+      brief: item.description,
+      assignee: '',
+      due: dueDate.toISOString().split('T')[0],
+      status: 'inprogress',
+      checks: {},
+      reviewLink: item.link,
+    };
+    try {
+      const existingRaw = localStorage.getItem('titanleap_pending_production');
+      const existing = existingRaw ? JSON.parse(existingRaw) : [];
+      existing.push(task);
+      localStorage.setItem('titanleap_pending_production', JSON.stringify(existing));
+      toast.success('Sent to Production queue', {
+        description: `${item.title} added to the ${taskType === 'video' ? 'Video Editor' : 'Designer'} lane.`
+      });
+    } catch (err) {
+      console.error('Failed to send to production:', err);
+      toast.error('Failed to send to production queue');
+    }
+  };
+
   const handleGenerateScripts = async () => {
     if (!handle) return;
     setIsGenerating(true);
@@ -1877,6 +1914,16 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                                         className="text-[8px] font-black uppercase tracking-widest text-primary hover:underline"
                                       >
                                         Edit
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleSendToProduction(item);
+                                        }}
+                                        className="text-[8px] font-black uppercase tracking-widest text-emerald-600 hover:underline flex items-center gap-0.5"
+                                        title="Send to Production"
+                                      >
+                                        <Rocket size={9} />
                                       </button>
                                       <span className="text-[8px] font-black uppercase tracking-widest opacity-40">{item.status}</span>
                                     </div>
