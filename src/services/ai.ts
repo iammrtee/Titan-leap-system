@@ -94,6 +94,48 @@ export const generateNotionContent = async (userPrompt: string) => {
   }
 };
 
+export const generateCalendarFromBlueprint = async (auditData: any, plan: any) => {
+  const planSummary = plan ? JSON.stringify(plan).slice(0, 6000) : 'No blueprint generated yet.';
+  const prompt = `
+    You are an expert content strategist. Using the business audit and 30-day growth blueprint below, draft a complete 30-day content calendar.
+
+    BUSINESS: ${auditData?.businessName || 'The Brand'}
+    INDUSTRY: ${auditData?.industry || 'Not specified'}
+    PRIMARY PLATFORM: ${auditData?.primaryPlatform || 'Instagram, TikTok, LinkedIn'}
+    MAIN OFFER: ${auditData?.mainOffer || 'Not specified'}
+
+    GROWTH BLUEPRINT (platform mix, cadence, content pillars, hooks, and KPIs to reflect in the calendar):
+    ${planSummary}
+
+    Generate exactly 30 content ideas, one for each of the next 30 days (dayOffset 0 to 29), that bring this blueprint to life. Vary the platform mix and content pillars/themes according to the blueprint's recommendations. Each idea must be specific to this business — no generic filler.
+
+    Return a JSON array of objects with the following structure:
+    [
+      {
+        "title": "Short catchy title",
+        "description": "Detailed description of the post/video, tied to a blueprint theme or pillar",
+        "platform": "Instagram" | "TikTok" | "LinkedIn" | "Twitter" | "YouTube",
+        "type": "video" | "article" | "post",
+        "time": "09:00 AM",
+        "dayOffset": number (0 to 29),
+        "tags": ["tag1", "tag2"]
+      }
+    ]
+  `;
+
+  try {
+    const response = await unifiedGenerateContent({
+      prompt,
+      responseMimeType: "application/json",
+    });
+
+    return parseJSON(response.text, []);
+  } catch (error) {
+    console.error("AI Generation Error:", error);
+    throw error;
+  }
+};
+
 export const generateContentScripts = async (handle: string, mode: string) => {
   const isPerLink = mode === 'per-link';
   
