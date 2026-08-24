@@ -54,12 +54,27 @@ const unifiedGenerateContent = async (options: {
 const parseJSON = (text: string | undefined, fallback: any = {}) => {
   if (!text) return fallback;
   try {
-    const cleaned = text.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
-    return JSON.parse(cleaned);
+    return JSON.parse(text.trim());
+  } catch {}
+  try {
+    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (fenceMatch) {
+      return JSON.parse(fenceMatch[1].trim());
+    }
+  } catch {}
+  try {
+    const firstBracket = text.search(/[\[{]/);
+    if (firstBracket !== -1) {
+      const isArray = text[firstBracket] === '[';
+      const lastBracket = text.lastIndexOf(isArray ? ']' : '}');
+      if (lastBracket > firstBracket) {
+        return JSON.parse(text.slice(firstBracket, lastBracket + 1));
+      }
+    }
   } catch (e) {
     console.error("Failed to parse JSON:", text);
-    return fallback;
   }
+  return fallback;
 };
 
 export const generateNotionContent = async (userPrompt: string) => {
