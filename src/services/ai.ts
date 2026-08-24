@@ -429,40 +429,42 @@ export const generate30DayPlan = async (auditData: any) => {
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     OUTPUT FORMAT
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    BE CONCISE. This is a planning calendar, not full scripts — every field below has a hard length limit. Do not write multi-paragraph messages or slide-by-slide breakdowns.
+
     The output MUST be a JSON object with the following structure exactly:
     {
       "calendar": [
         {
           "date": "Day 1",
           "platform": "Instagram | TikTok | LinkedIn | Twitter | YouTube",
-          "pillar": "string",
-          "format": "string",
-          "viralMechanic": "string",
-          "hook": "string",
-          "message": "string",
-          "cta": "string",
-          "hashtags": "string",
+          "pillar": "string (2-4 words)",
+          "format": "string (2-4 words)",
+          "viralMechanic": "string (2-4 words)",
+          "hook": "string (max 15 words)",
+          "message": "string (1-2 short sentences max, no slide-by-slide breakdowns)",
+          "cta": "string (max 10 words)",
+          "hashtags": "string (3-5 tags max)",
           "postTime": "string",
-          "notes": "string"
+          "notes": "string (max 8 words, or omit)"
         }
       ],
       "strategicSyncSummary": [
-        "Paragraph 1: The narrative arc and thematic flow across the 30 days",
-        "Paragraph 2: How the platform sync strategy drives cross-platform amplification",
-        "Paragraph 3: The #1 viral bet of the calendar and why it will work"
+        "Paragraph 1 (2-3 sentences): The narrative arc and thematic flow across the 30 days",
+        "Paragraph 2 (2-3 sentences): How the platform sync strategy drives cross-platform amplification",
+        "Paragraph 3 (2-3 sentences): The #1 viral bet of the calendar and why it will work"
       ],
       "weeklyKPIs": [
         { "kpi": "string", "target": "string" }
       ],
       "abTestPlan": [
-        { "hypothesis": "string", "variable": "string", "successMetric": "string" }
+        { "hypothesis": "string (1 sentence)", "variable": "string", "successMetric": "string" }
       ],
       "hookLibrary": [
-        "string (hook 1)", "string (hook 2)"
+        "string (hook 1, max 15 words)", "string (hook 2, max 15 words)"
       ]
     }
     
-    Ensure exactly 30 items in the "calendar" array.
+    Ensure exactly 30 items in the "calendar" array, exactly 4 items in "weeklyKPIs" (one per week), exactly 3 items in "abTestPlan", and exactly 10 items in "hookLibrary". Stay within every length limit above — brevity is required, not optional.
   `;
 
   try {
