@@ -31,7 +31,7 @@ import {
   FileCode2
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { auditLandingPage, smartFillForm, getAIEngine, setAIEngine, type AIEngine } from '@/src/services/ai';
+import { auditLandingPage, smartFillForm, generate90DayBlueprint, getAIEngine, setAIEngine, type AIEngine } from '@/src/services/ai';
 import { supabase } from '@/src/services/supabase';
 import { toast } from 'sonner';
 import { Sparkles, Wand2, Loader2, FileDown, Printer, RefreshCw } from 'lucide-react';
@@ -136,6 +136,8 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
   const [auditReport, setAuditReport] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'intake' | 'result' | 'strategy'>('intake');
   const [strategyTimestamp, setStrategyTimestamp] = useState(0);
+  const [detailedBlueprint, setDetailedBlueprint] = useState<any>(null);
+  const [isGeneratingBlueprint, setIsGeneratingBlueprint] = useState(false);
   const reportRef = React.useRef<HTMLDivElement>(null);
 
   // Persistence: Load saved data on mount
@@ -164,12 +166,48 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
         console.error("Failed to parse saved audit report", e);
       }
     }
+
+    const savedBlueprint = localStorage.getItem('titanleap_90day_blueprint');
+    if (savedBlueprint) {
+      try {
+        const parsedBlueprint = JSON.parse(savedBlueprint);
+        if (parsedBlueprint && parsedBlueprint.phases) {
+          setDetailedBlueprint(parsedBlueprint);
+        }
+      } catch (e) {
+        console.error("Failed to parse saved 90-day blueprint", e);
+      }
+    }
   }, []);
 
   // Persistence: Save data on change
   useEffect(() => {
     localStorage.setItem('titanleap_audit_form', JSON.stringify(formData));
   }, [formData]);
+
+  useEffect(() => {
+    if (detailedBlueprint && detailedBlueprint.phases) {
+      localStorage.setItem('titanleap_90day_blueprint', JSON.stringify(detailedBlueprint));
+    }
+  }, [detailedBlueprint]);
+
+  const handleGenerateBlueprint = async () => {
+    if (!auditReport) return;
+    setIsGeneratingBlueprint(true);
+    try {
+      const blueprint = await generate90DayBlueprint(auditReport);
+      if (blueprint && blueprint.phases) {
+        setDetailedBlueprint(blueprint);
+      } else {
+        toast.error("Failed to generate detailed blueprint. Please try again.");
+      }
+    } catch (e) {
+      console.error("Failed to generate 90-day blueprint", e);
+      toast.error("Failed to generate detailed blueprint. Please try again.");
+    } finally {
+      setIsGeneratingBlueprint(false);
+    }
+  };
 
   useEffect(() => {
     if (auditReport) {
@@ -1075,16 +1113,13 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
         ) : activeTab === 'strategy' ? (
           <div>
             {auditReport ? (
-              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:400,gap:24,textAlign:'center',padding:'48px 24px',background:'#06030D',color:'#EDE9F5'}}>
-                <div style={{width:64,height:64,borderRadius:16,background:'#100823',border:'1px solid #1F1430',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>🚀</div>
-                <div>
-                  <h3 style={{fontSize:21,fontWeight:800,margin:'0 0 8px'}}>Growth Blueprint Ready</h3>
-                  <p style={{fontSize:15,color:'#9B91B4',maxWidth:'40ch',margin:0}}>Your 30-day strategy, content calendar, and blueprint live in Strategy Hub — not here.</p>
-                </div>
-                <button onClick={() => (onViewStrategy || onStartStrategy) && (onViewStrategy || onStartStrategy)(auditReport)} style={{padding:'14px 28px',background:'#6B21E8',color:'#EDE9F5',border:'none',borderRadius:10,fontWeight:700,fontSize:13,textTransform:'uppercase',letterSpacing:'0.1em',cursor:'pointer'}}>
-                  Open in Strategy Hub
-                </button>
-              </div>
+              <NinetyDayBlueprintView
+                auditReport={auditReport}
+                detailedBlueprint={detailedBlueprint}
+                isGenerating={isGeneratingBlueprint}
+                onGenerate={handleGenerateBlueprint}
+                onViewStrategy={() => (onViewStrategy || onStartStrategy) && (onViewStrategy || onStartStrategy)(auditReport)}
+              />
             ) : (
               <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:400,gap:24,textAlign:'center',padding:'48px 24px',background:'#06030D',color:'#EDE9F5'}}>
                 <div style={{width:64,height:64,borderRadius:16,background:'#100823',border:'1px solid #1F1430',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>🚀</div>
@@ -1108,6 +1143,132 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
 
 
 // Helper Components
+const NinetyDayBlueprintView = ({ auditReport, detailedBlueprint, isGenerating, onGenerate, onViewStrategy }: {
+  auditReport: any;
+  detailedBlueprint: any;
+  isGenerating: boolean;
+  onGenerate: () => void;
+  onViewStrategy: () => void;
+}) => {
+  const roadmap = auditReport?.roadmap;
+  const months = [1, 2, 3];
+
+  return (
+    <div style={{ background: '#06030D', color: '#EDE9F5', borderRadius: 24, padding: '32px 24px' }}>
+      <div style={{ marginBottom: 28 }}>
+        <h3 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 6px' }}>90-Day Growth Blueprint</h3>
+        <p style={{ fontSize: 14, color: '#9B91B4', margin: 0 }}>Built from your audit results — here's what the next 90 days look like.</p>
+      </div>
+
+      {roadmap ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 28 }}>
+          {months.map((m) => {
+            const phase = roadmap[`month${m}`];
+            if (!phase) return null;
+            return (
+              <div key={m} style={{ background: '#100823', border: '1px solid #1F1430', borderRadius: 16, padding: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#A78BFA', marginBottom: 8 }}>Month {m}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>{phase.focus}</div>
+                <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(phase.actions || []).map((action: string, i: number) => (
+                    <li key={i} style={{ fontSize: 13, color: '#C9C2DB', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <span style={{ color: '#6B21E8', fontWeight: 800 }}>·</span>
+                      <span>{action}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p style={{ fontSize: 14, color: '#9B91B4', marginBottom: 28 }}>No roadmap found in this audit result.</p>
+      )}
+
+      {!detailedBlueprint ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '28px 16px', background: '#100823', border: '1px dashed #1F1430', borderRadius: 16, marginBottom: 24 }}>
+          <p style={{ fontSize: 13, color: '#9B91B4', margin: 0, textAlign: 'center', maxWidth: '46ch' }}>
+            Want the week-by-week version? Generate a detailed blueprint with weekly milestones and KPIs for each month.
+          </p>
+          <button
+            onClick={onGenerate}
+            disabled={isGenerating}
+            style={{ padding: '12px 24px', background: isGenerating ? '#3A2A5C' : '#6B21E8', color: '#EDE9F5', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em', cursor: isGenerating ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+          >
+            {isGenerating && <Loader2 size={14} className="animate-spin" />}
+            {isGenerating ? 'Generating…' : 'Generate Detailed Blueprint'}
+          </button>
+        </div>
+      ) : (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h4 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>Week-by-Week Detail</h4>
+            <button
+              onClick={onGenerate}
+              disabled={isGenerating}
+              style={{ background: 'transparent', border: '1px solid #1F1430', color: '#9B91B4', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', cursor: isGenerating ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              {isGenerating && <Loader2 size={12} className="animate-spin" />}
+              Regenerate
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {(detailedBlueprint.phases || []).map((phase: any, idx: number) => (
+              <div key={idx} style={{ background: '#100823', border: '1px solid #1F1430', borderRadius: 16, padding: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#A78BFA', marginBottom: 4 }}>Month {phase.month}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{phase.theme}</div>
+                <p style={{ fontSize: 13, color: '#9B91B4', margin: '0 0 16px' }}>{phase.objective}</p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 16 }}>
+                  {(phase.weeks || []).map((week: any, wIdx: number) => (
+                    <div key={wIdx} style={{ background: '#06030D', border: '1px solid #1F1430', borderRadius: 12, padding: 12 }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#6B21E8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Week {week.week}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{week.focus}</div>
+                      <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {(week.milestones || []).map((ms: string, mIdx: number) => (
+                          <li key={mIdx} style={{ fontSize: 11, color: '#C9C2DB' }}>– {ms}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+
+                {phase.kpis && phase.kpis.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {phase.kpis.map((kpi: any, kIdx: number) => (
+                      <span key={kIdx} style={{ fontSize: 11, background: '#1F1430', color: '#C9C2DB', borderRadius: 999, padding: '4px 12px' }}>
+                        {kpi.metric}: <strong style={{ color: '#EDE9F5' }}>{kpi.target}</strong>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {detailedBlueprint.milestones90Day && detailedBlueprint.milestones90Day.length > 0 && (
+            <div style={{ marginTop: 20, background: '#100823', border: '1px solid #1F1430', borderRadius: 16, padding: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>90-Day Milestones</div>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {detailedBlueprint.milestones90Day.map((ms: string, i: number) => (
+                  <li key={i} style={{ fontSize: 13, color: '#C9C2DB' }}>🎯 {ms}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
+        <button onClick={onViewStrategy} style={{ background: 'transparent', border: '1px solid #1F1430', color: '#9B91B4', padding: '10px 20px', borderRadius: 10, fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', cursor: 'pointer' }}>
+          Open 30-Day Content Calendar in Strategy Hub
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const CollapsibleSection = ({ id, title, isOpen, isComplete, onToggle, children }: any) => (
   <div className={cn(
     "rounded-[32px] border transition-all duration-500 overflow-hidden",
