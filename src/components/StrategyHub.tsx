@@ -707,7 +707,10 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     
     if (savedPlan) {
       try {
-        setThirtyDayPlan(JSON.parse(savedPlan));
+        const parsedPlan = JSON.parse(savedPlan);
+        if (parsedPlan && parsedPlan.strategicSyncSummary) {
+          setThirtyDayPlan(parsedPlan);
+        }
       } catch (e) {
         console.error("Failed to parse saved plan", e);
       }
@@ -724,7 +727,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
 
   // Persistence: Save data on change
   useEffect(() => {
-    if (thirtyDayPlan) {
+    if (thirtyDayPlan && thirtyDayPlan.strategicSyncSummary) {
       localStorage.setItem('titanleap_strategy_plan', JSON.stringify(thirtyDayPlan));
     }
   }, [thirtyDayPlan]);
@@ -963,7 +966,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       
       const plan = await generate30DayPlan(auditData);
       
-      if (plan) {
+      if (plan && plan.strategicSyncSummary) {
         setGenerationState('completed');
         setThirtyDayPlan(plan);
         // Keep the completed state visible for a moment before resetting
