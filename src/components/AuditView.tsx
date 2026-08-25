@@ -31,10 +31,10 @@ import {
   FileCode2
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { auditLandingPage, smartFillForm, generate90DayBlueprint, getAIEngine, setAIEngine, type AIEngine } from '@/src/services/ai';
+import { auditLandingPage, smartFillForm, generate90DayBlueprint, researchSocialPresence, type SocialResearchResult, getAIEngine, setAIEngine, type AIEngine } from '@/src/services/ai';
 import { supabase } from '@/src/services/supabase';
 import { toast } from 'sonner';
-import { Sparkles, Wand2, Loader2, FileDown, Printer, RefreshCw } from 'lucide-react';
+import { Sparkles, Wand2, Loader2, FileDown, Printer, RefreshCw, Search } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
 import { Logo } from './Logo';
@@ -138,6 +138,8 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
   const [strategyTimestamp, setStrategyTimestamp] = useState(0);
   const [detailedBlueprint, setDetailedBlueprint] = useState<any>(null);
   const [isGeneratingBlueprint, setIsGeneratingBlueprint] = useState(false);
+  const [socialResearch, setSocialResearch] = useState<SocialResearchResult | null>(null);
+  const [isResearchingSocial, setIsResearchingSocial] = useState(false);
   const reportRef = React.useRef<HTMLDivElement>(null);
   const blueprintRef = React.useRef<HTMLDivElement>(null);
 
@@ -207,6 +209,42 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
       toast.error("Failed to generate detailed blueprint. Please try again.");
     } finally {
       setIsGeneratingBlueprint(false);
+    }
+  };
+
+  const handleResearchSocial = async () => {
+    const handle = formData.socialHandles.find(h => h.trim() !== '');
+    if (!formData.primaryPlatform || !handle) {
+      toast.error("Add a primary platform and at least one handle first.");
+      return;
+    }
+    setIsResearchingSocial(true);
+    setSocialResearch(null);
+    try {
+      const research = await researchSocialPresence(formData.primaryPlatform, handle);
+      setSocialResearch(research);
+
+      if (research.data_quality === 'insufficient') {
+        toast.warning("Couldn't verify enough on this profile — left reach/consistency for you to fill in.");
+        return;
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        postingConsistently: research.posting_consistency === 'yes' ? 'Yes'
+          : research.posting_consistency === 'no' ? 'No'
+          : research.posting_consistency === 'sometimes' ? 'Sometimes'
+          : prev.postingConsistently,
+        monthlyReach: (research.follower_count != null && !prev.monthlyReach)
+          ? String(research.follower_count)
+          : prev.monthlyReach,
+      }));
+      toast.success("Social presence research complete.");
+    } catch (e: any) {
+      console.error("Social research failed", e);
+      toast.error(e?.message || "Social research failed. Please try again.");
+    } finally {
+      setIsResearchingSocial(false);
     }
   };
 
@@ -419,7 +457,8 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
         style: {
           transform: 'scale(1)',
           transformOrigin: 'top left'
-        }
+        },
+        filter: (node) => !(node instanceof HTMLElement && node.getAttribute('data-pdf-hide') === 'true')
       });
       
       // Calculate dimensions to fit A4 if possible, or use canvas size
@@ -919,6 +958,85 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                       ))}
                     </div>
                   </InputGroup>
+
+                  <div className="pt-2 border-t border-outline-variant/30">
+                    <button
+                      onClick={handleResearchSocial}
+                      disabled={isResearchingSocial || !formData.primaryPlatform || !formData.socialHandles.some(h => h.trim() !== '')}
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary/10 text-primary text-xs font-black uppercase tracking-widest hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {isResearchingSocial ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                      {isResearchingSocial ? 'Researching profile…' : 'Research this profile'}
+                    </button>
+                    <p className="text-[11px] text-on-surface-variant/60 mt-2 leading-relaxed">
+                      Actually reads the handle above — no guessing. Fields only fill in when we find real evidence on the profile.
+                    </p>
+
+                    {socialResearch && (
+                      <div className="mt-4 p-4 rounded-xl bg-surface-container-highest space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">
+                            Research result
+                          </span>
+                          <span className={cn(
+                            "text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full",
+                            socialResearch.data_quality === 'sufficient' ? "bg-primary/15 text-primary" :
+                            socialResearch.data_quality === 'partial' ? "bg-amber-500/15 text-amber-600" :
+                            "bg-error/15 text-error"
+                          )}>
+                            {socialResearch.data_quality}
+                          </span>
+                        </div>
+
+                        {socialResearch.data_quality === 'insufficient' ? (
+                          <p className="text-xs text-on-surface-variant/80">
+                            Couldn't verify this profile (private, handle mismatch, or no visible activity). Fill in reach and posting consistency manually.
+                          </p>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-2 gap-3 text-xs">
+                              <div>
+                                <div className="text-on-surface-variant/50 uppercase tracking-widest text-[10px] mb-0.5">Followers</div>
+                                <div className="font-bold text-on-surface">{socialResearch.follower_count ?? 'Not visible'}</div>
+                              </div>
+                              <div>
+                                <div className="text-on-surface-variant/50 uppercase tracking-widest text-[10px] mb-0.5">Posts / 30d</div>
+                                <div className="font-bold text-on-surface">{socialResearch.posts_last_30_days ?? 'Not visible'}</div>
+                              </div>
+                            </div>
+
+                            {socialResearch.content_themes?.length > 0 && (
+                              <div>
+                                <div className="text-on-surface-variant/50 uppercase tracking-widest text-[10px] mb-1">Content themes</div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {socialResearch.content_themes.map((t, i) => (
+                                    <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-surface text-on-surface-variant">{t}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {socialResearch.tone && (
+                              <div>
+                                <div className="text-on-surface-variant/50 uppercase tracking-widest text-[10px] mb-0.5">Tone</div>
+                                <div className="text-xs text-on-surface">{socialResearch.tone}</div>
+                              </div>
+                            )}
+
+                            {socialResearch.specific_signal?.found && (
+                              <div className="pt-2 border-t border-outline-variant/30">
+                                <div className="text-on-surface-variant/50 uppercase tracking-widest text-[10px] mb-1">Specific signal</div>
+                                <p className="text-xs text-on-surface leading-relaxed">{socialResearch.specific_signal.description}</p>
+                                {socialResearch.relatability_hook && (
+                                  <p className="text-xs italic text-primary mt-2 leading-relaxed">"{socialResearch.relatability_hook}"</p>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CollapsibleSection>
 
@@ -1176,7 +1294,7 @@ const NinetyDayBlueprintView = ({ auditReport, detailedBlueprint, isGenerating, 
       <div className="gb-topbar" style={{ padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${LINE}`, maxWidth: 760, margin: '0 auto' }}>
         <span style={{ ...M, fontSize: 11, color: INK_FAINT, letterSpacing: '0.12em' }}>TitanLeap · 90-Day Growth Blueprint</span>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onExport} disabled={isExporting} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_DIM, background: CARD, border: `1px solid ${LINE_BR}`, borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>
+          <button data-pdf-hide="true" onClick={onExport} disabled={isExporting} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_DIM, background: CARD, border: `1px solid ${LINE_BR}`, borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>
             {isExporting ? 'Exporting…' : '↓ PDF'}
           </button>
         </div>
@@ -1260,7 +1378,7 @@ const NinetyDayBlueprintView = ({ auditReport, detailedBlueprint, isGenerating, 
             <p style={{ color: INK_DIM, fontSize: 15, maxWidth: '48ch', margin: '0 auto 30px' }}>
               Generate a detailed blueprint with weekly milestones and KPIs for each month.
             </p>
-            <button onClick={onGenerate} disabled={isGenerating} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: isGenerating ? CARD_HI : GOLD, color: isGenerating ? INK_DIM : '#1a1205', fontWeight: 700, fontSize: 14, padding: '14px 30px', borderRadius: 8, border: 'none', cursor: isGenerating ? 'default' : 'pointer', letterSpacing: '0.01em', boxShadow: isGenerating ? 'none' : '0 8px 30px rgba(245,197,24,.2)' }}>
+            <button data-pdf-hide="true" onClick={onGenerate} disabled={isGenerating} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: isGenerating ? CARD_HI : GOLD, color: isGenerating ? INK_DIM : '#1a1205', fontWeight: 700, fontSize: 14, padding: '14px 30px', borderRadius: 8, border: 'none', cursor: isGenerating ? 'default' : 'pointer', letterSpacing: '0.01em', boxShadow: isGenerating ? 'none' : '0 8px 30px rgba(245,197,24,.2)' }}>
               {isGenerating && <Loader2 size={16} className="animate-spin" />}
               {isGenerating ? 'Generating…' : 'Generate Detailed Blueprint'}
             </button>
@@ -1271,7 +1389,7 @@ const NinetyDayBlueprintView = ({ auditReport, detailedBlueprint, isGenerating, 
           <div style={W}>
             <div className="gb-sec-head" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
               <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_FAINT }}>Week-by-Week Detail</div>
-              <button onClick={onGenerate} disabled={isGenerating} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_DIM, background: 'transparent', border: `1px solid ${LINE_BR}`, borderRadius: 4, padding: '6px 12px', cursor: isGenerating ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button data-pdf-hide="true" onClick={onGenerate} disabled={isGenerating} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_DIM, background: 'transparent', border: `1px solid ${LINE_BR}`, borderRadius: 4, padding: '6px 12px', cursor: isGenerating ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                 {isGenerating && <Loader2 size={11} className="animate-spin" />}
                 Regenerate
               </button>
@@ -1537,8 +1655,8 @@ const RevenueLeakBlueprint: React.FC<{
       <div className="rlb-topbar" style={{ padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${LINE}`, maxWidth: 760, margin: '0 auto' }}>
         <span style={{ ...M, fontSize: 11, color: INK_FAINT, letterSpacing: '0.12em' }}>TitanLeap · Revenue Leak Audit</span>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onBack} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_FAINT, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>← Edit</button>
-          <button onClick={onExport} disabled={isExporting} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_DIM, background: CARD, border: `1px solid ${LINE_BR}`, borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>
+          <button data-pdf-hide="true" onClick={onBack} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_FAINT, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>← Edit</button>
+          <button data-pdf-hide="true" onClick={onExport} disabled={isExporting} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_DIM, background: CARD, border: `1px solid ${LINE_BR}`, borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>
             {isExporting ? 'Exporting…' : '↓ PDF'}
           </button>
         </div>
