@@ -232,6 +232,40 @@ Return ONLY the JSON. No markdown. No explanation.`;
   });
 
   // Social Presence Research (protected) â real web_search-backed lookup, no guessing
+  // Scrapes a real Instagram profile via Apify's Instagram Profile Scraper actor.
+  // Returns null (never throws) if APIFY_API_TOKEN isn't set, the request fails, or the
+  // profile can't be found/is private â callers must fall back to the web-search path.
+  async function scrapeInstagramProfile(handle: string): Promise<any | null> {
+    const token = process.env.APIFY_API_TOKEN;
+    if (!token) return null;
+    try {
+      const usernameMatch = handle.match(/instagram\.com\/([A-Za-z0-9._]+)/i);
+      const username = (usernameMatch ? usernameMatch[1] : handle).replace(/^@/, '').replace(/\/$/, '').trim();
+      if (!username) return null;
+
+      const apifyRes = await fetch(
+        `https://api.apify.com/v2/actors/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${token}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ usernames: [username] }),
+        }
+      );
+      if (!apifyRes.ok) {
+        console.error("[ApifyInstagram] non-OK response:", apifyRes.status);
+        return null;
+      }
+      const items = await apifyRes.json();
+      if (!Array.isArray(items) || items.length === 0) return null;
+      const profile = items[0];
+      if (!profile || profile.private) return null;
+      return profile;
+    } catch (err: any) {
+      console.error("[ApifyInstagram] scrape failed:", err?.message || err);
+      return null;
+    }
+  }
+
   app.post("/api/ai/social-research", requireInternalAuth, async (req, res) => {
     try {
       const { platform, handle } = req.body;
@@ -239,7 +273,20 @@ Return ONLY the JSON. No markdown. No explanation.`;
         return res.status(400).json({ error: "platform and profile link are required" });
       }
 
-      const prompt = `You are the Smart Fill research step for TitanLeap's Audit intake form. You will be given:
+      const scrapedProfile = platform === "Instagram" ? await scrapeInstagramProfile(handle) : null;
+
+      const prompt = scrapedProfile ? `You are the Smart Fill research step for TitanLeap's Audit intake form. You have been
+given REAL, freshly-scraped Instagram profile data below â pulled directly from the profile via
+API, not a guess. Use ONLY what is present in this data. Do not invent or estimate anything not
+shown here.
+
+Primary Platform: ${platform}
+Profile Link: ${handle}
+
+SCRAPED PROFILE DATA (JSON):
+${JSON.stringify(scrapedProfile).slice(0, 12000)}
+
+WHAT TO LOOK FOR:` : `You are the Smart Fill research step for TitanLeap's Audit intake form. You will be given:
 - Primary Platform (e.g. LinkedIn, X/Twitter, Instagram)
 - A Profile Link (a full URL to the person or business's profile â open it directly. If what's
   given is a bare handle instead of a URL, search for and open the matching profile on the stated
@@ -305,7 +352,7 @@ Return ONLY the JSON. No markdown. No explanation.`;
       const result = await generateClaudeContent({
         prompt,
         apiKey: process.env.CLAUDE_API_KEY,
-        useWebSearch: true,
+        useWebSearch: !scrapedProfile,
         temperature: 0.3,
       });
 
