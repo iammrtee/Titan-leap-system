@@ -118,7 +118,7 @@ const INITIAL_FORM_DATA: FormData = {
 
 const INDUSTRIES = ['B2B SaaS', 'E-commerce', 'Coaching/Consulting', 'Agency', 'Local Business', 'Other'];
 const DURATIONS = ['Less than 6 months', '6–12 months', '1–3 years', '3+ years'];
-const PLATFORMS = ['Instagram', 'TikTok', 'YouTube', 'LinkedIn', 'Twitter-X', 'Other'];
+const PLATFORMS = ['Instagram', 'Facebook', 'TikTok', 'YouTube', 'LinkedIn', 'Twitter-X', 'Other'];
 const TIMELINES = ['30 days', '60 days', '90 days', '6 months', '1 year'];
 const CHALLENGES = ['Getting leads', 'Converting leads', 'Retaining clients', 'Content creation', 'Ads not working', 'No clear strategy', 'Other'];
 const TOOLS = ['Mailchimp', 'ConvertKit', 'ClickFunnels', 'Webflow', 'Shopify', 'Kajabi', 'None', 'Other'];
