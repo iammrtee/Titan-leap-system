@@ -384,6 +384,10 @@ OUTPUT FORMAT (JSON):
   "relatability_hook": "one warm, specific line referencing the signal above â only generate
    this if specific_signal.found is true; otherwise null"
 }
+CRITICAL OUTPUT RULE: Your entire response must be nothing but the raw JSON object above.
+No markdown heading, no title, no bullet points, no commentary before or after, no code fence.
+The very first character of your response must be "{" and the very last character must be "}".
+
 Return ONLY the JSON. No markdown. No explanation.`;
 
       const { generateClaudeContent } = await import("./src/services/claude.ts");
