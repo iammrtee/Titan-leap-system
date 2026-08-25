@@ -625,6 +625,43 @@ Return ONLY the JSON. No markdown. No explanation.`;
   }
 };
 
+export type SocialResearchResult = {
+  platform: string;
+  handle: string;
+  data_quality: 'sufficient' | 'insufficient' | 'partial';
+  posting_consistency: 'yes' | 'no' | 'sometimes' | 'unknown';
+  posts_last_30_days: number | null;
+  follower_count: number | null;
+  avg_engagement_per_post: number | null;
+  content_themes: string[];
+  tone: string;
+  specific_signal: {
+    found: boolean;
+    description: string | null;
+    post_url_or_reference: string | null;
+    date: string | null;
+  };
+  relatability_hook: string | null;
+};
+
+// Real research (not inference) on a social handle, backed by Claude's web_search tool
+// server-side. Every field traces back to something actually found on the profile â
+// fields are left null/"insufficient" rather than guessed when the profile can't be verified.
+export const researchSocialPresence = async (platform: string, handle: string): Promise<SocialResearchResult> => {
+  const response = await fetch('/api/ai/social-research', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform, handle }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Social research failed' }));
+    throw new Error(err.error || 'Social research failed');
+  }
+
+  return await response.json();
+};
+
 export const analyzeSocialTrends = async (platform: string) => {
   const prompt = `
     Analyze current social media trends for the platform: ${platform}.
