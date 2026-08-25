@@ -47,6 +47,7 @@ export const generateClaudeContent = async (params: {
   apiKey?: string;
   model?: string;
   useWebSearch?: boolean;
+  prefillAssistant?: string;
 }) => {
   // If in browser, call the server proxy
   if (typeof window !== 'undefined') {
@@ -109,7 +110,14 @@ export const generateClaudeContent = async (params: {
               text: params.prompt
             }
           ]
-        }
+        },
+        // Prefilling the assistant turn forces the response to start exactly here —
+        // used to guarantee raw JSON output (no markdown/prose) without relying on the
+        // model to follow a "return only JSON" instruction on its own.
+        ...(params.prefillAssistant ? [{
+          role: "assistant" as const,
+          content: [{ type: "text" as const, text: params.prefillAssistant }]
+        }] : [])
       ],
       ...(params.useWebSearch ? {
         tools: [
@@ -126,9 +134,13 @@ export const generateClaudeContent = async (params: {
       .filter((block: any) => block.type === 'text')
       .map((block: any) => block.text)
       .join('\n');
-    
+
+    // The prefill text isn't echoed back by the API, so stitch it back onto the front
+    // of the response to reconstruct the full JSON string.
+    const fullText = params.prefillAssistant ? params.prefillAssistant + text : text;
+
     return {
-      text,
+      text: fullText,
       response
     };
   } catch (error: any) {
