@@ -236,9 +236,9 @@ Return ONLY the JSON. No markdown. No explanation.`;
   // Returns null (never throws) if APIFY_API_TOKEN isn't set, the request fails, or the
   // profile can't be found/is private â callers must fall back to the web-search path.
   // In-memory cache so repeat clicks / re-renders on the same handle don't re-bill
-  // Apify credits â a scrape is reused for 6 hours before we hit the API again.
+  // Apify credits â a scrape is reused for 12 hours before we hit the API again.
   const instagramScrapeCache = new Map<string, { data: any; expiresAt: number }>();
-  const INSTAGRAM_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+  const INSTAGRAM_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
   async function scrapeInstagramProfile(handle: string): Promise<any | null> {
     const token = process.env.APIFY_API_TOKEN;
