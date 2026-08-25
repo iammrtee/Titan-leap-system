@@ -139,6 +139,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
   const [detailedBlueprint, setDetailedBlueprint] = useState<any>(null);
   const [isGeneratingBlueprint, setIsGeneratingBlueprint] = useState(false);
   const reportRef = React.useRef<HTMLDivElement>(null);
+  const blueprintRef = React.useRef<HTMLDivElement>(null);
 
   // Persistence: Load saved data on mount
   useEffect(() => {
@@ -373,11 +374,11 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
     }
   };
 
-  const handleExportPDF = async () => {
-    if (!auditReport || !reportRef.current) return;
+  const handleExportPDF = async (targetRef: React.RefObject<HTMLDivElement>, fileNamePrefix: string) => {
+    if (!auditReport || !targetRef.current) return;
     
     setIsExporting(true);
-    const container = reportRef.current;
+    const container = targetRef.current;
     const parent = container.parentElement;
     let originalLeft = '';
     let originalTop = '';
@@ -430,7 +431,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
       
       pdf.addImage(imgData, 'PNG', 0, 0, container.scrollWidth, container.scrollHeight, undefined, 'FAST');
       
-      const fileName = `TitanLeap_FunnelsPlus_${formData.businessName.trim().replace(/\s+/g, '_') || 'Report'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      const fileName = `TitanLeap_${fileNamePrefix}_${formData.businessName.trim().replace(/\s+/g, '_') || 'Report'}_${new Date().toISOString().split('T')[0]}.pdf`;
       pdf.save(fileName);
       
       toast.success("PDF Generated Successfully");
@@ -1092,7 +1093,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                   setStrategyTimestamp(Date.now());
                   setActiveTab('strategy');
                 }}
-                onExport={handleExportPDF}
+                onExport={() => handleExportPDF(reportRef, 'FunnelsPlus')}
                 isExporting={isExporting}
                 onBack={() => setActiveTab('intake')}
                 onClear={handleClearAudit}
@@ -1111,7 +1112,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
             )}
           </div>
         ) : activeTab === 'strategy' ? (
-          <div>
+          <div ref={blueprintRef}>
             {auditReport ? (
               <NinetyDayBlueprintView
                 auditReport={auditReport}
@@ -1119,6 +1120,8 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                 isGenerating={isGeneratingBlueprint}
                 onGenerate={handleGenerateBlueprint}
                 onViewStrategy={() => (onViewStrategy || onStartStrategy) && (onViewStrategy || onStartStrategy)(auditReport)}
+                onExport={() => handleExportPDF(blueprintRef, 'GrowthBlueprint')}
+                isExporting={isExporting}
               />
             ) : (
               <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:400,gap:24,textAlign:'center',padding:'48px 24px',background:'#06030D',color:'#EDE9F5'}}>
@@ -1143,102 +1146,161 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
 
 
 // Helper Components
-const NinetyDayBlueprintView = ({ auditReport, detailedBlueprint, isGenerating, onGenerate, onViewStrategy }: {
+const NinetyDayBlueprintView = ({ auditReport, detailedBlueprint, isGenerating, onGenerate, onViewStrategy, onExport, isExporting }: {
   auditReport: any;
   detailedBlueprint: any;
   isGenerating: boolean;
   onGenerate: () => void;
   onViewStrategy: () => void;
+  onExport: () => void;
+  isExporting: boolean;
 }) => {
   const roadmap = auditReport?.roadmap;
   const months = [1, 2, 3];
+  const phaseCount = months.filter((m) => roadmap?.[`month${m}`]).length;
 
   return (
-    <div style={{ background: '#06030D', color: '#EDE9F5', borderRadius: 24, padding: '32px 24px' }}>
-      <div style={{ marginBottom: 28 }}>
-        <h3 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 6px' }}>90-Day Growth Blueprint</h3>
-        <p style={{ fontSize: 14, color: '#9B91B4', margin: 0 }}>Built from your audit results — here's what the next 90 days look like.</p>
-      </div>
+    <div style={{ background: BG_DEEP, color: INK, fontFamily: "-apple-system,'SF Pro Display','Archivo',system-ui,sans-serif", lineHeight: 1.5, WebkitFontSmoothing: 'antialiased' }}>
+      <style>{`
+        @media (max-width: 540px) {
+          .gb-topbar   { flex-direction: column; gap: 10px; align-items: flex-start !important; }
+          .gb-meta-row { flex-direction: column !important; }
+          .gb-meta-row > div { border-right: none !important; border-bottom: 1px solid ${LINE}; padding: 14px 0 !important; min-width: unset !important; }
+          .gb-meta-row > div:last-child { border-bottom: none; }
+          .gb-sec-head { flex-direction: column !important; gap: 4px; }
+          .gb-weeks    { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
 
-      {roadmap ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 28 }}>
-          {months.map((m) => {
-            const phase = roadmap[`month${m}`];
-            if (!phase) return null;
-            return (
-              <div key={m} style={{ background: '#100823', border: '1px solid #1F1430', borderRadius: 16, padding: 20 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#A78BFA', marginBottom: 8 }}>Month {m}</div>
-                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>{phase.focus}</div>
-                <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {(phase.actions || []).map((action: string, i: number) => (
-                    <li key={i} style={{ fontSize: 13, color: '#C9C2DB', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                      <span style={{ color: '#6B21E8', fontWeight: 800 }}>·</span>
-                      <span>{action}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <p style={{ fontSize: 14, color: '#9B91B4', marginBottom: 28 }}>No roadmap found in this audit result.</p>
-      )}
-
-      {!detailedBlueprint ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '28px 16px', background: '#100823', border: '1px dashed #1F1430', borderRadius: 16, marginBottom: 24 }}>
-          <p style={{ fontSize: 13, color: '#9B91B4', margin: 0, textAlign: 'center', maxWidth: '46ch' }}>
-            Want the week-by-week version? Generate a detailed blueprint with weekly milestones and KPIs for each month.
-          </p>
-          <button
-            onClick={onGenerate}
-            disabled={isGenerating}
-            style={{ padding: '12px 24px', background: isGenerating ? '#3A2A5C' : '#6B21E8', color: '#EDE9F5', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em', cursor: isGenerating ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-          >
-            {isGenerating && <Loader2 size={14} className="animate-spin" />}
-            {isGenerating ? 'Generating…' : 'Generate Detailed Blueprint'}
+      {/* ── TOP BAR ── */}
+      <div className="gb-topbar" style={{ padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${LINE}`, maxWidth: 760, margin: '0 auto' }}>
+        <span style={{ ...M, fontSize: 11, color: INK_FAINT, letterSpacing: '0.12em' }}>TitanLeap · 90-Day Growth Blueprint</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onExport} disabled={isExporting} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_DIM, background: CARD, border: `1px solid ${LINE_BR}`, borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>
+            {isExporting ? 'Exporting…' : '↓ PDF'}
           </button>
         </div>
-      ) : (
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <h4 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>Week-by-Week Detail</h4>
-            <button
-              onClick={onGenerate}
-              disabled={isGenerating}
-              style={{ background: 'transparent', border: '1px solid #1F1430', color: '#9B91B4', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', cursor: isGenerating ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              {isGenerating && <Loader2 size={12} className="animate-spin" />}
-              Regenerate
-            </button>
+      </div>
+
+      {/* ── HEADER ── */}
+      <header style={{ padding: '64px 0 0', background: `radial-gradient(120% 80% at 80% -10%, rgba(107,33,232,.28), transparent 60%), ${BG_DEEP}`, borderBottom: `1px solid ${LINE}` }}>
+        <div style={W}>
+          <div style={{ ...M, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: GOLD, display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
+            <span style={{ display: 'inline-block', width: 26, height: 1, background: GOLD }} />
+            Growth Blueprint
           </div>
+          <h1 style={{ fontSize: 'clamp(34px,7vw,52px)', fontWeight: 800, lineHeight: 1.04, letterSpacing: '-0.02em', margin: '0 0 14px' }}>
+            Your next 90 days, mapped.
+          </h1>
+          <p style={{ color: INK_DIM, fontSize: 16, maxWidth: '50ch', marginBottom: 36 }}>
+            Built from your audit results — a phase-by-phase plan for turning the diagnosis into growth.
+          </p>
+          <div className="gb-meta-row" style={{ display: 'flex', flexWrap: 'wrap', borderTop: `1px solid ${LINE}`, marginTop: 8 }}>
+            {[
+              { k: 'Prepared for', v: auditReport?.businessName || '—' },
+              { k: 'Date', v: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) },
+              { k: 'Industry', v: auditReport?.industry || '—' },
+              { k: 'Phases', v: `${phaseCount || 3} months`, flag: true },
+            ].map((m, i, arr) => (
+              <div key={i} style={{ flex: 1, minWidth: 140, padding: '18px 20px 22px 0', borderRight: i < arr.length - 1 ? `1px solid ${LINE}` : 'none' }}>
+                <div style={{ ...M, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 7 }}>{m.k}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: (m as any).flag ? GOLD : INK }}>{m.v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </header>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {(detailedBlueprint.phases || []).map((phase: any, idx: number) => (
-              <div key={idx} style={{ background: '#100823', border: '1px solid #1F1430', borderRadius: 16, padding: 20 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#A78BFA', marginBottom: 4 }}>Month {phase.month}</div>
-                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{phase.theme}</div>
-                <p style={{ fontSize: 13, color: '#9B91B4', margin: '0 0 16px' }}>{phase.objective}</p>
+      {/* ── THE ROADMAP ── */}
+      <section style={{ padding: '52px 24px', borderBottom: `1px solid ${LINE}`, background: BG_DEEP }}>
+        <div style={W}>
+          <div className="gb-sec-head" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_FAINT }}>The Roadmap</div>
+            <div style={{ ...M, fontSize: 13, color: GOLD, fontWeight: 600 }}>{phaseCount || 3} phases · in order</div>
+          </div>
+          <p style={{ fontSize: 15, color: INK_DIM, marginBottom: 34, maxWidth: '54ch' }}>
+            Each month builds on the last — sequenced to fix what's diagnosed, not just fill a calendar.
+          </p>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 16 }}>
-                  {(phase.weeks || []).map((week: any, wIdx: number) => (
-                    <div key={wIdx} style={{ background: '#06030D', border: '1px solid #1F1430', borderRadius: 12, padding: 12 }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#6B21E8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Week {week.week}</div>
-                      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{week.focus}</div>
-                      <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {(week.milestones || []).map((ms: string, mIdx: number) => (
-                          <li key={mIdx} style={{ fontSize: 11, color: '#C9C2DB' }}>– {ms}</li>
-                        ))}
-                      </ul>
+          {roadmap ? months.map((mo) => {
+            const phase = roadmap[`month${mo}`];
+            if (!phase) return null;
+            return (
+              <div key={mo} style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 6, marginBottom: 20, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', padding: '24px 26px 20px', flexWrap: 'wrap' }}>
+                  <div style={{ ...M, fontSize: 13, fontWeight: 700, color: PURPLE, border: `1px solid ${LINE_BR}`, borderRadius: 6, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: BG_DEEP }}>
+                    {String(mo).padStart(2, '0')}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 160 }}>
+                    <div style={{ ...M, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 6 }}>Month {mo}</div>
+                    <h3 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', margin: 0 }}>{phase.focus}</h3>
+                  </div>
+                </div>
+                <div style={{ borderTop: `1px solid ${LINE}`, padding: '18px 26px 24px' }}>
+                  {(phase.actions || []).map((action: string, i: number) => (
+                    <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 0', borderTop: i > 0 ? `1px solid ${LINE}` : 'none' }}>
+                      <div style={{ ...M, fontSize: 12, color: GOLD, fontWeight: 700, flexShrink: 0, paddingTop: 1 }}>{String(i + 1).padStart(2, '0')}</div>
+                      <p style={{ fontSize: 14, color: INK, margin: 0 }}>{action}</p>
                     </div>
                   ))}
                 </div>
+              </div>
+            );
+          }) : (
+            <p style={{ fontSize: 14, color: INK_DIM }}>No roadmap found in this audit result.</p>
+          )}
+        </div>
+      </section>
 
+      {/* ── WEEK-BY-WEEK / GENERATE CTA ── */}
+      {!detailedBlueprint ? (
+        <div style={{ background: `radial-gradient(120% 100% at 50% 0%, rgba(107,33,232,.3), transparent 65%), ${BG_DEEP}`, textAlign: 'center', padding: '60px 24px 70px', borderBottom: `1px solid ${LINE}` }}>
+          <div style={W}>
+            <h2 style={{ fontSize: 'clamp(22px,4vw,28px)', fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 14px' }}>Want the week-by-week version?</h2>
+            <p style={{ color: INK_DIM, fontSize: 15, maxWidth: '48ch', margin: '0 auto 30px' }}>
+              Generate a detailed blueprint with weekly milestones and KPIs for each month.
+            </p>
+            <button onClick={onGenerate} disabled={isGenerating} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: isGenerating ? CARD_HI : GOLD, color: isGenerating ? INK_DIM : '#1a1205', fontWeight: 700, fontSize: 14, padding: '14px 30px', borderRadius: 8, border: 'none', cursor: isGenerating ? 'default' : 'pointer', letterSpacing: '0.01em', boxShadow: isGenerating ? 'none' : '0 8px 30px rgba(245,197,24,.2)' }}>
+              {isGenerating && <Loader2 size={16} className="animate-spin" />}
+              {isGenerating ? 'Generating…' : 'Generate Detailed Blueprint'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <section style={{ padding: '52px 24px', borderBottom: `1px solid ${LINE}`, background: BG }}>
+          <div style={W}>
+            <div className="gb-sec-head" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_FAINT }}>Week-by-Week Detail</div>
+              <button onClick={onGenerate} disabled={isGenerating} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_DIM, background: 'transparent', border: `1px solid ${LINE_BR}`, borderRadius: 4, padding: '6px 12px', cursor: isGenerating ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {isGenerating && <Loader2 size={11} className="animate-spin" />}
+                Regenerate
+              </button>
+            </div>
+            <p style={{ fontSize: 15, color: INK_DIM, marginBottom: 34, maxWidth: '54ch' }}>Weekly milestones and KPIs, phase by phase.</p>
+
+            {(detailedBlueprint.phases || []).map((phase: any, idx: number) => (
+              <div key={idx} style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 6, marginBottom: 20, overflow: 'hidden' }}>
+                <div style={{ padding: '24px 26px 18px' }}>
+                  <div style={{ ...M, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 6 }}>Month {phase.month}</div>
+                  <h3 style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.01em', margin: '0 0 6px' }}>{phase.theme}</h3>
+                  <p style={{ fontSize: 14, color: INK_DIM, margin: 0, maxWidth: '58ch' }}>{phase.objective}</p>
+                </div>
+                <div className="gb-weeks" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, background: LINE, borderTop: `1px solid ${LINE}` }}>
+                  {(phase.weeks || []).map((week: any, wIdx: number) => (
+                    <div key={wIdx} style={{ background: BG_DEEP, padding: '16px 16px 18px' }}>
+                      <div style={{ ...M, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: PURPLE, fontWeight: 700, marginBottom: 6 }}>Week {week.week}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 8 }}>{week.focus}</div>
+                      {(week.milestones || []).map((ms: string, mIdx: number) => (
+                        <div key={mIdx} style={{ fontSize: 12, color: INK_DIM, marginBottom: 4, lineHeight: 1.4 }}>— {ms}</div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
                 {phase.kpis && phase.kpis.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '18px 26px', borderTop: `1px solid ${LINE}`, background: 'linear-gradient(180deg,transparent,rgba(107,33,232,.05))' }}>
                     {phase.kpis.map((kpi: any, kIdx: number) => (
-                      <span key={kIdx} style={{ fontSize: 11, background: '#1F1430', color: '#C9C2DB', borderRadius: 999, padding: '4px 12px' }}>
-                        {kpi.metric}: <strong style={{ color: '#EDE9F5' }}>{kpi.target}</strong>
+                      <span key={kIdx} style={{ ...M, fontSize: 11, background: 'rgba(245,197,24,.1)', color: GOLD, border: '1px solid rgba(245,197,24,.28)', borderRadius: 999, padding: '5px 12px' }}>
+                        {kpi.metric}: <strong>{kpi.target}</strong>
                       </span>
                     ))}
                   </div>
@@ -1246,25 +1308,55 @@ const NinetyDayBlueprintView = ({ auditReport, detailedBlueprint, isGenerating, 
               </div>
             ))}
           </div>
-
-          {detailedBlueprint.milestones90Day && detailedBlueprint.milestones90Day.length > 0 && (
-            <div style={{ marginTop: 20, background: '#100823', border: '1px solid #1F1430', borderRadius: 16, padding: 20 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>90-Day Milestones</div>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {detailedBlueprint.milestones90Day.map((ms: string, i: number) => (
-                  <li key={i} style={{ fontSize: 13, color: '#C9C2DB' }}>🎯 {ms}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
+        </section>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
-        <button onClick={onViewStrategy} style={{ background: 'transparent', border: '1px solid #1F1430', color: '#9B91B4', padding: '10px 20px', borderRadius: 10, fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', cursor: 'pointer' }}>
-          Open 30-Day Content Calendar in Strategy Hub
-        </button>
-      </div>
+      {/* ── 90-DAY MILESTONES ── */}
+      {detailedBlueprint?.milestones90Day?.length > 0 && (
+        <section style={{ padding: '52px 24px', borderBottom: `1px solid ${LINE}`, background: BG_DEEP }}>
+          <div style={W}>
+            <div className="gb-sec-head" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_FAINT }}>90-Day Milestones</div>
+              <div style={{ ...M, fontSize: 13, color: GOLD, fontWeight: 600 }}>where you'll land</div>
+            </div>
+            <p style={{ fontSize: 15, color: INK_DIM, marginBottom: 34, maxWidth: '54ch' }}>If you execute the roadmap, here's what's true by day 90.</p>
+            {detailedBlueprint.milestones90Day.map((ms: string, i: number) => (
+              <div key={i} style={{ display: 'flex', gap: 18, alignItems: 'flex-start', padding: '20px 0', borderTop: i > 0 ? `1px solid ${LINE}` : 'none' }}>
+                <div style={{ ...M, fontSize: 13, color: GOLD, fontWeight: 700, flexShrink: 0, paddingTop: 1 }}>{String(i + 1).padStart(2, '0')}</div>
+                <p style={{ fontSize: 14, color: INK, margin: 0 }}>{ms}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── RISKS ── */}
+      {detailedBlueprint?.risksAndMitigations?.length > 0 && (
+        <section style={{ padding: '44px 24px', borderBottom: `1px solid ${LINE}`, background: BG }}>
+          <div style={W}>
+            <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 20 }}>Risks & Mitigations</div>
+            {detailedBlueprint.risksAndMitigations.map((r: any, i: number) => (
+              <div key={i} style={{ border: `1px solid ${LINE_BR}`, borderLeft: `3px solid ${GOLD}`, background: `linear-gradient(180deg,${CARD_HI},${CARD})`, padding: '18px 22px', borderRadius: 4, marginBottom: 14 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: INK, marginBottom: 6 }}>{r.risk}</div>
+                <div style={{ fontSize: 13, color: INK_DIM }}>{r.mitigation}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── FOOTER ── */}
+      <footer style={{ padding: '30px 24px 40px', textAlign: 'center', background: BG_DEEP }}>
+        <div style={W}>
+          <div style={{ fontWeight: 800, fontSize: 15, letterSpacing: '-0.01em' }}>Titan<span style={{ color: PURPLE }}>Leap</span></div>
+          <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 8, maxWidth: '52ch', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
+            This blueprint elaborates on your audit's diagnosed constraints — it isn't a guarantee of results. Actual pacing depends on execution and market response.
+          </div>
+          <div style={{ marginTop: 20, display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={onViewStrategy} style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_FAINT, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 4, padding: '7px 16px', cursor: 'pointer' }}>Open 30-Day Content Calendar →</button>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };
