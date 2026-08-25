@@ -395,6 +395,7 @@ Return ONLY the JSON. No markdown. No explanation.`;
         prompt,
         apiKey: process.env.CLAUDE_API_KEY,
         useWebSearch: !scrapedProfile,
+        prefillAssistant: scrapedProfile ? "{" : undefined,
         temperature: 0.3,
       });
 
