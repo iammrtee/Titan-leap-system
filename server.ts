@@ -236,19 +236,21 @@ Return ONLY the JSON. No markdown. No explanation.`;
     try {
       const { platform, handle } = req.body;
       if (!platform || !handle) {
-        return res.status(400).json({ error: "platform and handle are required" });
+        return res.status(400).json({ error: "platform and profile link are required" });
       }
 
       const prompt = `You are the Smart Fill research step for TitanLeap's Audit intake form. You will be given:
 - Primary Platform (e.g. LinkedIn, X/Twitter, Instagram)
-- Social Media Handle(s)
+- A Profile Link (a full URL to the person or business's profile â open it directly. If what's
+  given is a bare handle instead of a URL, search for and open the matching profile on the stated
+  platform.)
 
-TASK: Actually visit and read the given handle(s) on the given platform(s) using web search. Extract what is
+TASK: Actually visit and read the given profile on the given platform using web search. Extract what is
 genuinely there â do not infer or estimate anything you have not directly observed on the
 profile/feed.
 
 Primary Platform: ${platform}
-Social Media Handle(s): ${handle}
+Profile Link: ${handle}
 
 WHAT TO LOOK FOR:
 1. Posting cadence â how many posts in the last 30 days? (fills "posting consistently:
