@@ -277,6 +277,33 @@ Return ONLY the JSON. No markdown. No explanation.`;
     }
   }
 
+  // Keeps only what the prompt actually needs so JSON.stringify() never has to be
+  // truncated mid-object â huge profiles (millions of followers, dozens of posts with
+  // images/comments) were breaking the JSON sent to Claude before this trim existed.
+  function trimInstagramProfileForPrompt(profile: any) {
+    const posts = Array.isArray(profile.latestPosts) ? profile.latestPosts.slice(0, 6) : [];
+    return {
+      username: profile.username,
+      fullName: profile.fullName,
+      biography: profile.biography,
+      followersCount: profile.followersCount,
+      followsCount: profile.followsCount,
+      postsCount: profile.postsCount,
+      isBusinessAccount: profile.isBusinessAccount,
+      businessCategoryName: profile.businessCategoryName,
+      verified: profile.verified,
+      externalUrl: profile.externalUrl,
+      latestPosts: posts.map((p: any) => ({
+        type: p.type,
+        caption: typeof p.caption === "string" ? p.caption.slice(0, 300) : null,
+        timestamp: p.timestamp,
+        likesCount: p.likesCount,
+        commentsCount: p.commentsCount,
+        hashtags: Array.isArray(p.hashtags) ? p.hashtags.slice(0, 8) : [],
+      })),
+    };
+  }
+
   app.post("/api/ai/social-research", requireInternalAuth, async (req, res) => {
     try {
       const { platform, handle } = req.body;
@@ -295,7 +322,7 @@ Primary Platform: ${platform}
 Profile Link: ${handle}
 
 SCRAPED PROFILE DATA (JSON):
-${JSON.stringify(scrapedProfile).slice(0, 12000)}
+${JSON.stringify(trimInstagramProfileForPrompt(scrapedProfile))}
 
 WHAT TO LOOK FOR:` : `You are the Smart Fill research step for TitanLeap's Audit intake form. You will be given:
 - Primary Platform (e.g. LinkedIn, X/Twitter, Instagram)
@@ -377,6 +404,7 @@ Return ONLY the JSON. No markdown. No explanation.`;
         if (firstBracket !== -1 && lastBracket > firstBracket) {
           parsed = JSON.parse(cleaned.slice(firstBracket, lastBracket + 1));
         } else {
+          console.error("[SocialResearch] Unparseable raw text:", cleaned.slice(0, 2000));
           throw new Error("Could not parse research response as JSON");
         }
       }
