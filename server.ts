@@ -75,7 +75,7 @@ async function startServer() {
   // Claude AI Proxy (protected)
   app.post("/api/ai/claude", requireInternalAuth, async (req, res) => {
     try {
-      const { prompt, systemPrompt, temperature } = req.body;
+      const { prompt, systemPrompt, temperature, useWebSearch } = req.body;
       const { generateClaudeContent } = await import("./src/services/claude.ts");
       
       // Explicitly pass the API key from server environment
@@ -85,7 +85,8 @@ async function startServer() {
         prompt, 
         systemPrompt, 
         temperature,
-        apiKey
+        apiKey,
+        useWebSearch
       });
       res.json(result);
     } catch (error: any) {
@@ -226,6 +227,103 @@ Return ONLY the JSON. No markdown. No explanation.`;
     } catch (error: any) {
       const errMsg = error?.message || String(error) || "Smart fill failed";
       console.error("[SmartFill] Error:", errMsg, error?.stack);
+      res.status(500).json({ error: errMsg });
+    }
+  });
+
+  // Social Presence Research (protected) â real web_search-backed lookup, no guessing
+  app.post("/api/ai/social-research", requireInternalAuth, async (req, res) => {
+    try {
+      const { platform, handle } = req.body;
+      if (!platform || !handle) {
+        return res.status(400).json({ error: "platform and handle are required" });
+      }
+
+      const prompt = `You are the Smart Fill research step for TitanLeap's Audit intake form. You will be given:
+- Primary Platform (e.g. LinkedIn, X/Twitter, Instagram)
+- Social Media Handle(s)
+
+TASK: Actually visit and read the given handle(s) on the given platform(s) using web search. Extract what is
+genuinely there â do not infer or estimate anything you have not directly observed on the
+profile/feed.
+
+Primary Platform: ${platform}
+Social Media Handle(s): ${handle}
+
+WHAT TO LOOK FOR:
+1. Posting cadence â how many posts in the last 30 days? (fills "posting consistently:
+   yes/no/sometimes")
+2. Approximate reach signal â follower count, and typical engagement (likes/comments/reposts)
+   on their last 5 posts, if visible. Only fill "average monthly reach" if you can point to a
+   real number or a defensible range from what's shown on the profile â otherwise leave null.
+3. Content themes â what do they actually post about? (product updates, personal takes,
+   industry commentary, memes, customer wins, hiring, etc.)
+4. ONE specific, recent, real post or activity (within last 60 days) that could open a
+   conversation â a launch, an opinion they shared, a milestone, a complaint, a question they
+   asked their audience.
+5. Tone â how do they write? (direct, casual, data-heavy, funny, formal) â this should shape
+   how the outreach email is voiced, not just what it references.
+
+STRICT RULES:
+1. Every field must trace back to something you actually saw on the profile. If you cannot
+   access the profile (private, handle wrong, platform not supported, no recent activity),
+   return that field as null and set "data_quality" to "insufficient" â never fill a field
+   with a plausible guess.
+2. Do not round up or embellish reach numbers. If the profile shows 340 followers, report
+   340, not "a few hundred" rounded favorably or "over 1,000."
+3. The "specific_signal" field must be something a stranger reading their profile cold would
+   also find within 2 minutes â if it took inference or speculation to construct, it doesn't
+   qualify.
+4. Do not comment on their website, funnel, or business metrics here â this step is social
+   presence only, feeds the relatability angle, not the revenue-leak audit.
+
+OUTPUT FORMAT (JSON):
+{
+  "platform": "...",
+  "handle": "...",
+  "data_quality": "sufficient / insufficient / partial",
+  "posting_consistency": "yes / no / sometimes / unknown",
+  "posts_last_30_days": <number or null>,
+  "follower_count": <number or null>,
+  "avg_engagement_per_post": <number or null>,
+  "content_themes": ["...", "..."],
+  "tone": "...",
+  "specific_signal": {
+    "found": true/false,
+    "description": "one factual sentence, in your own words",
+    "post_url_or_reference": "...",
+    "date": "YYYY-MM-DD"
+  },
+  "relatability_hook": "one warm, specific line referencing the signal above â only generate
+   this if specific_signal.found is true; otherwise null"
+}
+Return ONLY the JSON. No markdown. No explanation.`;
+
+      const { generateClaudeContent } = await import("./src/services/claude.ts");
+      const result = await generateClaudeContent({
+        prompt,
+        apiKey: process.env.CLAUDE_API_KEY,
+        useWebSearch: true,
+        temperature: 0.3,
+      });
+
+      const cleaned = (result.text || '').replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
+      let parsed;
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch {
+        const firstBracket = cleaned.search(/[\[{]/);
+        const lastBracket = cleaned.lastIndexOf('}');
+        if (firstBracket !== -1 && lastBracket > firstBracket) {
+          parsed = JSON.parse(cleaned.slice(firstBracket, lastBracket + 1));
+        } else {
+          throw new Error("Could not parse research response as JSON");
+        }
+      }
+      res.json(parsed);
+    } catch (error: any) {
+      const errMsg = error?.message || String(error) || "Social research failed";
+      console.error("[SocialResearch] Error:", errMsg, error?.stack);
       res.status(500).json({ error: errMsg });
     }
   });
