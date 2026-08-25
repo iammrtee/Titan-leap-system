@@ -235,13 +235,23 @@ Return ONLY the JSON. No markdown. No explanation.`;
   // Scrapes a real Instagram profile via Apify's Instagram Profile Scraper actor.
   // Returns null (never throws) if APIFY_API_TOKEN isn't set, the request fails, or the
   // profile can't be found/is private â callers must fall back to the web-search path.
+  // In-memory cache so repeat clicks / re-renders on the same handle don't re-bill
+  // Apify credits â a scrape is reused for 6 hours before we hit the API again.
+  const instagramScrapeCache = new Map<string, { data: any; expiresAt: number }>();
+  const INSTAGRAM_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
   async function scrapeInstagramProfile(handle: string): Promise<any | null> {
     const token = process.env.APIFY_API_TOKEN;
     if (!token) return null;
     try {
       const usernameMatch = handle.match(/instagram\.com\/([A-Za-z0-9._]+)/i);
-      const username = (usernameMatch ? usernameMatch[1] : handle).replace(/^@/, '').replace(/\/$/, '').trim();
+      const username = (usernameMatch ? usernameMatch[1] : handle).replace(/^@/, '').replace(/\/$/, '').trim().toLowerCase();
       if (!username) return null;
+
+      const cached = instagramScrapeCache.get(username);
+      if (cached && cached.expiresAt > Date.now()) {
+        return cached.data;
+      }
 
       const apifyRes = await fetch(
         `https://api.apify.com/v2/actors/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${token}`,
@@ -259,6 +269,7 @@ Return ONLY the JSON. No markdown. No explanation.`;
       if (!Array.isArray(items) || items.length === 0) return null;
       const profile = items[0];
       if (!profile || profile.private) return null;
+      instagramScrapeCache.set(username, { data: profile, expiresAt: Date.now() + INSTAGRAM_CACHE_TTL_MS });
       return profile;
     } catch (err: any) {
       console.error("[ApifyInstagram] scrape failed:", err?.message || err);
