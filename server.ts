@@ -313,55 +313,37 @@ Return ONLY the JSON. No markdown. No explanation.`;
 
       const scrapedProfile = platform === "Instagram" ? await scrapeInstagramProfile(handle) : null;
 
-      const prompt = scrapedProfile ? `You are the Smart Fill research step for TitanLeap's Audit intake form. You have been
-given REAL, freshly-scraped Instagram profile data below â pulled directly from the profile via
-API, not a guess. Use ONLY what is present in this data. Do not invent or estimate anything not
-shown here.
-
-Primary Platform: ${platform}
-Profile Link: ${handle}
-
-SCRAPED PROFILE DATA (JSON):
-${JSON.stringify(trimInstagramProfileForPrompt(scrapedProfile))}
-
-WHAT TO LOOK FOR:` : `You are the Smart Fill research step for TitanLeap's Audit intake form. You will be given:
-- Primary Platform (e.g. LinkedIn, X/Twitter, Instagram)
-- A Profile Link (a full URL to the person or business's profile â open it directly. If what's
-  given is a bare handle instead of a URL, search for and open the matching profile on the stated
-  platform.)
-
-TASK: Actually visit and read the given profile on the given platform using web search. Extract what is
-genuinely there â do not infer or estimate anything you have not directly observed on the
-profile/feed.
-
-Primary Platform: ${platform}
-Profile Link: ${handle}
-
-WHAT TO LOOK FOR:
-1. Posting cadence â how many posts in the last 30 days? (fills "posting consistently:
+      // Shared instructions + output schema used by BOTH the scraped-data path and the
+      // web-search path, so the model always returns the exact field names the frontend
+      // (AuditView.tsx) reads: follower_count, posts_last_30_days, etc. This used to only
+      // live in the web-search branch's template literal, which meant the scraped-data
+      // branch never told the model what shape to return â it produced plausible-looking
+      // but differently-keyed JSON that silently rendered as "Not visible" in the UI.
+      const outputSchemaInstructions = `WHAT TO LOOK FOR:
+1. Posting cadence â how many posts in the last 30 days? (fills "posting consistently:
    yes/no/sometimes")
-2. Approximate reach signal â follower count, and typical engagement (likes/comments/reposts)
+2. Approximate reach signal â follower count, and typical engagement (likes/comments/reposts)
    on their last 5 posts, if visible. Only fill "average monthly reach" if you can point to a
-   real number or a defensible range from what's shown on the profile â otherwise leave null.
-3. Content themes â what do they actually post about? (product updates, personal takes,
+   real number or a defensible range from what's shown on the profile â otherwise leave null.
+3. Content themes â what do they actually post about? (product updates, personal takes,
    industry commentary, memes, customer wins, hiring, etc.)
 4. ONE specific, recent, real post or activity (within last 60 days) that could open a
-   conversation â a launch, an opinion they shared, a milestone, a complaint, a question they
+   conversation â a launch, an opinion they shared, a milestone, a complaint, a question they
    asked their audience.
-5. Tone â how do they write? (direct, casual, data-heavy, funny, formal) â this should shape
+5. Tone â how do they write? (direct, casual, data-heavy, funny, formal) â this should shape
    how the outreach email is voiced, not just what it references.
 
 STRICT RULES:
 1. Every field must trace back to something you actually saw on the profile. If you cannot
    access the profile (private, handle wrong, platform not supported, no recent activity),
-   return that field as null and set "data_quality" to "insufficient" â never fill a field
+   return that field as null and set "data_quality" to "insufficient" â never fill a field
    with a plausible guess.
 2. Do not round up or embellish reach numbers. If the profile shows 340 followers, report
    340, not "a few hundred" rounded favorably or "over 1,000."
 3. The "specific_signal" field must be something a stranger reading their profile cold would
-   also find within 2 minutes â if it took inference or speculation to construct, it doesn't
+   also find within 2 minutes â if it took inference or speculation to construct, it doesn't
    qualify.
-4. Do not comment on their website, funnel, or business metrics here â this step is social
+4. Do not comment on their website, funnel, or business metrics here â this step is social
    presence only, feeds the relatability angle, not the revenue-leak audit.
 
 OUTPUT FORMAT (JSON):
@@ -381,7 +363,7 @@ OUTPUT FORMAT (JSON):
     "post_url_or_reference": "...",
     "date": "YYYY-MM-DD"
   },
-  "relatability_hook": "one warm, specific line referencing the signal above â only generate
+  "relatability_hook": "one warm, specific line referencing the signal above â only generate
    this if specific_signal.found is true; otherwise null"
 }
 CRITICAL OUTPUT RULE: Your entire response must be nothing but the raw JSON object above.
@@ -389,6 +371,32 @@ No markdown heading, no title, no bullet points, no commentary before or after, 
 The very first character of your response must be "{" and the very last character must be "}".
 
 Return ONLY the JSON. No markdown. No explanation.`;
+
+      const prompt = scrapedProfile ? `You are the Smart Fill research step for TitanLeap's Audit intake form. You have been
+given REAL, freshly-scraped Instagram profile data below â pulled directly from the profile via
+API, not a guess. Use ONLY what is present in this data. Do not invent or estimate anything not
+shown here.
+
+Primary Platform: ${platform}
+Profile Link: ${handle}
+
+SCRAPED PROFILE DATA (JSON):
+${JSON.stringify(trimInstagramProfileForPrompt(scrapedProfile))}
+
+${outputSchemaInstructions}` : `You are the Smart Fill research step for TitanLeap's Audit intake form. You will be given:
+- Primary Platform (e.g. LinkedIn, X/Twitter, Instagram)
+- A Profile Link (a full URL to the person or business's profile â open it directly. If what's
+  given is a bare handle instead of a URL, search for and open the matching profile on the stated
+  platform.)
+
+TASK: Actually visit and read the given profile on the given platform using web search. Extract what is
+genuinely there â do not infer or estimate anything you have not directly observed on the
+profile/feed.
+
+Primary Platform: ${platform}
+Profile Link: ${handle}
+
+${outputSchemaInstructions}`;
 
       const { generateClaudeContent } = await import("./src/services/claude.ts");
       const result = await generateClaudeContent({
