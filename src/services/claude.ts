@@ -46,6 +46,7 @@ export const generateClaudeContent = async (params: {
   temperature?: number;
   apiKey?: string;
   model?: string;
+  useWebSearch?: boolean;
 }) => {
   // If in browser, call the server proxy
   if (typeof window !== 'undefined') {
@@ -110,9 +111,21 @@ export const generateClaudeContent = async (params: {
           ]
         }
       ],
+      ...(params.useWebSearch ? {
+        tools: [
+          { type: "web_search_20250305" as any, name: "web_search", max_uses: 5 }
+        ]
+      } : {})
     });
 
-    const text = response.content.find(block => block.type === 'text')?.text || '';
+    // When web search is used, Claude emits multiple text blocks interleaved with
+    // search tool_use/result blocks (e.g. "I'll search for..." then the final answer
+    // after results come back). Join every text block so the final structured output
+    // is captured, not just the first ("I'll search...") fragment.
+    const text = response.content
+      .filter((block: any) => block.type === 'text')
+      .map((block: any) => block.text)
+      .join('\n');
     
     return {
       text,
