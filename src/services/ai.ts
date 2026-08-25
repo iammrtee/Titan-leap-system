@@ -647,10 +647,24 @@ export type SocialResearchResult = {
 // Real research (not inference) on a social handle, backed by Claude's web_search tool
 // server-side. Every field traces back to something actually found on the profile â
 // fields are left null/"insufficient" rather than guessed when the profile can't be verified.
+let _socialResearchApiSecret: string | null = null;
+const getInternalApiSecret = async (): Promise<string> => {
+  if (_socialResearchApiSecret) return _socialResearchApiSecret;
+  try {
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    _socialResearchApiSecret = data.apiSecret || '';
+    return _socialResearchApiSecret;
+  } catch {
+    return '';
+  }
+};
+
 export const researchSocialPresence = async (platform: string, handle: string): Promise<SocialResearchResult> => {
+  const secret = await getInternalApiSecret();
   const response = await fetch('/api/ai/social-research', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': secret },
     body: JSON.stringify({ platform, handle }),
   });
 
