@@ -215,7 +215,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
   const handleResearchSocial = async () => {
     const handle = formData.socialHandles.find(h => h.trim() !== '');
     if (!formData.primaryPlatform || !handle) {
-      toast.error("Add a primary platform and at least one handle first.");
+      toast.error("Add a primary platform and at least one profile link first.");
       return;
     }
     setIsResearchingSocial(true);
@@ -902,7 +902,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                       {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </InputGroup>
-                  <InputGroup label="Social media handle(s)" tooltip="Your direct line to customers. We analyze your profile to see if your 'front door' is actually inviting people in.">
+                  <InputGroup label="Profile link(s)" tooltip="Your direct line to customers. Paste the full profile URL so we can actually open and verify it — we analyze your profile to see if your 'front door' is actually inviting people in.">
                     <div className="space-y-3">
                       {formData.socialHandles.map((handle, idx) => (
                         <div key={idx} className="flex gap-2">
@@ -914,7 +914,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                               newHandles[idx] = e.target.value;
                               setFormData({...formData, socialHandles: newHandles});
                             }}
-                            placeholder="@handle"
+                            placeholder="https://linkedin.com/in/yourname"
                             className="audit-input"
                           />
                           {idx > 0 && (
@@ -971,7 +971,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                       {isResearchingSocial ? 'Researching profile…' : 'Research this profile'}
                     </button>
                     <p className="text-[11px] text-on-surface-variant/60 mt-2 leading-relaxed">
-                      Actually reads the handle above — no guessing. Fields only fill in when we find real evidence on the profile.
+                      Actually opens the link above — no guessing. Fields only fill in when we find real evidence on the profile.
                     </p>
 
                     {socialResearch && (
@@ -992,7 +992,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
 
                         {socialResearch.data_quality === 'insufficient' ? (
                           <p className="text-xs text-on-surface-variant/80">
-                            Couldn't verify this profile (private, handle mismatch, or no visible activity). Fill in reach and posting consistency manually.
+                            Couldn't verify this profile (private, broken link, or no visible activity). Fill in reach and posting consistency manually.
                           </p>
                         ) : (
                           <>
