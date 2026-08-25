@@ -235,7 +235,9 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
           : research.posting_consistency === 'no' ? 'No'
           : research.posting_consistency === 'sometimes' ? 'Sometimes'
           : prev.postingConsistently,
-        monthlyReach: (research.follower_count != null && !prev.monthlyReach)
+        // Auto-fill reach from real research whenever we find a number — don't
+        // require the user to type it in, and don't just fill it once and stop.
+        monthlyReach: research.follower_count != null
           ? String(research.follower_count)
           : prev.monthlyReach,
       }));
