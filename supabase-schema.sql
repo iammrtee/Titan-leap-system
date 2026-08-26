@@ -87,3 +87,29 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE posts DISABLE ROW LEVEL SECURITY;
 ALTER TABLE leads DISABLE ROW LEVEL SECURITY;
 ALTER TABLE sales_transactions DISABLE ROW LEVEL SECURITY;
+
+-- 8. Create a table for the Content Calendar (Strategy Hub)
+-- Mirrors the CalendarItem shape used in StrategyHub.tsx. Scoped by profile_id so
+-- multiple client profiles don't overwrite each other's calendars.
+CREATE TABLE IF NOT EXISTS calendar_items (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL DEFAULT 'default',
+  day INTEGER NOT NULL,
+  month INTEGER NOT NULL, -- 0-indexed, matches JS Date
+  year INTEGER NOT NULL,
+  platform TEXT NOT NULL, -- TikTok / LinkedIn / Instagram / YouTube / Twitter
+  title TEXT,
+  description TEXT,
+  status TEXT DEFAULT 'scheduled', -- scheduled / published / draft
+  type TEXT DEFAULT 'post', -- video / article / post
+  time TEXT,
+  link TEXT,
+  tags JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_calendar_items_profile ON calendar_items(profile_id);
+
+-- Disable RLS for prototyping (matches the other tables above — enable later for production!)
+ALTER TABLE calendar_items DISABLE ROW LEVEL SECURITY;
