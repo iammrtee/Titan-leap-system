@@ -725,6 +725,42 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     }
   }, []);
 
+  // Persistence: Load calendar items from Supabase (if configured). This runs after the
+  // localStorage load above and overrides it once the Supabase fetch resolves, so Supabase
+  // is the source of truth when available but localStorage still works offline / without it.
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('calendar_items')
+          .select('*')
+          .eq('profile_id', profileId)
+          .order('year', { ascending: true })
+          .order('month', { ascending: true })
+          .order('day', { ascending: true });
+        if (!error && data && data.length > 0) {
+          setCalendarItems(data.map((row: any) => ({
+            id: row.id,
+            day: row.day,
+            month: row.month,
+            year: row.year,
+            platform: row.platform,
+            title: row.title,
+            description: row.description,
+            status: row.status,
+            type: row.type,
+            time: row.time,
+            link: row.link || undefined,
+            tags: row.tags || undefined,
+          })));
+        }
+      } catch (e) {
+        console.error('Failed to load calendar items from Supabase', e);
+      }
+    })();
+  }, [profileId]);
+
   // Persistence: Save data on change
   useEffect(() => {
     if (thirtyDayPlan && thirtyDayPlan.strategicSyncSummary) {
@@ -734,7 +770,33 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
 
   useEffect(() => {
     localStorage.setItem('titanleap_calendar_items', JSON.stringify(calendarItems));
-  }, [calendarItems]);
+    // Also sync to Supabase when configured, so the calendar survives across devices/deploys
+    // instead of living only in this browser's localStorage.
+    if (!isSupabaseConfigured || calendarItems.length === 0) return;
+    (async () => {
+      try {
+        const rows = calendarItems.map(item => ({
+          id: item.id,
+          profile_id: profileId,
+          day: item.day,
+          month: item.month,
+          year: item.year,
+          platform: item.platform,
+          title: item.title,
+          description: item.description,
+          status: item.status,
+          type: item.type,
+          time: item.time,
+          link: item.link || null,
+          tags: item.tags || null,
+          updated_at: new Date().toISOString(),
+        }));
+        await supabase.from('calendar_items').upsert(rows, { onConflict: 'id' });
+      } catch (e) {
+        console.error('Failed to sync calendar items to Supabase', e);
+      }
+    })();
+  }, [calendarItems, profileId]);
 
   const handleFileUpload = async (e: React.DragEvent | React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
