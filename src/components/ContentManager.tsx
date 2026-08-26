@@ -194,6 +194,45 @@ export const ContentManager: React.FC = () => {
 // ═══════════════════════════════════════════
 //  PRODUCTION QUEUE (original ContentManager)
 // ═══════════════════════════════════════════
+// ─── Supabase Persistence (production_tasks table) ───
+const TASKS_TABLE = 'production_tasks';
+
+const taskToRow = (task: Task) => ({
+  id: task.id,
+  type: task.type,
+  platform: task.platform,
+  title: task.title,
+  brief: task.brief,
+  assignee: task.assignee,
+  due: task.due,
+  status: task.status,
+  checks: task.checks,
+  review_link: task.reviewLink ?? null,
+});
+
+const rowToTask = (row: any): Task => ({
+  id: row.id,
+  type: row.type,
+  platform: row.platform,
+  title: row.title,
+  brief: row.brief,
+  assignee: row.assignee,
+  due: row.due,
+  status: row.status,
+  checks: row.checks || {},
+  reviewLink: row.review_link || undefined,
+});
+
+const persistTask = async (task: Task) => {
+  if (!isSupabaseConfigured) return;
+  try {
+    const { error } = await supabase.from(TASKS_TABLE).upsert(taskToRow(task));
+    if (error) throw error;
+  } catch (err) {
+    console.error('Failed to sync task to Supabase:', err);
+  }
+};
+
 const ProductionQueue: React.FC<{ externalOpenSignal?: number }> = ({ externalOpenSignal }) => {
   const [tasks, setTasks] = useState<Task[]>(() => {
     try {
@@ -211,6 +250,24 @@ const ProductionQueue: React.FC<{ externalOpenSignal?: number }> = ({ externalOp
       localStorage.setItem('titanleap_production_tasks', JSON.stringify(tasks));
     } catch {}
   }, [tasks]);
+
+  // Load tasks from Supabase (shared, durable storage) on mount
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    (async () => {
+      try {
+        const { data, error } = await supabase.from(TASKS_TABLE).select('*').order('id', { ascending: true });
+        if (error) throw error;
+        if (data && data.length > 0) {
+          setTasks(data.map(rowToTask));
+        } else {
+          await supabase.from(TASKS_TABLE).upsert(tasks.map(taskToRow));
+        }
+      } catch (err) {
+        console.error('Failed to load tasks from Supabase:', err);
+      }
+    })();
+  }, []);
   const [currentTab, setCurrentTab] = useState<'all' | TaskStatus>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   useEffect(() => {
@@ -238,10 +295,9 @@ const ProductionQueue: React.FC<{ externalOpenSignal?: number }> = ({ externalOp
       if (pendingRaw) {
         const pending: Task[] = JSON.parse(pendingRaw);
         if (Array.isArray(pending) && pending.length > 0) {
-          setTasks(prevTasks => [
-            ...prevTasks,
-            ...pending.map((item, index) => ({ ...item, id: Date.now() + index })),
-          ]);
+          const newTasks = pending.map((item, index) => ({ ...item, id: Date.now() + index }));
+          setTasks(prevTasks => [...prevTasks, ...newTasks]);
+          newTasks.forEach(persistTask);
         }
         localStorage.removeItem('titanleap_pending_production');
       }
@@ -258,7 +314,10 @@ const ProductionQueue: React.FC<{ externalOpenSignal?: number }> = ({ externalOp
 
   const handleToggleCheck = (cardId: number, checkIdx: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    setTasks(tasks.map(t => t.id === cardId ? { ...t, checks: { ...t.checks, [checkIdx]: !t.checks[checkIdx] } } : t));
+    const updatedTasks = tasks.map(t => t.id === cardId ? { ...t, checks: { ...t.checks, [checkIdx]: !t.checks[checkIdx] } } : t);
+    setTasks(updatedTasks);
+    const changed = updatedTasks.find(t => t.id === cardId);
+    if (changed) persistTask(changed);
   };
 
   const handleSetStatus = (cardId: number, status: TaskStatus, e: React.MouseEvent) => {
@@ -269,11 +328,17 @@ const ProductionQueue: React.FC<{ externalOpenSignal?: number }> = ({ externalOp
       toast.error("Review Link Required", { description: "Please attach a review link before moving this task to review." });
       return;
     }
-    setTasks(tasks.map(t => t.id === cardId ? { ...t, status } : t));
+    const updatedTasks = tasks.map(t => t.id === cardId ? { ...t, status } : t);
+    setTasks(updatedTasks);
+    const changed = updatedTasks.find(t => t.id === cardId);
+    if (changed) persistTask(changed);
   };
 
   const handleUpdateReviewLink = (cardId: number, link: string) => {
-    setTasks(tasks.map(t => t.id === cardId ? { ...t, reviewLink: link } : t));
+    const updatedTasks = tasks.map(t => t.id === cardId ? { ...t, reviewLink: link } : t);
+    setTasks(updatedTasks);
+    const changed = updatedTasks.find(t => t.id === cardId);
+    if (changed) persistTask(changed);
   };
 
   const handleAddTask = () => {
@@ -289,6 +354,7 @@ const ProductionQueue: React.FC<{ externalOpenSignal?: number }> = ({ externalOp
       assignee: newTask.assignee || 'Unassigned', due: dueFormatted, status: 'inprogress', checks
     };
     setTasks([task, ...tasks]);
+    persistTask(task);
     setIsModalOpen(false);
     setNewTask({ title: '', platform: 'youtube', brief: '', assignee: '', due: '' });
     setCurrentTab('all');
