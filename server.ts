@@ -555,6 +555,53 @@ ${outputSchemaInstructions}`;
     });
   });
 
+  // Schedule a post from the Content Manager's "Schedule & Publish" screen.
+  // Inserts a row with status "pending" — a separate n8n workflow polls scheduled_posts
+  // for due rows and does the actual per-platform publishing (see n8n workflow docs).
+  app.post("/api/posts/schedule", requireInternalAuth, async (req, res) => {
+    try {
+      const { platforms, mediaUrls, caption, scheduledTime, linkedinCompanyId, profile_id } = req.body;
+
+      if (!Array.isArray(platforms) || platforms.length === 0) {
+        return res.status(400).json({ error: "Select at least one platform." });
+      }
+      if (!scheduledTime || isNaN(new Date(scheduledTime).getTime())) {
+        return res.status(400).json({ error: "A valid scheduledTime is required." });
+      }
+
+      // Instagram, TikTok and YouTube reject/silently drop text-only posts — require media upfront.
+      const MEDIA_REQUIRED_PLATFORMS = ['instagram', 'tiktok', 'youtube'];
+      const missingMedia = platforms.filter((p: string) => MEDIA_REQUIRED_PLATFORMS.includes(p));
+      if (missingMedia.length > 0 && (!Array.isArray(mediaUrls) || mediaUrls.length === 0)) {
+        return res.status(400).json({
+          error: `${missingMedia.join(', ')} require at least one photo or video attached — text-only posts fail silently on these platforms.`
+        });
+      }
+
+      const { data, error } = await supabase
+        .from('scheduled_posts')
+        .insert({
+          profile_id: profile_id || 'default',
+          caption: caption || '',
+          media_urls: mediaUrls || [],
+          platforms,
+          scheduled_for: new Date(scheduledTime).toISOString(),
+          status: 'pending',
+          platform_results: {},
+          linkedin_company_id: linkedinCompanyId || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      res.status(201).json({ success: true, post: data });
+    } catch (err: any) {
+      console.error('[Posts] Schedule error:', err);
+      res.status(500).json({ error: err.message || 'Failed to schedule post' });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
