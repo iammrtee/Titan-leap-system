@@ -97,12 +97,12 @@ const INITIAL_TASKS: Task[] = [
 
 const AVATAR_COLORS = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-red-500', 'bg-amber-500', 'bg-cyan-500'];
 
-const POST_PLATFORMS: { id: PostPlatform; label: string; icon: React.ReactNode; color: string }[] = [
+const POST_PLATFORMS: { id: PostPlatform; label: string; icon: React.ReactNode; color: string; badge?: string; badgeColor?: string }[] = [
   { id: 'ig', label: 'Instagram', icon: <Instagram size={16} />, color: 'bg-pink-500/10 text-pink-500 border-pink-500/20' },
-  { id: 'tt', label: 'TikTok', icon: <Play size={16} />, color: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20' },
+  { id: 'tt', label: 'TikTok', icon: <Play size={16} />, color: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20', badge: 'Pending app review', badgeColor: 'bg-amber-500/15 text-amber-600' },
   { id: 'li', label: 'LinkedIn', icon: <Linkedin size={16} />, color: 'bg-blue-600/10 text-blue-600 border-blue-600/20' },
   { id: 'fb', label: 'Facebook', icon: <Facebook size={16} />, color: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
-  { id: 'tw', label: 'Twitter / X', icon: <Twitter size={16} />, color: 'bg-sky-500/10 text-sky-500 border-sky-500/20' },
+  { id: 'tw', label: 'Twitter / X', icon: <Twitter size={16} />, color: 'bg-sky-500/10 text-sky-500 border-sky-500/20', badge: 'Paid API', badgeColor: 'bg-red-500/15 text-red-500' },
   { id: 'yt', label: 'YouTube', icon: <Youtube size={16} />, color: 'bg-red-500/10 text-red-500 border-red-500/20' },
 ];
 
@@ -655,6 +655,12 @@ const AutoPostTab: React.FC = () => {
       setShowAdvanced(true);
       return;
     }
+    const mediaRequiredLabels: Record<string, string> = { ig: 'Instagram', tt: 'TikTok', yt: 'YouTube' };
+    const missingMediaPlatforms = selectedPlatforms.filter(p => mediaRequiredLabels[p]);
+    if (missingMediaPlatforms.length > 0 && uploadedAssets.length === 0) {
+      toast.error(`${missingMediaPlatforms.map(p => mediaRequiredLabels[p]).join(', ')} require media.`, { description: "Text-only posts fail silently on these platforms — add a photo or video." });
+      return;
+    }
 
     setIsPublishing(true);
     try {
@@ -662,7 +668,7 @@ const AutoPostTab: React.FC = () => {
       const mediaUrls = uploadedAssets.map(a => a.url);
       const platformMap: Record<string, string> = { ig: 'instagram', tt: 'tiktok', li: 'linkedin', fb: 'facebook', tw: 'twitter', yt: 'youtube' };
 
-      const response = await fetch('/api/daemon/publish', {
+      const response = await fetch('/api/posts/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -804,6 +810,9 @@ const AutoPostTab: React.FC = () => {
                       isSelected ? cn(platform.color, "border-current/30") : "border-outline-variant/10 text-on-surface-variant/50 hover:border-outline-variant/30 hover:text-on-surface-variant")}>
                     {platform.icon}
                     <span className="text-sm font-bold flex-1">{platform.label}</span>
+                    {platform.badge && (
+                      <span className={cn("text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-full", platform.badgeColor)}>{platform.badge}</span>
+                    )}
                     {isSelected && <Check size={14} />}
                   </button>
                 );
