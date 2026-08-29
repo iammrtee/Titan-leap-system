@@ -113,3 +113,28 @@ CREATE INDEX IF NOT EXISTS idx_calendar_items_profile ON calendar_items(profile_
 
 -- Disable RLS for prototyping (matches the other tables above — enable later for production!)
 ALTER TABLE calendar_items DISABLE ROW LEVEL SECURITY;
+
+-- 9. Create a table for Scheduled Posts (Content Manager's Schedule & Publish screen)
+-- Rows are inserted with status 'pending' by POST /api/posts/schedule. A separate n8n
+-- workflow polls for due rows (scheduled_for <= now() AND status = 'pending'), publishes
+-- to each platform, then updates status/platform_results here.
+CREATE TABLE IF NOT EXISTS scheduled_posts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  profile_id TEXT NOT NULL DEFAULT 'default',
+  caption TEXT,
+  media_urls JSONB DEFAULT '[]'::jsonb, -- array of Supabase Storage public URLs
+  platforms TEXT[] NOT NULL, -- e.g. ARRAY['instagram','linkedin']
+  scheduled_for TIMESTAMP WITH TIME ZONE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', -- pending / sent / failed
+  platform_results JSONB DEFAULT '{}'::jsonb, -- { "instagram": {"success": true}, "tiktok": {"success": false, "error": "..."} }
+  linkedin_company_id TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Speeds up the n8n polling query (WHERE status = 'pending' AND scheduled_for <= now())
+CREATE INDEX IF NOT EXISTS idx_scheduled_posts_due ON scheduled_posts(status, scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_scheduled_posts_profile ON scheduled_posts(profile_id);
+
+-- Disable RLS for prototyping (matches the other tables above — enable later for production!)
+ALTER TABLE scheduled_posts DISABLE ROW LEVEL SECURITY;
