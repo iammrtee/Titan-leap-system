@@ -602,6 +602,147 @@ ${outputSchemaInstructions}`;
     }
   });
 
+  // ─── Scheduled Post Publisher ───
+  // Polls scheduled_posts for due, pending rows and publishes them directly to each
+  // platform's API. Runs in-process (no separate n8n service needed). TikTok is disabled
+  // until Content Posting API review is approved; YouTube needs a resumable upload step
+  // that isn't wired yet, so both just record a clear failure reason.
+  const esc = (s: string) => String(s);
+
+  async function publishToInstagram(post: any) {
+    const token = process.env.META_ACCESS_TOKEN;
+    const igUserId = process.env.META_IG_USER_ID;
+    if (!token || !igUserId) throw new Error('Missing META_ACCESS_TOKEN / META_IG_USER_ID');
+    const mediaUrl = (post.media_urls || [])[0];
+    if (!mediaUrl) throw new Error('Instagram requires at least one media URL');
+    const isVideo = /\.(mp4|mov)$/i.test(mediaUrl);
+    const createRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media?` + new URLSearchParams({
+      access_token: token, caption: post.caption || '',
+      ...(isVideo ? { video_url: mediaUrl, media_type: 'REELS' } : { image_url: mediaUrl }),
+    }), { method: 'POST' });
+    const created = await createRes.json();
+    if (!createRes.ok) throw new Error(created?.error?.message || 'Instagram media creation failed');
+    const publishRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media_publish?` + new URLSearchParams({
+      access_token: token, creation_id: created.id,
+    }), { method: 'POST' });
+    const published = await publishRes.json();
+    if (!publishRes.ok) throw new Error(published?.error?.message || 'Instagram publish failed');
+    return { success: true, id: published.id };
+  }
+
+  async function publishToFacebook(post: any) {
+    const token = process.env.META_PAGE_ACCESS_TOKEN;
+    const pageId = process.env.META_FB_PAGE_ID;
+    if (!token || !pageId) throw new Error('Missing META_PAGE_ACCESS_TOKEN / META_FB_PAGE_ID');
+    const mediaUrl = (post.media_urls || [])[0];
+    const url = mediaUrl
+      ? `https://graph.facebook.com/v20.0/${pageId}/photos`
+      : `https://graph.facebook.com/v20.0/${pageId}/feed`;
+    const res = await fetch(url + '?' + new URLSearchParams({
+      access_token: token, message: post.caption || '', ...(mediaUrl ? { url: mediaUrl } : {}),
+    }), { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Facebook publish failed');
+    return { success: true, id: data.id || data.post_id };
+  }
+
+  async function publishToLinkedin(post: any) {
+    const token = process.env.LINKEDIN_ACCESS_TOKEN;
+    if (!token) throw new Error('Missing LINKEDIN_ACCESS_TOKEN');
+    const orgId = post.linkedin_company_id || process.env.LINKEDIN_DEFAULT_ORG_ID;
+    const author = orgId ? `urn:li:organization:${orgId}` : `urn:li:person:${process.env.LINKEDIN_PERSON_ID}`;
+    const res = await fetch('https://api.linkedin.com/v2/ugcPosts', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'X-Restli-Protocol-Version': '2.0.0', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        author, lifecycleState: 'PUBLISHED',
+        specificContent: { 'com.linkedin.ugc.ShareContent': { shareCommentary: { text: post.caption || '' }, shareMediaCategory: 'NONE' } },
+        visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
+      }),
+    });
+    if (!res.ok) throw new Error((await res.text()) || 'LinkedIn publish failed');
+    const data = await res.json();
+    return { success: true, id: data.id };
+  }
+
+  async function publishToTwitter(post: any) {
+    const token = process.env.TWITTER_BEARER_TOKEN;
+    if (!token) throw new Error('Missing TWITTER_BEARER_TOKEN');
+    const res = await fetch('https://api.twitter.com/2/tweets', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: post.caption || '' }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.detail || data?.title || 'Twitter publish failed');
+    return { success: true, id: data.data?.id };
+  }
+
+  async function publishToTiktok(): Promise<any> {
+    throw new Error('TikTok posting is disabled until Content Posting API app review is approved.');
+  }
+
+  async function publishToYoutube(): Promise<any> {
+    throw new Error('YouTube publishing needs a resumable video upload step \u2014 not implemented yet.');
+  }
+
+  const PLATFORM_PUBLISHERS: Record<string, (post: any) => Promise<any>> = {
+    instagram: publishToInstagram,
+    facebook: publishToFacebook,
+    linkedin: publishToLinkedin,
+    twitter: publishToTwitter,
+    tiktok: publishToTiktok,
+    youtube: publishToYoutube,
+  };
+
+  async function publishScheduledPosts() {
+    try {
+      const { data: duePosts, error } = await supabase
+        .from('scheduled_posts')
+        .select('*')
+        .eq('status', 'pending')
+        .lte('scheduled_for', new Date().toISOString())
+        .order('scheduled_for', { ascending: true })
+        .limit(20);
+
+      if (error) throw error;
+      if (!duePosts || duePosts.length === 0) return;
+
+      console.log(`[Scheduler] Publishing ${duePosts.length} due post(s)`);
+
+      for (const post of duePosts) {
+        const platforms: string[] = Array.isArray(post.platforms) ? post.platforms : [];
+        const platform_results: Record<string, any> = {};
+        let anyFailure = false;
+
+        for (const platform of platforms) {
+          try {
+            const publisher = PLATFORM_PUBLISHERS[platform];
+            if (!publisher) throw new Error(`No publisher for platform: ${platform}`);
+            platform_results[platform] = await publisher(post);
+          } catch (err: any) {
+            platform_results[platform] = { success: false, error: esc(err?.message || String(err)) };
+            anyFailure = true;
+          }
+        }
+
+        const status = anyFailure ? 'failed' : 'sent';
+        await supabase
+          .from('scheduled_posts')
+          .update({ status, platform_results, updated_at: new Date().toISOString() })
+          .eq('id', post.id);
+
+        console.log(`[Scheduler] Post ${post.id} -> ${status}`, platform_results);
+      }
+    } catch (err: any) {
+      console.error('[Scheduler] Error polling scheduled posts:', err?.message || err);
+    }
+  }
+
+  // Poll every 3 minutes for due posts.
+  setInterval(publishScheduledPosts, 3 * 60 * 1000);
+  publishScheduledPosts();
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
