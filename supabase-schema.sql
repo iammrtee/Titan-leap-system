@@ -138,3 +138,11 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_posts_profile ON scheduled_posts(profil
 
 -- Disable RLS for prototyping (matches the other tables above — enable later for production!)
 ALTER TABLE scheduled_posts DISABLE ROW LEVEL SECURITY;
+
+-- 10. Add per-client social posting fields to user_settings (for multi-client auto-post)
+-- The scheduler looks these up by profile_id so each client's posts use their own tokens
+-- instead of one global set of env vars. Populated later by an OAuth "Connect accounts" flow.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS meta_ig_user_id TEXT;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS meta_fb_page_id TEXT;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS linkedin_org_id TEXT;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS linkedin_person_id TEXT;
