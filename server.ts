@@ -609,10 +609,10 @@ ${outputSchemaInstructions}`;
   // that isn't wired yet, so both just record a clear failure reason.
   const esc = (s: string) => String(s);
 
-  async function publishToInstagram(post: any) {
-    const token = process.env.META_ACCESS_TOKEN;
-    const igUserId = process.env.META_IG_USER_ID;
-    if (!token || !igUserId) throw new Error('Missing META_ACCESS_TOKEN / META_IG_USER_ID');
+  async function publishToInstagram(post: any, creds: any) {
+    const token = creds?.facebook_token || process.env.META_ACCESS_TOKEN;
+    const igUserId = creds?.meta_ig_user_id || process.env.META_IG_USER_ID;
+    if (!token || !igUserId) throw new Error('Missing Instagram token / IG user ID for this client');
     const mediaUrl = (post.media_urls || [])[0];
     if (!mediaUrl) throw new Error('Instagram requires at least one media URL');
     const isVideo = /\.(mp4|mov)$/i.test(mediaUrl);
@@ -630,10 +630,10 @@ ${outputSchemaInstructions}`;
     return { success: true, id: published.id };
   }
 
-  async function publishToFacebook(post: any) {
-    const token = process.env.META_PAGE_ACCESS_TOKEN;
-    const pageId = process.env.META_FB_PAGE_ID;
-    if (!token || !pageId) throw new Error('Missing META_PAGE_ACCESS_TOKEN / META_FB_PAGE_ID');
+  async function publishToFacebook(post: any, creds: any) {
+    const token = creds?.facebook_token || process.env.META_PAGE_ACCESS_TOKEN;
+    const pageId = creds?.meta_fb_page_id || process.env.META_FB_PAGE_ID;
+    if (!token || !pageId) throw new Error('Missing Facebook token / Page ID for this client');
     const mediaUrl = (post.media_urls || [])[0];
     const url = mediaUrl
       ? `https://graph.facebook.com/v20.0/${pageId}/photos`
@@ -646,11 +646,11 @@ ${outputSchemaInstructions}`;
     return { success: true, id: data.id || data.post_id };
   }
 
-  async function publishToLinkedin(post: any) {
-    const token = process.env.LINKEDIN_ACCESS_TOKEN;
-    if (!token) throw new Error('Missing LINKEDIN_ACCESS_TOKEN');
-    const orgId = post.linkedin_company_id || process.env.LINKEDIN_DEFAULT_ORG_ID;
-    const author = orgId ? `urn:li:organization:${orgId}` : `urn:li:person:${process.env.LINKEDIN_PERSON_ID}`;
+  async function publishToLinkedin(post: any, creds: any) {
+    const token = creds?.linkedin_token || process.env.LINKEDIN_ACCESS_TOKEN;
+    if (!token) throw new Error('Missing LinkedIn token for this client');
+    const orgId = post.linkedin_company_id || creds?.linkedin_org_id || process.env.LINKEDIN_DEFAULT_ORG_ID;
+    const author = orgId ? `urn:li:organization:${orgId}` : `urn:li:person:${creds?.linkedin_person_id || process.env.LINKEDIN_PERSON_ID}`;
     const res = await fetch('https://api.linkedin.com/v2/ugcPosts', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'X-Restli-Protocol-Version': '2.0.0', 'Content-Type': 'application/json' },
@@ -665,9 +665,9 @@ ${outputSchemaInstructions}`;
     return { success: true, id: data.id };
   }
 
-  async function publishToTwitter(post: any) {
-    const token = process.env.TWITTER_BEARER_TOKEN;
-    if (!token) throw new Error('Missing TWITTER_BEARER_TOKEN');
+  async function publishToTwitter(post: any, creds: any) {
+    const token = creds?.twitter_token || process.env.TWITTER_BEARER_TOKEN;
+    if (!token) throw new Error('Missing Twitter/X token for this client');
     const res = await fetch('https://api.twitter.com/2/tweets', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -686,13 +686,13 @@ ${outputSchemaInstructions}`;
     throw new Error('YouTube publishing needs a resumable video upload step \u2014 not implemented yet.');
   }
 
-  const PLATFORM_PUBLISHERS: Record<string, (post: any) => Promise<any>> = {
+  const PLATFORM_PUBLISHERS: Record<string, (post: any, creds: any) => Promise<any>> = {
     instagram: publishToInstagram,
     facebook: publishToFacebook,
     linkedin: publishToLinkedin,
     twitter: publishToTwitter,
-    tiktok: publishToTiktok,
-    youtube: publishToYoutube,
+    tiktok: (post: any) => publishToTiktok(),
+    youtube: (post: any) => publishToYoutube(),
   };
 
   async function publishScheduledPosts() {
@@ -715,11 +715,26 @@ ${outputSchemaInstructions}`;
         const platform_results: Record<string, any> = {};
         let anyFailure = false;
 
+        // Per-client credentials: each client's tokens live in user_settings, keyed by
+        // the same profile_id stored on the post. Falls back to the env-var tokens above
+        // (the "default" client) when no per-client row exists yet.
+        let creds: any = null;
+        try {
+          const { data: credsRow } = await supabase
+            .from('user_settings')
+            .select('*')
+            .eq('profile_id', post.profile_id || 'default')
+            .maybeSingle();
+          creds = credsRow;
+        } catch (credsErr: any) {
+          console.warn('[Scheduler] Could not load per-client credentials, falling back to env vars:', credsErr?.message || credsErr);
+        }
+
         for (const platform of platforms) {
           try {
             const publisher = PLATFORM_PUBLISHERS[platform];
             if (!publisher) throw new Error(`No publisher for platform: ${platform}`);
-            platform_results[platform] = await publisher(post);
+            platform_results[platform] = await publisher(post, creds);
           } catch (err: any) {
             platform_results[platform] = { success: false, error: esc(err?.message || String(err)) };
             anyFailure = true;
