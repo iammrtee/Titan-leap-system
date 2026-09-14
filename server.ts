@@ -616,13 +616,13 @@ ${outputSchemaInstructions}`;
     const mediaUrl = (post.media_urls || [])[0];
     if (!mediaUrl) throw new Error('Instagram requires at least one media URL');
     const isVideo = /\.(mp4|mov)$/i.test(mediaUrl);
-    const createRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media?` + new URLSearchParams({
+    const createRes = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media?` + new URLSearchParams({
       access_token: token, caption: post.caption || '',
       ...(isVideo ? { video_url: mediaUrl, media_type: 'REELS' } : { image_url: mediaUrl }),
     }), { method: 'POST' });
     const created = await createRes.json();
     if (!createRes.ok) throw new Error(created?.error?.message || 'Instagram media creation failed');
-    const publishRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media_publish?` + new URLSearchParams({
+    const publishRes = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media_publish?` + new URLSearchParams({
       access_token: token, creation_id: created.id,
     }), { method: 'POST' });
     const published = await publishRes.json();
