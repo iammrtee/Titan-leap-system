@@ -802,6 +802,10 @@ ${outputSchemaInstructions}`;
     });
   }
 
+  app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
+    res.type('text/plain').send('tiktok-developers-site-verification=YpXZpQ9XONrgK65iJfPCyWLHPVQivOuX');
+  });
+
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
     if (!WEBHOOK_SECRET) {
