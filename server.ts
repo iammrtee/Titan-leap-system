@@ -678,8 +678,37 @@ ${outputSchemaInstructions}`;
     return { success: true, id: data.data?.id };
   }
 
-  async function publishToTiktok(): Promise<any> {
-    throw new Error('TikTok posting is disabled until Content Posting API app review is approved.');
+  async function publishToTiktok(post: any, creds: any) {
+    const token = creds?.tiktok_token || process.env.TIKTOK_ACCESS_TOKEN;
+    if (!token) throw new Error('Missing TikTok token for this client');
+    const mediaUrl = (post.media_urls || [])[0];
+    if (!mediaUrl) throw new Error('TikTok requires a video URL');
+    // SELF_ONLY is required by TikTok for apps that have not yet passed Content Posting API
+    // review — public posting will be rejected by TikTok until the app is approved.
+    const privacyLevel = creds?.tiktok_privacy_level || process.env.TIKTOK_PRIVACY_LEVEL || 'SELF_ONLY';
+    const initRes = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        post_info: {
+          title: post.caption || '',
+          privacy_level: privacyLevel,
+          disable_duet: false,
+          disable_comment: false,
+          disable_stitch: false,
+          video_cover_timestamp_ms: 1000,
+        },
+        source_info: { source: 'PULL_FROM_URL', video_url: mediaUrl },
+      }),
+    });
+    const initData = await initRes.json();
+    if (!initRes.ok || initData?.error?.code !== 'ok') {
+      throw new Error(initData?.error?.message || 'TikTok publish init failed');
+    }
+    // TikTok processes the video asynchronously after init — publish_id can be polled via
+    // /v2/post/publish/status/fetch/ for final status, but init success is enough to record
+    // the post as sent for our purposes here.
+    return { success: true, id: initData.data?.publish_id, status: 'processing' };
   }
 
   async function publishToYoutube(): Promise<any> {
@@ -691,7 +720,7 @@ ${outputSchemaInstructions}`;
     facebook: publishToFacebook,
     linkedin: publishToLinkedin,
     twitter: publishToTwitter,
-    tiktok: (post: any) => publishToTiktok(),
+    tiktok: publishToTiktok,
     youtube: (post: any) => publishToYoutube(),
   };
 
