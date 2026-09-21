@@ -51,6 +51,10 @@ const requireWebhookAuth = (req: express.Request, res: express.Response, next: e
 
 async function startServer() {
   const app = express();
+app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
+  res.type('text/plain').send('tiktok-developers-site-verification=YpXZpQ9XONrgK65iJfPCyWLHPVQivOuX');
+});
+
   // Use DEFAULT_APP_PORT in AI Studio (3000), otherwise fallback to Cloud Run's PORT (8080)
   const PORT = Number(process.env.DEFAULT_APP_PORT || process.env.PORT || 3000);
 
@@ -801,10 +805,6 @@ ${outputSchemaInstructions}`;
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
-
-  app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
-    res.type('text/plain').send('tiktok-developers-site-verification=YpXZpQ9XONrgK65iJfPCyWLHPVQivOuX');
-  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
