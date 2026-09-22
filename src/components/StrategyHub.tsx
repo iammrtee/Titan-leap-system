@@ -170,6 +170,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   const [showCredentialsModal, setShowCredentialsModal] = useState(false);
   const [credentialsPlatform, setCredentialsPlatform] = useState<'twitter' | 'linkedin' | 'facebook' | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [showConnectPanel, setShowConnectPanel] = useState(false);
+  const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
   const [twitterCredentials, setTwitterCredentials] = useState({ username: '', password: '' });
   
   // Listen for OAuth success messages from popup
@@ -306,7 +308,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   }, [postScript, selectedPlatforms, uploadedAssets, profileId, draftId]);
 
   const handleOAuthConnect = async (platform: string) => {
-    setIsAuthenticating(true);
+    setIsAuthenticating(true); setConnectingPlatform(platform);
     try {
       // 1. Fetch the OAuth URL from your server
       const response = await fetch(`/api/auth/${platform}/url`);
@@ -325,12 +327,12 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       if (!authWindow) {
         // Popup was blocked
         toast.error('Please allow popups for this site to connect your account.');
-        setIsAuthenticating(false);
+        setIsAuthenticating(false); setConnectingPlatform(null);
       }
     } catch (error) {
       console.error('OAuth error:', error);
       toast.error('Failed to initiate connection.');
-      setIsAuthenticating(false);
+      setIsAuthenticating(false); setConnectingPlatform(null);
     }
   };
   const [isExtensionReady, setIsExtensionReady] = useState(
@@ -1914,6 +1916,58 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                         </motion.div>
                       )}
                     </AnimatePresence>
+
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowConnectPanel(!showConnectPanel)}
+                        className="flex-1 md:flex-none justify-center bg-surface-container-low text-on-surface-variant px-4 md:px-6 py-2.5 md:py-3 rounded-lg md:rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest border border-outline-variant/10 flex items-center gap-2 md:gap-3 hover:bg-surface-container transition-all shadow-sm"
+                      >
+                        <Zap size={14} className="text-primary md:w-4 md:h-4" />
+                        <span className="hidden sm:inline">Connect Accounts</span>
+                        <span className="sm:hidden">Connect</span>
+                      </button>
+
+                      <AnimatePresence>
+                        {showConnectPanel && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                            className="absolute top-full left-0 md:left-auto md:right-0 mt-4 w-[calc(100vw-3rem)] md:w-80 bg-surface-container-low rounded-3xl border border-outline-variant/10 shadow-2xl z-[100] p-6 space-y-4"
+                          >
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-[10px] font-black uppercase tracking-widest text-on-surface">Connect Accounts</h4>
+                              <button onClick={() => setShowConnectPanel(false)} className="text-on-surface-variant/60 hover:text-on-surface">
+                                <X size={14} />
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-on-surface-variant/60 leading-relaxed">
+                              Connects this client's own account (profile: {profileId}). Opens the provider's real login in a popup  - we never see or store the password.
+                            </p>
+                            <div className="space-y-2">
+                              {[
+                                { key: 'tiktok', label: 'TikTok' },
+                                { key: 'linkedin', label: 'LinkedIn' },
+                                { key: 'twitter', label: 'Twitter / X' },
+                              ].map(p => (
+                                <button
+                                  key={p.key}
+                                  disabled={isAuthenticating}
+                                  onClick={() => handleOAuthConnect(p.key)}
+                                  className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-surface-container-highest/30 border border-outline-variant/10 hover:bg-surface-container-highest transition-all disabled:opacity-50"
+                                >
+                                  <span className="text-[11px] font-bold text-on-surface">{p.label}</span>
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-primary flex items-center gap-1.5">
+                                    {isAuthenticating && connectingPlatform === p.key ? <Loader2 size={12} className="animate-spin" /> : null}
+                                    Connect
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
 
                     <button 
                       onClick={handleExportCSV}
