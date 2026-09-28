@@ -1,5 +1,4 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getAuthHeader } from '../lib/supabase';
 
 let anthropicClient: Anthropic | null = null;
 
@@ -39,6 +38,7 @@ export const generateClaudeContent = async (params: {
   // If in browser, call the server proxy
   if (typeof window !== 'undefined') {
     try {
+      const { getAuthHeader } = await import('../lib/supabase');
       const authHeader = await getAuthHeader();
       const response = await fetch('/api/ai/claude', {
         method: 'POST',
