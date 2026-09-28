@@ -706,6 +706,27 @@ export const auditContent = async (
   return await response.json();
 };
 
+// Customer Leak Audit: the $297 deliverable. Server fetches the client's pages and does
+// the funnel maths; returns data for renderLeakReportHtml() in src/lib/leakReportTemplate.ts.
+export const generateLeakAudit = async (input: {
+  businessName?: string; websiteUrl: string; pricingPageUrl?: string; signupUrl?: string;
+  mainOffer?: string; audience?: string; notes?: string;
+  visitors: number; signupRate: number; paidRate: number; revenuePerCustomer: number;
+  contentSummary?: string; contentScore?: number | null;
+}) => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch('/api/ai/leak-audit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Leak audit failed' }));
+    throw new Error(err.error || 'Leak audit failed');
+  }
+  return await response.json();
+};
+
 export const analyzeSocialTrends = async (platform: string) => {
   const prompt = `
     Analyze current social media trends for the platform: ${platform}.
