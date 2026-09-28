@@ -669,6 +669,178 @@ The first character of your response must be "{" and the last must be "}".`;
     }
   });
 
+  // ── Customer Leak Audit (the $297 deliverable) ─────────────────────────────
+  // Funnel maths is done in code from the client's own numbers. Claude reads the real
+  // pages and writes the leaks, but only says what share of the customer gap each leak
+  // explains; the customer and revenue ranges are computed here, never invented.
+  const LEAK_TARGET_SIGNUP_PCT = 3;
+  const LEAK_TARGET_PAID_PCT = 18;
+
+  async function fetchPageTextForAudit(url: string | undefined, limit = 7000): Promise<string | null> {
+    if (!url || !String(url).trim()) return null;
+    let u = String(url).trim();
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    try {
+      const r = await fetch(u, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TitanLeap/1.0; +https://titanleap.co)' },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!r.ok) return null;
+      const html = await r.text();
+      const title = (html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || '').trim();
+      const text = html
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
+        .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
+        .replace(/<(h1|h2|h3|button|a)\b[^>]*>/gi, ' [$1] ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#39;|&rsquo;/g, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
+      return `TITLE: ${title}\n${text}`.slice(0, limit);
+    } catch {
+      return null;
+    }
+  }
+
+  app.post("/api/ai/leak-audit", requireUser, async (req, res) => {
+    try {
+      const b = req.body || {};
+      const visitors = Number(b.visitors);
+      const signupRate = Number(b.signupRate);
+      const paidRate = Number(b.paidRate);
+      const revenuePerCustomer = Number(b.revenuePerCustomer);
+      if (!b.websiteUrl) return res.status(400).json({ error: "Website URL is required" });
+      if (!(visitors > 0) || !(signupRate > 0) || !(paidRate > 0) || !(revenuePerCustomer > 0)) {
+        return res.status(400).json({ error: "Visitors, signup rate, trial-to-paid rate and revenue per customer are all required" });
+      }
+
+      const trials = visitors * signupRate / 100;
+      const customers = trials * paidRate / 100;
+      const targetCustomers = visitors * Math.max(signupRate, LEAK_TARGET_SIGNUP_PCT) / 100 * Math.max(paidRate, LEAK_TARGET_PAID_PCT) / 100;
+      const gap = Math.max(0, targetCustomers - customers);
+
+      const [home, pricing, signup] = await Promise.all([
+        fetchPageTextForAudit(b.websiteUrl),
+        fetchPageTextForAudit(b.pricingPageUrl),
+        fetchPageTextForAudit(b.signupUrl),
+      ]);
+
+      const prompt = `You are writing TitanLeap's Customer Leak Audit for a SaaS founder. It is a paid report.
+Find the three places this business loses the most potential customers, and say exactly what to change.
+Write like a sharp, honest operator talking to the founder: plain English, specific, no jargon, no filler.
+
+BUSINESS: ${b.businessName || 'unknown'}
+WHAT THEY SELL: ${b.mainOffer || 'unknown'}
+WHO BUYS: ${b.audience || 'unknown'}
+FOUNDER NOTES: ${b.notes || 'none'}
+
+THEIR FUNNEL (their own numbers, treat as facts):
+- ${Math.round(visitors)} visitors a month
+- ${signupRate}% sign up or start a trial (TitanLeap target ${LEAK_TARGET_SIGNUP_PCT}%) -> ${Math.round(trials)} trials
+- ${paidRate}% of trials pay (target ${LEAK_TARGET_PAID_PCT}%) -> ${Math.round(customers)} new customers a month
+- At target rates: ${Math.round(targetCustomers)} a month. Gap: ${Math.round(gap)} customers a month.
+
+CONTENT AUDIT SUMMARY: ${b.contentSummary || 'not run'}
+
+HOME PAGE (real text, fetched today):
+${home || '(could not fetch)'}
+
+PRICING PAGE:
+${pricing || '(not provided or could not fetch)'}
+
+SIGNUP PAGE:
+${signup || '(not provided or could not fetch)'}
+
+RULES:
+1. Every leak must quote or point to something actually on their pages, or to a funnel number above. If a page could not be fetched, say what you would check instead of pretending.
+2. Never invent statistics (exit rates, bounce rates, benchmarks, competitor counts). Only use the numbers given here.
+3. "gapShare" is the fraction of the ${Math.round(gap)}-customer gap this leak explains (0 to 1). The three must add up to 1 or less. Put the biggest first.
+4. Fixes must be concrete enough to do this week: exact copy, exact change, where.
+5. If the gap is 0, the funnel already beats our targets: still give the three biggest improvements, set gapShare to 0, and lean on the channels.
+
+Return ONLY this JSON (first character "{", last character "}"):
+{
+  "verdict": "2-3 sentences. The honest read on why visitors are not becoming customers.",
+  "leaks": [
+    {
+      "title": "The problem in plain words",
+      "where": "Home page / Pricing page / Signup flow / Onboarding / Content",
+      "whatWeSaw": "Short exact quote from their page, or the funnel number, that shows the problem",
+      "whatsWrong": "2-3 sentences",
+      "fixes": ["exact change 1", "exact change 2", "exact change 3"],
+      "before": "Current copy if the fix is a copy change, else empty string",
+      "after": "Suggested replacement copy, else empty string",
+      "effort": "e.g. 1 hour, 2 hours, 1 day",
+      "howToKnow": "The metric that should move, and roughly when",
+      "gapShare": 0.4
+    }
+  ],
+  "channels": [
+    { "name": "Channel name", "who": "Exactly who to reach", "why": "Why it fits their buyers", "firstStep": "What to do this week" }
+  ],
+  "uncomfortableTruth": "One honest thing the founder probably doesn't want to hear, 2-3 sentences.",
+  "plan": { "weeks1to2": ["..."], "month1": ["..."], "month3": ["..."] }
+}
+Exactly 3 leaks and exactly 2 channels.`;
+
+      const { generateClaudeContent } = await import("./src/services/claude.ts");
+      const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, prefillAssistant: "{", temperature: 0.4 });
+      const cleaned = (result.text || '').replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
+      let ai: any;
+      try { ai = JSON.parse(cleaned); } catch {
+        const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
+        ai = JSON.parse(cleaned.slice(s, e + 1));
+      }
+
+      // Customer and revenue ranges come from the gap, not from the model.
+      const leaks = (Array.isArray(ai.leaks) ? ai.leaks : []).slice(0, 3);
+      const shares = leaks.map((l: any) => Math.max(0, Math.min(1, Number(l.gapShare) || 0)));
+      const shareSum = shares.reduce((a: number, v: number) => a + v, 0);
+      const scale = shareSum > 1 ? 1 / shareSum : 1;
+      const withNumbers = leaks.map((l: any, i: number) => {
+        const high = Math.round(gap * shares[i] * scale);
+        const low = Math.round(high * 0.5);
+        return {
+          ...l,
+          customersLow: low,
+          customersHigh: high,
+          revenueLow: Math.round(low * revenuePerCustomer),
+          revenueHigh: Math.round(high * revenuePerCustomer),
+        };
+      });
+      const totalLow = withNumbers.reduce((a: number, l: any) => a + l.customersLow, 0);
+      const totalHigh = withNumbers.reduce((a: number, l: any) => a + l.customersHigh, 0);
+
+      res.json({
+        businessName: b.businessName || '',
+        websiteUrl: b.websiteUrl,
+        generatedAt: new Date().toISOString(),
+        pagesRead: { home: !!home, pricing: !!pricing, signup: !!signup },
+        funnel: {
+          visitors: Math.round(visitors), signupRate, trials: Math.round(trials), paidRate,
+          customers: Math.round(customers), targetSignupRate: LEAK_TARGET_SIGNUP_PCT, targetPaidRate: LEAK_TARGET_PAID_PCT,
+          targetCustomers: Math.round(targetCustomers), gap: Math.round(gap), revenuePerCustomer,
+        },
+        totals: {
+          customersLow: totalLow, customersHigh: totalHigh,
+          revenueLow: Math.round(totalLow * revenuePerCustomer), revenueHigh: Math.round(totalHigh * revenuePerCustomer),
+          effort: withNumbers.map((l: any) => l.effort).filter(Boolean).join(' + '),
+        },
+        verdict: ai.verdict || '',
+        leaks: withNumbers,
+        channels: (Array.isArray(ai.channels) ? ai.channels : []).slice(0, 2),
+        uncomfortableTruth: ai.uncomfortableTruth || '',
+        plan: ai.plan || { weeks1to2: [], month1: [], month3: [] },
+        contentSummary: b.contentSummary || null,
+        contentScore: b.contentScore ?? null,
+      });
+    } catch (error: any) {
+      const errMsg = error?.message || String(error) || "Leak audit failed";
+      console.error("[LeakAudit] Error:", errMsg, error?.stack);
+      res.status(500).json({ error: errMsg });
+    }
+  });
+
   // n8n Webhook for Leads (webhook auth)
   app.post("/api/webhooks/n8n/leads", requireWebhookAuth, async (req, res) => {
     try {
