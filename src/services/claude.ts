@@ -1,18 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-
-// Cached API secret fetched from server
-let _apiSecret: string | null = null;
-const getApiSecret = async (): Promise<string> => {
-  if (_apiSecret) return _apiSecret;
-  try {
-    const res = await fetch('/api/config');
-    const data = await res.json();
-    _apiSecret = data.apiSecret || '';
-    return _apiSecret;
-  } catch {
-    return '';
-  }
-};
+import { getAuthHeader } from '../lib/supabase';
 
 let anthropicClient: Anthropic | null = null;
 
@@ -52,12 +39,12 @@ export const generateClaudeContent = async (params: {
   // If in browser, call the server proxy
   if (typeof window !== 'undefined') {
     try {
-      const secret = await getApiSecret();
+      const authHeader = await getAuthHeader();
       const response = await fetch('/api/ai/claude', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': secret,
+          ...authHeader,
         },
         body: JSON.stringify(params),
       });
