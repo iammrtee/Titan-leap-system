@@ -433,6 +433,220 @@ ${outputSchemaInstructions}`;
     }
   });
 
+  // ── Content Audit (protected) ──────────────────────────────────────────────
+  // Instagram: real numbers from the Apify scrape, scored by fixed rules in code so the
+  // same profile always gets the same score. Claude only writes the diagnosis and must
+  // cite the measured numbers. Other platforms: Claude web search, marked "partial".
+  const CONTENT_CTA_RE = /(link in (my |our )?bio|comment\b|\bdm\b|send (me|us)|sign ?up|free trial|\bbook\b|\bjoin\b|download|register|\bshop\b|get (it|yours|started|access)|try (it|free|now)|learn more|\bapply\b|waitlist)/i;
+  const IG_FORMAT_LABELS: Record<string, string> = { Video: 'Reels / video', Image: 'Single image', Sidecar: 'Carousel' };
+
+  function scoreFromBands(value: number | null, bands: Array<[number, number]>, floor: number): number | null {
+    if (value == null || Number.isNaN(value)) return null;
+    for (const [threshold, score] of bands) if (value >= threshold) return score;
+    return floor;
+  }
+
+  function computeInstagramContentMetrics(profile: any) {
+    const DAY = 86_400_000;
+    const now = Date.now();
+    const posts = (Array.isArray(profile.latestPosts) ? profile.latestPosts : [])
+      .filter((p: any) => p && p.timestamp)
+      .sort((a: any, b: any) => +new Date(b.timestamp) - +new Date(a.timestamp));
+    const followers = Number(profile.followersCount) || 0;
+    // Apify reports -1 likes when the owner hides like counts.
+    const likes = (p: any) => Math.max(0, Number(p.likesCount) || 0);
+    const comments = (p: any) => Math.max(0, Number(p.commentsCount) || 0);
+    const eng = (p: any) => likes(p) + comments(p);
+    const n = posts.length;
+    const hiddenLikes = posts.filter((p: any) => Number(p.likesCount) < 0).length;
+
+    const ages = posts.map((p: any) => (now - +new Date(p.timestamp)) / DAY);
+    const postsLast30 = ages.filter((d: number) => d <= 30).length;
+    const daysSinceLastPost = n ? Math.floor(ages[0]) : null;
+    let longestGapDays = 0;
+    for (let i = 1; i < n; i++) longestGapDays = Math.max(longestGapDays, Math.round(ages[i] - ages[i - 1]));
+    const windowDays = n ? Math.max(7, ages[n - 1]) : 0;
+    const postsPerWeek = n ? +(n / (windowDays / 7)).toFixed(1) : 0;
+
+    const avgLikes = n ? Math.round(posts.reduce((s: number, p: any) => s + likes(p), 0) / n) : 0;
+    const avgComments = n ? +(posts.reduce((s: number, p: any) => s + comments(p), 0) / n).toFixed(1) : 0;
+    const avgEngagement = n ? posts.reduce((s: number, p: any) => s + eng(p), 0) / n : 0;
+    const engagementRate = followers > 0 && n ? +((avgEngagement / followers) * 100).toFixed(2) : null;
+
+    const byFormat: Record<string, { posts: number; avgEngagement: number }> = {};
+    for (const p of posts) {
+      const label = IG_FORMAT_LABELS[p.type] || p.type || 'Other';
+      byFormat[label] = byFormat[label] || { posts: 0, avgEngagement: 0 };
+      byFormat[label].posts += 1;
+      byFormat[label].avgEngagement += eng(p);
+    }
+    for (const k of Object.keys(byFormat)) byFormat[k].avgEngagement = Math.round(byFormat[k].avgEngagement / byFormat[k].posts);
+
+    const summarise = (p: any) => p && ({
+      format: IG_FORMAT_LABELS[p.type] || p.type,
+      date: String(p.timestamp).slice(0, 10),
+      engagement: eng(p),
+      firstLine: String(p.caption || '').split('\n')[0].slice(0, 140),
+      url: p.url || (p.shortCode ? `https://www.instagram.com/p/${p.shortCode}/` : null),
+    });
+    const ranked = posts.slice().sort((a: any, b: any) => eng(b) - eng(a));
+    const captions = posts.map((p: any) => String(p.caption || ''));
+    const share = (pred: (c: string) => boolean) => (n ? Math.round((captions.filter(pred).length / n) * 100) : 0);
+
+    const metrics = {
+      followers,
+      totalPosts: Number(profile.postsCount) || null,
+      postsAnalysed: n,
+      postsLast30Days: postsLast30,
+      postsPerWeek,
+      daysSinceLastPost,
+      longestGapDays,
+      avgLikes,
+      avgComments,
+      engagementRatePct: engagementRate,
+      hiddenLikeCounts: hiddenLikes,
+      formats: byFormat,
+      captionsWithCtaPct: share(c => CONTENT_CTA_RE.test(c)),
+      captionsWithQuestionPct: share(c => c.includes('?')),
+      avgCaptionWords: n ? Math.round(captions.reduce((s: number, c: string) => s + (c.trim() ? c.trim().split(/\s+/).length : 0), 0) / n) : 0,
+      bioHasLink: !!profile.externalUrl,
+      bioLink: profile.externalUrl || null,
+      bioHasCta: CONTENT_CTA_RE.test(String(profile.biography || '')),
+      isBusinessAccount: !!profile.isBusinessAccount,
+      bestPosts: ranked.slice(0, 3).map(summarise),
+      weakestPosts: ranked.slice(-3).reverse().map(summarise),
+    };
+
+    // Fixed scoring rules (0–100). Shown in the UI so the client can see how we scored.
+    let consistency = scoreFromBands(postsPerWeek, [[4, 100], [3, 85], [2, 70], [1, 50], [0.5, 30]], 10);
+    if (consistency != null && daysSinceLastPost != null && daysSinceLastPost > 14) consistency = Math.min(consistency, 30);
+    const engagement = scoreFromBands(engagementRate, [[3, 100], [2, 80], [1, 60], [0.5, 40]], 20);
+    const conversionPath = Math.round((metrics.bioHasLink ? 40 : 0) + (metrics.bioHasCta ? 20 : 0) + metrics.captionsWithCtaPct * 0.4);
+    const formatCount = Object.keys(byFormat).length;
+    const formatMix = formatCount >= 3 ? 100 : formatCount === 2 ? 75 : formatCount === 1 ? 40 : null;
+    const parts = [consistency, engagement, conversionPath, formatMix].filter((v): v is number => v != null);
+    const scores = {
+      overall: parts.length ? Math.round(parts.reduce((a, b) => a + b, 0) / parts.length) : null,
+      consistency,
+      engagement,
+      conversionPath,
+      formatMix,
+    };
+    return { metrics, scores, posts };
+  }
+
+  const CONTENT_ANALYSIS_SCHEMA = `Return ONLY this JSON object:
+{
+  "verdict": "One plain sentence a founder would understand, e.g. 'You post often, but almost nothing points people to your offer.'",
+  "whatsWorking": ["1-2 items, each quoting a real number or a specific post"],
+  "leaks": [
+    {
+      "title": "Short name for the problem",
+      "evidence": "Quote the measured number or the specific post that proves it",
+      "fix": "Exactly what to change, specific to this account",
+      "effort": "Low | Medium | High",
+      "impact": "High | Medium | Low"
+    }
+  ],
+  "contentToOffer": "1-2 sentences: does their content lead people toward what they sell? Be specific.",
+  "nextPosts": [
+    { "format": "Reel / Carousel / Single image / Text post / Video", "hook": "The first line, written out", "why": "Which post or number this is based on" }
+  ],
+  "summaryForMainAudit": "3-4 plain sentences summarising the content findings, used inside the full system audit"
+}
+Rules: at most 3 leaks, ranked by impact. Exactly 3 nextPosts. Never invent a number that is not in the data.
+If the data is too thin to judge something, say so instead of guessing.
+The first character of your response must be "{" and the last must be "}".`;
+
+  app.post("/api/ai/content-audit", requireInternalAuth, async (req, res) => {
+    try {
+      const { platform, handle, businessName, offer, audience } = req.body || {};
+      if (!platform || !handle) return res.status(400).json({ error: "platform and profile link are required" });
+      const context = `Business: ${businessName || 'unknown'}\nWhat they sell: ${offer || 'unknown'}\nWho they sell to: ${audience || 'unknown'}`;
+
+      const { generateClaudeContent } = await import("./src/services/claude.ts");
+      const parse = (text: string) => {
+        const cleaned = (text || '').replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
+        try { return JSON.parse(cleaned); } catch {
+          const a = cleaned.indexOf('{'), b = cleaned.lastIndexOf('}');
+          if (a !== -1 && b > a) return JSON.parse(cleaned.slice(a, b + 1));
+          throw new Error("Could not parse content audit response");
+        }
+      };
+
+      const profile = platform === "Instagram" ? await scrapeInstagramProfile(handle) : null;
+
+      if (profile) {
+        const { metrics, scores, posts } = computeInstagramContentMetrics(profile);
+        if (!metrics.postsAnalysed) {
+          return res.json({ platform, handle, dataSource: 'instagram_api', dataQuality: 'insufficient', metrics, scores, analysis: null });
+        }
+        const trimmedPosts = posts.slice(0, 12).map((p: any) => ({
+          format: IG_FORMAT_LABELS[p.type] || p.type,
+          date: String(p.timestamp).slice(0, 10),
+          likes: p.likesCount, comments: p.commentsCount,
+          caption: String(p.caption || '').slice(0, 400),
+        }));
+        const prompt = `You are TitanLeap's content auditor. You are looking at REAL data scraped from an Instagram account today.
+Judge whether their content is bringing them customers, not whether it looks nice.
+
+${context}
+
+PROFILE: @${profile.username} — ${profile.fullName || ''}
+BIO: ${String(profile.biography || '').slice(0, 300)}
+
+MEASURED METRICS (computed in code, treat as facts):
+${JSON.stringify(metrics)}
+
+SCORES (fixed rules, 0-100): ${JSON.stringify(scores)}
+
+LATEST POSTS:
+${JSON.stringify(trimmedPosts)}
+
+${CONTENT_ANALYSIS_SCHEMA}`;
+        const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, prefillAssistant: "{", temperature: 0.3 });
+        return res.json({ platform, handle, dataSource: 'instagram_api', dataQuality: 'sufficient', metrics, scores, analysis: parse(result.text) });
+      }
+
+      // Web-search path: LinkedIn, X, TikTok, YouTube, or Instagram when Apify is unavailable.
+      const prompt = `You are TitanLeap's content auditor. Open this profile with web search and audit the content you can actually see.
+Judge whether their content is bringing them customers, not whether it looks nice.
+
+Platform: ${platform}
+Profile: ${handle}
+${context}
+
+First report what you observed. Use null for anything you could not see; never estimate.
+Then the analysis. Return ONLY this JSON:
+{
+  "dataQuality": "sufficient | partial | insufficient",
+  "observed": {
+    "followers": <number or null>,
+    "postsLast30Days": <number or null>,
+    "avgEngagementPerPost": <number or null>,
+    "formats": ["formats you saw"],
+    "bioHasLink": <true/false/null>,
+    "postsWithCtaPct": <number or null>
+  },
+  "analysis": ${CONTENT_ANALYSIS_SCHEMA.replace('Return ONLY this JSON object:\n', '').split('\nRules:')[0]}
+}
+Rules: at most 3 leaks, exactly 3 nextPosts, no invented numbers. If you cannot open the profile, set dataQuality to "insufficient" and analysis to null.
+The first character of your response must be "{" and the last must be "}".`;
+      const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, useWebSearch: true, temperature: 0.3 });
+      const parsed = parse(result.text);
+      return res.json({
+        platform, handle, dataSource: 'web_search',
+        dataQuality: parsed.dataQuality || 'partial',
+        metrics: parsed.observed || null, scores: null,
+        analysis: parsed.analysis || null,
+      });
+    } catch (error: any) {
+      const errMsg = error?.message || String(error) || "Content audit failed";
+      console.error("[ContentAudit] Error:", errMsg, error?.stack);
+      res.status(500).json({ error: errMsg });
+    }
+  });
+
   // n8n Webhook for Leads (webhook auth)
   app.post("/api/webhooks/n8n/leads", requireWebhookAuth, async (req, res) => {
     try {
