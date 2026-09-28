@@ -12,19 +12,32 @@ import { EmailCampaigns } from './components/EmailCampaigns';
 import { AIAutomation } from './components/AIAutomation';
 import { TeamsView } from './components/TeamsView';
 import { Logo } from './components/Logo';
+import { Login } from './components/Login';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { motion, AnimatePresence } from 'motion/react';
-import { Instagram, Twitter, Linkedin, Youtube, Github, Globe, Plus } from 'lucide-react';
+import { Instagram, Twitter, Linkedin, Youtube, Github, Globe, Plus, Loader2 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { cn } from './lib/utils';
+import { supabase } from './lib/supabase';
+import type { Session } from '@supabase/supabase-js';
 
 export default function App() {
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
   const [darkMode, setDarkMode] = useState(false);
   const [auditData, setAuditData] = useState<any>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [forceRegenerateTimestamp, setForceRegenerateTimestamp] = useState<number>(0);
+
+  // Auth: track the current Supabase session; gate the whole app behind it.
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   // Persistence: Load saved state on mount
   useEffect(() => {
@@ -137,6 +150,25 @@ export default function App() {
 
   const config = getViewConfig();
 
+  // Still checking for an existing session.
+  if (session === undefined) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-surface">
+        <Loader2 className="animate-spin text-on-surface-variant" size={24} />
+      </div>
+    );
+  }
+
+  // No session — show the login/sign-up screen instead of the dashboard.
+  if (session === null) {
+    return (
+      <>
+        <Toaster position="top-right" richColors />
+        <Login />
+      </>
+    );
+  }
+
   return (
     <ErrorBoundary>
     
@@ -157,6 +189,7 @@ export default function App() {
         onClose={() => setIsMobileMenuOpen(false)}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        onLogout={() => supabase.auth.signOut()}
       />
       
       <Toaster position="top-right" richColors />
