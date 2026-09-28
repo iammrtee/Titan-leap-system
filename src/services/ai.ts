@@ -243,6 +243,7 @@ Email Sequence: ${formData.emailSequence}
 Running Ads: ${formData.runningAds ? 'Yes — ' + formData.adPlatform : 'No'}
 Content Types: ${formData.contentTypes?.join(', ') || 'Not specified'}
 Tools Used: ${formData.tools?.join(', ') || 'Not specified'}
+${formData.contentAuditSummary ? `\nCONTENT AUDIT (measured from their real ${formData.primaryPlatform || 'social'} profile, treat as facts):\n${formData.contentAuditSummary}\n` : ''}
 
 CONSTRAINT CATEGORIES TO DIAGNOSE:
 1. Positioning — Does the market clearly understand who this is for and why it's different?
@@ -673,6 +674,44 @@ export const researchSocialPresence = async (platform: string, handle: string): 
     throw new Error(err.error || 'Social research failed');
   }
 
+  return await response.json();
+};
+
+export type ContentAuditLeak = { title: string; evidence: string; fix: string; effort: string; impact: string };
+export type ContentAuditResult = {
+  platform: string;
+  handle: string;
+  dataSource: 'instagram_api' | 'web_search';
+  dataQuality: 'sufficient' | 'partial' | 'insufficient';
+  metrics: Record<string, any> | null;
+  scores: { overall: number | null; consistency: number | null; engagement: number | null; conversionPath: number | null; formatMix: number | null } | null;
+  analysis: {
+    verdict: string;
+    whatsWorking: string[];
+    leaks: ContentAuditLeak[];
+    contentToOffer: string;
+    nextPosts: { format: string; hook: string; why: string }[];
+    summaryForMainAudit: string;
+  } | null;
+};
+
+// Content audit: real Instagram data (Apify) scored by fixed rules on the server,
+// or a web-search read of other platforms (marked partial). See /api/ai/content-audit.
+export const auditContent = async (
+  platform: string,
+  handle: string,
+  context: { businessName?: string; offer?: string; audience?: string } = {}
+): Promise<ContentAuditResult> => {
+  const secret = await getInternalApiSecret();
+  const response = await fetch('/api/ai/content-audit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': secret },
+    body: JSON.stringify({ platform, handle, ...context }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Content audit failed' }));
+    throw new Error(err.error || 'Content audit failed');
+  }
   return await response.json();
 };
 
