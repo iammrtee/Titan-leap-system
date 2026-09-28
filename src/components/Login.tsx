@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import { Logo } from './Logo';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/src/lib/utils';
 
 export const Login: React.FC = () => {
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
@@ -37,25 +38,37 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-surface px-4">
-      <div className="w-full max-w-sm">
-        <div className="flex justify-center mb-8">
-          <Logo />
+    <div className="min-h-screen w-full flex items-center justify-center bg-surface px-4 relative overflow-hidden">
+      {/* Atmospheric background, matching the rest of the app */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-secondary/10 blur-[120px] rounded-full" />
+      </div>
+
+      <div className="w-full max-w-sm relative z-10">
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-16 h-16 mb-4 shadow-[0_20px_60px_rgba(71,0,175,0.3)] rounded-full">
+            <Logo />
+          </div>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 rounded-full border border-primary/10">
+            <Zap size={12} className="text-primary" fill="currentColor" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-primary">TitanLeap</span>
+          </div>
         </div>
 
-        <div className="bg-surface-container rounded-2xl border border-outline-variant/20 p-8">
-          <h1 className="text-lg font-semibold text-on-surface mb-1">
-            {mode === 'sign-in' ? 'Sign in' : 'Create account'}
+        <div className="glass-panel rounded-[28px] p-8 shadow-2xl">
+          <h1 className="text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant/40 mb-2">
+            {mode === 'sign-in' ? 'Sign In' : 'Create Account'}
           </h1>
-          <p className="text-sm text-on-surface-variant mb-6">
+          <p className="text-sm font-medium text-on-surface-variant/70 mb-6">
             {mode === 'sign-in'
-              ? 'Sign in to access the TitanLeap dashboard.'
-              : 'Create an account to access the TitanLeap dashboard.'}
+              ? 'Sign in to access the Growth System.'
+              : 'Create an account to access the Growth System.'}
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="login-email" className="block text-xs font-medium text-on-surface-variant mb-1.5">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <label htmlFor="login-email" className="block text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 ml-1">
                 Email
               </label>
               <input
@@ -65,13 +78,13 @@ export const Login: React.FC = () => {
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg bg-surface-container-high border border-outline-variant/30 px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="audit-input"
                 placeholder="you@titanleap.co"
               />
             </div>
 
-            <div>
-              <label htmlFor="login-password" className="block text-xs font-medium text-on-surface-variant mb-1.5">
+            <div className="space-y-2">
+              <label htmlFor="login-password" className="block text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 ml-1">
                 Password
               </label>
               <input
@@ -82,22 +95,26 @@ export const Login: React.FC = () => {
                 autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg bg-surface-container-high border border-outline-variant/30 px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="audit-input"
                 placeholder="••••••••"
               />
             </div>
 
             {message && (
-              <p className="text-xs text-on-surface-variant">{message}</p>
+              <p className="text-xs font-medium text-on-surface-variant/70 leading-relaxed">{message}</p>
             )}
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary text-on-primary py-2.5 text-sm font-medium disabled:opacity-60"
+              className={cn(
+                "w-full py-4 bg-primary text-on-primary font-black text-xs uppercase tracking-[0.3em] rounded-2xl",
+                "shadow-[0_20px_60px_rgba(71,0,175,0.3)] hover:shadow-[0_30px_80px_rgba(71,0,175,0.5)] hover:scale-[1.02] active:scale-95",
+                "transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:hover:scale-100"
+              )}
             >
-              {isSubmitting && <Loader2 size={16} className="animate-spin" />}
-              {mode === 'sign-in' ? 'Sign in' : 'Create account'}
+              {isSubmitting && <Loader2 size={14} className="animate-spin" />}
+              {mode === 'sign-in' ? 'Sign In' : 'Create Account'}
             </button>
           </form>
 
@@ -107,13 +124,13 @@ export const Login: React.FC = () => {
               setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in');
               setMessage(null);
             }}
-            className="w-full text-center text-xs text-on-surface-variant hover:text-on-surface mt-5"
+            className="w-full text-center text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40 hover:text-primary transition-colors mt-6"
           >
             {mode === 'sign-in' ? "Don't have an account? Create one" : 'Already have an account? Sign in'}
           </button>
         </div>
 
-        <p className="text-center text-xs text-on-surface-variant mt-6">
+        <p className="text-center text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant/40 max-w-xs mx-auto leading-relaxed mt-6">
           Access to dashboard data is restricted to approved team emails.
         </p>
       </div>
