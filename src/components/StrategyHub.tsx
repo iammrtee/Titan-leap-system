@@ -5,7 +5,7 @@ import { Anchor, Network, LineChart, Download, Clapperboard, Info, Bolt, Search,
 import { cn } from '@/src/lib/utils';
 import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent, generateCalendarFromBlueprint } from '@/src/services/ai';
 import { toast } from 'sonner';
-import { supabase, isSupabaseConfigured } from '@/src/lib/supabase';
+import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 import localforage from 'localforage';
 
 type StrategyTab = 'competitor' | 'calendar' | 'plan';
@@ -561,9 +561,10 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
           facebook: localStorage.getItem(`titanleap_facebook_token_${profileId}`) || localStorage.getItem('titanleap_facebook_token')
         };
 
+        const daemonAuthHeader = await getAuthHeader();
         const response = await fetch('/api/daemon/publish', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...daemonAuthHeader },
           body: JSON.stringify({
             platforms: selectedPlatforms.map(p => platformMap[p] || p),
             mediaUrls,

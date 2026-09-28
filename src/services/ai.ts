@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { TITANLEAP_SYSTEM_PROMPT } from '../prompt';
 import { generateClaudeContent } from './claude';
+import { getAuthHeader } from '../lib/supabase';
 
 export type AIEngine = 'gemini' | 'claude';
 
@@ -22,9 +23,10 @@ const generateGeminiContent = async (params: {
   responseMimeType?: string;
   temperature?: number;
 }) => {
+  const authHeader = await getAuthHeader();
   const response = await fetch('/api/ai/gemini', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeader },
     body: JSON.stringify(params),
   });
   
@@ -564,9 +566,10 @@ export const generate90DayBlueprint = async (auditData: any) => {
 export const smartFillForm = async (url: string) => {
   // Try server-side endpoint first (it can actually fetch the page)
   try {
+    const smartFillAuthHeader = await getAuthHeader();
     const serverRes = await fetch('/api/ai/smart-fill', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...smartFillAuthHeader },
       body: JSON.stringify({ url }),
     });
     if (serverRes.ok) {
@@ -606,9 +609,10 @@ Extract and return ONLY a valid JSON object with these exact keys:
 }
 Return ONLY the JSON. No markdown. No explanation.`;
 
+  const claudeFallbackAuthHeader = await getAuthHeader();
   const proxyRes = await fetch('/api/ai/claude', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...claudeFallbackAuthHeader },
     body: JSON.stringify({ prompt: smartFillPrompt }),
   });
 
@@ -648,24 +652,11 @@ export type SocialResearchResult = {
 // Real research (not inference) on a social handle, backed by Claude's web_search tool
 // server-side. Every field traces back to something actually found on the profile â
 // fields are left null/"insufficient" rather than guessed when the profile can't be verified.
-let _socialResearchApiSecret: string | null = null;
-const getInternalApiSecret = async (): Promise<string> => {
-  if (_socialResearchApiSecret) return _socialResearchApiSecret;
-  try {
-    const res = await fetch('/api/config');
-    const data = await res.json();
-    _socialResearchApiSecret = data.apiSecret || '';
-    return _socialResearchApiSecret;
-  } catch {
-    return '';
-  }
-};
-
 export const researchSocialPresence = async (platform: string, handle: string): Promise<SocialResearchResult> => {
-  const secret = await getInternalApiSecret();
+  const authHeader = await getAuthHeader();
   const response = await fetch('/api/ai/social-research', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': secret },
+    headers: { 'Content-Type': 'application/json', ...authHeader },
     body: JSON.stringify({ platform, handle }),
   });
 
@@ -702,10 +693,10 @@ export const auditContent = async (
   handle: string,
   context: { businessName?: string; offer?: string; audience?: string } = {}
 ): Promise<ContentAuditResult> => {
-  const secret = await getInternalApiSecret();
+  const authHeader = await getAuthHeader();
   const response = await fetch('/api/ai/content-audit', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': secret },
+    headers: { 'Content-Type': 'application/json', ...authHeader },
     body: JSON.stringify({ platform, handle, ...context }),
   });
   if (!response.ok) {

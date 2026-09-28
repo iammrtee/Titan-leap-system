@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { TITANLEAP_SYSTEM_PROMPT } from "../prompt";
 import { AuditFormData } from "../types";
+import { getAuthHeader } from "../lib/supabase";
 
 export async function generateAuditReport(data: AuditFormData): Promise<string> {
   const prompt = `
@@ -51,10 +52,12 @@ Generate the complete audit report now using the TitanLeap monetization framewor
   `;
 
   try {
+    const authHeader = await getAuthHeader();
     const response = await fetch('/api/ai/gemini', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...authHeader,
       },
       body: JSON.stringify({
         prompt,
