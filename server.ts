@@ -8,7 +8,6 @@ import { executePublishingDaemon } from "./src/services/daemon.ts";
 import { authRouter } from "./src/services/auth.ts";
 import { twitterManualRouter } from "./src/services/twitter-manual.ts";
 import { createClient } from '@supabase/supabase-js';
-import crypto from 'crypto';
 
 // Initialize Supabase Client for Server-side (env vars only â no hardcoded keys)
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
@@ -21,21 +20,49 @@ if (!supabaseUrl || !supabaseAnonKey) {
 const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
 
 // --- Auth Middleware ---
-// Internal API calls (from the SPA on the same origin) are validated via a session token.
+// Internal API calls (from the SPA) are validated via the caller's own Supabase session
+// token (Authorization: Bearer <access_token>), then checked against an email allowlist.
 // External webhooks (n8n) are validated via a separate WEBHOOK_SECRET.
-// Set INTERNAL_API_SECRET in your env (auto-generated at boot if missing).
-
-const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || crypto.randomBytes(32).toString('hex');
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
 
-// Middleware: require x-api-key header matching INTERNAL_API_SECRET
-const requireInternalAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const key = req.headers['x-api-key'];
-  if (key === INTERNAL_API_SECRET) return next();
-  // Also allow same-origin requests in dev (Referer/Origin check)
-  const origin = req.headers['origin'] || req.headers['referer'] || '';
-  if (process.env.NODE_ENV !== 'production' && origin.includes('localhost')) return next();
-  res.status(401).json({ error: 'Unauthorized' });
+// Comma-separated list of emails allowed to call protected internal routes, e.g.
+// "founder@titanleap.co,teammate@titanleap.co". Set this in the environment.
+const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+
+if (ALLOWED_EMAILS.length === 0) {
+  console.warn('[Auth] ALLOWED_EMAILS is not set — no one will be authorized to call protected routes. Set it in your environment (comma-separated emails).');
+}
+
+// Middleware: require a valid Supabase session token for the SPA's own logged-in user,
+// and require that user's email to be on the ALLOWED_EMAILS allowlist.
+const requireUser = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const authHeader = req.headers['authorization'] || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data?.user?.email) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const email = data.user.email.toLowerCase();
+    if (!ALLOWED_EMAILS.includes(email)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    (req as any).user = data.user;
+    return next();
+  } catch (err) {
+    console.error('[Auth] Failed to verify session token:', err);
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 };
 
 // Middleware: require x-webhook-secret header for external webhooks
@@ -60,11 +87,6 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
 
   app.use(express.json({ limit: '50mb' })); // Increased limit for base64 media
 
-  // Expose the internal API secret to the SPA via a meta endpoint (dev only / same-origin)
-  app.get("/api/config", (req, res) => {
-    res.json({ apiSecret: INTERNAL_API_SECRET });
-  });
-
   // Mount Auth Router
   app.use("/api/auth", authRouter);
   
@@ -77,7 +99,7 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
   });
 
   // Claude AI Proxy (protected)
-  app.post("/api/ai/claude", requireInternalAuth, async (req, res) => {
+  app.post("/api/ai/claude", requireUser, async (req, res) => {
     try {
       const { prompt, systemPrompt, temperature, useWebSearch } = req.body;
       const { generateClaudeContent } = await import("./src/services/claude.ts");
@@ -119,7 +141,7 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
   });
 
   // Gemini AI Proxy (protected)
-  app.post("/api/ai/gemini", requireInternalAuth, async (req, res) => {
+  app.post("/api/ai/gemini", requireUser, async (req, res) => {
     try {
       const { prompt, systemPrompt, responseMimeType, temperature } = req.body;
       const { GoogleGenAI } = await import("@google/genai");
@@ -162,7 +184,7 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
   });
 
   // Smart Fill (protected)
-  app.post("/api/ai/smart-fill", requireInternalAuth, async (req, res) => {
+  app.post("/api/ai/smart-fill", requireUser, async (req, res) => {
     try {
       const { url } = req.body;
       if (!url) return res.status(400).json({ error: "URL is required" });
@@ -308,7 +330,7 @@ Return ONLY the JSON. No markdown. No explanation.`;
     };
   }
 
-  app.post("/api/ai/social-research", requireInternalAuth, async (req, res) => {
+  app.post("/api/ai/social-research", requireUser, async (req, res) => {
     try {
       const { platform, handle } = req.body;
       if (!platform || !handle) {
@@ -558,7 +580,7 @@ Rules: at most 3 leaks, ranked by impact. Exactly 3 nextPosts. Never invent a nu
 If the data is too thin to judge something, say so instead of guessing.
 The first character of your response must be "{" and the last must be "}".`;
 
-  app.post("/api/ai/content-audit", requireInternalAuth, async (req, res) => {
+  app.post("/api/ai/content-audit", requireUser, async (req, res) => {
     try {
       const { platform, handle, businessName, offer, audience } = req.body || {};
       if (!platform || !handle) return res.status(400).json({ error: "platform and profile link are required" });
@@ -750,7 +772,7 @@ The first character of your response must be "{" and the last must be "}".`;
   });
 
   // Daemon publish endpoint (protected)
-  app.post("/api/daemon/publish", requireInternalAuth, async (req, res) => {
+  app.post("/api/daemon/publish", requireUser, async (req, res) => {
     const { platforms, mediaUrls, caption, scheduledTime, tokens, credentials, linkedinCompanyId } = req.body;
     
     console.log(`[DAEMON] Received request to publish to ${platforms.join(', ')}`);
@@ -776,7 +798,7 @@ The first character of your response must be "{" and the last must be "}".`;
   // Schedule a post from the Content Manager's "Schedule & Publish" screen.
   // Inserts a row with status "pending" — a separate n8n workflow polls scheduled_posts
   // for due rows and does the actual per-platform publishing (see n8n workflow docs).
-  app.post("/api/posts/schedule", requireInternalAuth, async (req, res) => {
+  app.post("/api/posts/schedule", requireUser, async (req, res) => {
     try {
       const { platforms, mediaUrls, caption, scheduledTime, linkedinCompanyId, profile_id } = req.body;
 
