@@ -40,6 +40,8 @@ import { toPng } from 'html-to-image';
 import { Logo } from './Logo';
 import { StrategyHub } from './StrategyHub';
 import { ContentAuditPanel } from './ContentAuditPanel';
+import { LeakReportPanel } from './LeakReportPanel';
+import type { LeakAuditReport } from '@/src/lib/leakReportTemplate';
 import { Activity } from 'lucide-react';
 import type { ContentAuditResult } from '@/src/services/ai';
 
@@ -137,7 +139,8 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
   const [smartFillUrl, setSmartFillUrl] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'intake' | 'content' | 'result' | 'strategy'>('intake');
+  const [activeTab, setActiveTab] = useState<'intake' | 'content' | 'leak' | 'result' | 'strategy'>('intake');
+  const [leakReport, setLeakReport] = useState<LeakAuditReport | null>(null);
   const [contentAudit, setContentAudit] = useState<ContentAuditResult | null>(null);
   const [strategyTimestamp, setStrategyTimestamp] = useState(0);
   const [detailedBlueprint, setDetailedBlueprint] = useState<any>(null);
@@ -630,6 +633,18 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
             {contentAudit?.scores?.overall != null && (
               <span className="ml-1 px-1.5 py-0.5 rounded-md bg-primary/15 text-primary">{contentAudit.scores.overall}</span>
             )}
+          </button>
+          <button
+            onClick={() => setActiveTab('leak')}
+            className={cn(
+              "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0",
+              activeTab === 'leak'
+                ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10"
+                : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container"
+            )}
+          >
+            <FileText size={16} />
+            Leak Report ($297)
           </button>
           <button
             onClick={() => setActiveTab('result')}
@@ -1239,6 +1254,8 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
               result={contentAudit}
               onResult={setContentAudit}
             />
+        ) : activeTab === 'leak' ? (
+            <LeakReportPanel formData={formData} contentAudit={contentAudit} report={leakReport} onReport={setLeakReport} />
         ) : activeTab === 'result' ? (
           <div ref={reportRef}>
             {auditReport ? (
