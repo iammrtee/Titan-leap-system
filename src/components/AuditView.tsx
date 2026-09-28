@@ -39,6 +39,9 @@ import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
 import { Logo } from './Logo';
 import { StrategyHub } from './StrategyHub';
+import { ContentAuditPanel } from './ContentAuditPanel';
+import { Activity } from 'lucide-react';
+import type { ContentAuditResult } from '@/src/services/ai';
 
 interface FormData {
   // Section 1
@@ -134,7 +137,8 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
   const [smartFillUrl, setSmartFillUrl] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'intake' | 'result' | 'strategy'>('intake');
+  const [activeTab, setActiveTab] = useState<'intake' | 'content' | 'result' | 'strategy'>('intake');
+  const [contentAudit, setContentAudit] = useState<ContentAuditResult | null>(null);
   const [strategyTimestamp, setStrategyTimestamp] = useState(0);
   const [detailedBlueprint, setDetailedBlueprint] = useState<any>(null);
   const [isGeneratingBlueprint, setIsGeneratingBlueprint] = useState(false);
@@ -354,7 +358,16 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
     });
 
     try {
-      const dashboardResult = await auditLandingPage(formData);
+      const contentAuditSummary = contentAudit?.analysis
+        ? [
+            contentAudit.analysis.summaryForMainAudit,
+            contentAudit.scores?.overall != null ? `Content score: ${contentAudit.scores.overall}/100.` : '',
+            contentAudit.metrics?.engagementRatePct != null ? `Engagement rate: ${contentAudit.metrics.engagementRatePct}%.` : '',
+            contentAudit.metrics?.postsPerWeek != null ? `Posts per week: ${contentAudit.metrics.postsPerWeek}.` : '',
+            contentAudit.dataSource === 'web_search' ? '(Read via web search, partial data.)' : '',
+          ].filter(Boolean).join(' ')
+        : '';
+      const dashboardResult = await auditLandingPage({ ...formData, contentAuditSummary });
       if (dashboardResult) {
         setAuditReport({
           ...dashboardResult,
@@ -602,6 +615,21 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
           >
             <FileText size={16} />
             Business Assessment
+          </button>
+          <button
+            onClick={() => setActiveTab('content')}
+            className={cn(
+              "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0",
+              activeTab === 'content'
+                ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10"
+                : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container"
+            )}
+          >
+            <Activity size={16} />
+            Content Audit
+            {contentAudit?.scores?.overall != null && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-md bg-primary/15 text-primary">{contentAudit.scores.overall}</span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('result')}
@@ -1203,6 +1231,14 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
             </p>
           </div>
         </div>
+        ) : activeTab === 'content' ? (
+            <ContentAuditPanel
+              initialPlatform={formData.primaryPlatform}
+              initialHandle={formData.socialHandles.find(h => h.trim() !== '') || ''}
+              context={{ businessName: formData.businessName, offer: formData.mainOffer, audience: formData.industry }}
+              result={contentAudit}
+              onResult={setContentAudit}
+            />
         ) : activeTab === 'result' ? (
           <div ref={reportRef}>
             {auditReport ? (
