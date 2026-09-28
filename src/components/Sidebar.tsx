@@ -32,6 +32,7 @@ interface SidebarProps {
   onClose: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  onLogout?: () => void;
 }
 
 const navItems = [
@@ -47,7 +48,7 @@ const navItems = [
   { id: 'teams', label: 'Teams', icon: Users },
 ] as const;
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, darkMode, onToggleDarkMode, isOpen, onClose, isCollapsed, onToggleCollapse }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, darkMode, onToggleDarkMode, isOpen, onClose, isCollapsed, onToggleCollapse, onLogout }) => {
   return (
     <>
       {/* Mobile Overlay */}
@@ -156,6 +157,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, dark
               {!isCollapsed && "Support"}
             </button>
             <button 
+              onClick={onLogout}
               title={isCollapsed ? "Logout" : undefined}
               className={cn(
                 "w-full flex items-center text-on-surface-variant hover:text-error transition-colors text-sm font-medium",

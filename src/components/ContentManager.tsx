@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Plus, X, Play, Image, Check, AlertCircle, Link as LinkIcon, ExternalLink, Upload, Clock, Send, Instagram, Twitter, Linkedin, Youtube, Facebook, Loader2, Calendar, Trash2, FileText, ChevronDown, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/src/lib/utils';
-import { supabase, isSupabaseConfigured } from '@/src/lib/supabase';
+import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 
 // ─── Content Manager Tab Types ───
 type ContentManagerTab = 'production' | 'autopost';
@@ -668,9 +668,10 @@ const AutoPostTab: React.FC = () => {
       const mediaUrls = uploadedAssets.map(a => a.url);
       const platformMap: Record<string, string> = { ig: 'instagram', tt: 'tiktok', li: 'linkedin', fb: 'facebook', tw: 'twitter', yt: 'youtube' };
 
+      const scheduleAuthHeader = await getAuthHeader();
       const response = await fetch('/api/posts/schedule', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...scheduleAuthHeader },
         body: JSON.stringify({
           platforms: selectedPlatforms.map(p => platformMap[p] || p),
           scheduledTime, caption, mediaUrls, linkedinCompanyId, profile_id: profileId,
