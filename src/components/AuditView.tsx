@@ -31,7 +31,7 @@ import {
   FileCode2
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { auditLandingPage, smartFillForm, generate90DayBlueprint, getAIEngine, setAIEngine, type AIEngine } from '@/src/services/ai';
+import { auditLandingPage, smartFillForm, generate90DayBlueprint, getAIEngine, setAIEngine, type AIEngine, discoverSocials, type DiscoveredSocial } from '@/src/services/ai';
 import { supabase } from '@/src/services/supabase';
 import { toast } from 'sonner';
 import { Sparkles, Wand2, Loader2, FileDown, Printer, RefreshCw, Search } from 'lucide-react';
@@ -39,7 +39,7 @@ import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
 import { Logo } from './Logo';
 import { StrategyHub } from './StrategyHub';
-import { useContentAudit, ContentAuditInline, profilesFromForm, looksComplete, contentSummaryForAudit, keyOf } from './ContentAuditPanel';
+import { useContentAudit, ContentAuditInline, profilesFromForm, looksComplete, contentSummaryForAudit, keyOf, detectProfilePlatform } from './ContentAuditPanel';
 import { LeakReportPanel } from './LeakReportPanel';
 import type { LeakAuditReport } from '@/src/lib/leakReportTemplate';
 import { Activity } from 'lucide-react';
@@ -191,6 +191,51 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
     const t = setTimeout(() => { contentCtl.ensure(ready).catch(() => {}); }, 2500);
     return () => clearTimeout(t);
   }, [socialProfilesKey, handlesEdited]);
+
+  // ── Find their socials from the website ──
+  // Reads the links in the site's source (free, no AI) and adds any platform the form
+  // doesn't already have. Adding them flips handlesEdited, so the prefetch above then
+  // audits every profile found.
+  const [isDiscoveringSocials, setIsDiscoveringSocials] = useState(false);
+  const discoveredFor = React.useRef('');
+  const formDataRef = React.useRef(formData);
+  formDataRef.current = formData;
+  const hostOf = (u: string) => {
+    try { return new URL(/^https?:\/\//i.test(u.trim()) ? u.trim() : `https://${u.trim()}`).hostname.replace(/^www\./, '').toLowerCase(); } catch { return ''; }
+  };
+  const mergeSocials = (fd: FormData, found: DiscoveredSocial[]) => {
+    const existing = fd.socialHandles.map(h => h.trim()).filter(Boolean);
+    const have = new Set(existing.map(h => detectProfilePlatform(h, fd.primaryPlatform)));
+    const add = found.filter(f => !have.has(f.platform));
+    const handles = [...existing, ...add.map(f => f.url)].slice(0, 6);
+    const pref = ['Instagram', 'TikTok', 'LinkedIn', 'YouTube', 'Twitter-X', 'Facebook'];
+    const primaryPlatform = fd.primaryPlatform || pref.find(p => found.some(f => f.platform === p)) || '';
+    return { next: { ...fd, socialHandles: handles.length ? handles : [''], primaryPlatform }, added: add };
+  };
+  const discoverFromWebsite = async (url: string, opts: { force?: boolean; quiet?: boolean } = {}): Promise<FormData | null> => {
+    const host = hostOf(url);
+    if (!host || !host.includes('.')) return null;
+    if (!opts.force && discoveredFor.current === host) return null;
+    discoveredFor.current = host;
+    setIsDiscoveringSocials(true);
+    try {
+      const found = await discoverSocials(url);
+      const { next, added } = mergeSocials(formDataRef.current, found);
+      if (added.length) {
+        setFormData(prev => mergeSocials(prev, found).next);
+        setHandlesEdited(true);
+        setExpandedSections(prev => (prev.includes(2) ? prev : [...prev, 2]));
+        if (!opts.quiet) toast.success(`Found ${added.length} social profile${added.length > 1 ? 's' : ''} on ${host}`, {
+          description: `${added.map(a => a.platform).join(', ')}. Auditing ${added.length > 1 ? 'them' : 'it'} now.`,
+        });
+      } else if (!opts.quiet) {
+        toast.info(found.length ? 'Every social linked on the website is already in the form.' : `No social links found on ${host}. Add them by hand below.`);
+      }
+      return next;
+    } finally {
+      setIsDiscoveringSocials(false);
+    }
+  };
   const reportRef = React.useRef<HTMLDivElement>(null);
   const blueprintRef = React.useRef<HTMLDivElement>(null);
 
@@ -328,7 +373,15 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
       }));
       setSmartFillUrl('');
       if (Array.isArray(data?.socialHandles) && data.socialHandles.some((h: string) => h?.trim())) setHandlesEdited(true);
-      toast.success("Form filled from your website!", { id: fillToast });
+      discoveredFor.current = hostOf(data.websiteUrl || url);
+      const foundCount = Array.isArray(data?.discoveredSocials) ? data.discoveredSocials.length : 0;
+      if (foundCount) setExpandedSections(prev => (prev.includes(2) ? prev : [...prev, 2]));
+      toast.success("Form filled from your website!", {
+        id: fillToast,
+        description: Array.isArray(data?.discoveredSocials) && data.discoveredSocials.length
+          ? `Found ${data.discoveredSocials.length} social profile${data.discoveredSocials.length > 1 ? 's' : ''} (${data.discoveredSocials.map((s: DiscoveredSocial) => s.platform).join(', ')}). Auditing them now.`
+          : undefined,
+      });
     } catch (error: any) {
       console.error("Smart fill failed:", error);
       toast.error("Smart Fill failed", {
@@ -393,14 +446,20 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
       // Content audit first. Profiles already audited (or being prefetched right now) are
       // reused, so this only costs time/credits for links that are new or changed.
       let ca = contentAudit;
-      if (socialProfiles.length) {
+      let profiles = socialProfiles;
+      if (!profiles.length && formData.websiteUrl.trim()) {
+        toast.loading("Looking for their social profiles...", { id: auditToast, description: "Reading the links on their website." });
+        const next = await discoverFromWebsite(formData.websiteUrl, { force: true, quiet: true });
+        if (next) profiles = profilesFromForm(next.socialHandles, next.primaryPlatform);
+      }
+      if (profiles.length) {
         setAuditPhase('content');
         toast.loading("Auditing social content...", {
           id: auditToast,
-          description: `${socialProfiles.length} profile${socialProfiles.length > 1 ? 's' : ''}. Anything already audited is reused.`
+          description: `${profiles.length} profile${profiles.length > 1 ? 's' : ''} (${profiles.map(p => p.platform).join(', ')}). Anything already audited is reused.`
         });
         try {
-          ca = await contentCtl.ensure(socialProfiles);
+          ca = await contentCtl.ensure(profiles);
         } catch (e) {
           console.error("Content audit failed, continuing without it", e);
         }
@@ -772,6 +831,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                       type="text" 
                       value={formData.websiteUrl}
                       onChange={e => setFormData({...formData, websiteUrl: e.target.value})}
+                      onBlur={e => { if (e.target.value.trim()) discoverFromWebsite(e.target.value); }}
                       placeholder="https://lumina.digital"
                       className="audit-input"
                     />
@@ -1034,6 +1094,16 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                   </InputGroup>
 
                   <div className="pt-2 border-t border-outline-variant/30">
+                    {formData.websiteUrl.trim() && (
+                      <button
+                        onClick={() => discoverFromWebsite(formData.websiteUrl, { force: true })}
+                        disabled={isDiscoveringSocials}
+                        className="w-full mb-3 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-colors disabled:opacity-50"
+                      >
+                        {isDiscoveringSocials ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+                        {isDiscoveringSocials ? `Checking ${hostOf(formData.websiteUrl)} for social links…` : `Find all socials on ${hostOf(formData.websiteUrl) || 'their website'}`}
+                      </button>
+                    )}
                     <ContentAuditInline profiles={socialProfiles} ctl={contentCtl} result={contentAudit} />
                   </div>
                 </div>
