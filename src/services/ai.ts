@@ -245,7 +245,7 @@ Email Sequence: ${formData.emailSequence}
 Running Ads: ${formData.runningAds ? 'Yes — ' + formData.adPlatform : 'No'}
 Content Types: ${formData.contentTypes?.join(', ') || 'Not specified'}
 Tools Used: ${formData.tools?.join(', ') || 'Not specified'}
-${formData.contentAuditSummary ? `\nCONTENT AUDIT (measured from their real ${formData.primaryPlatform || 'social'} profile, treat as facts):\n${formData.contentAuditSummary}\n` : ''}
+${formData.contentAuditSummary ? `\nCONTENT AUDIT (from their real social profiles, one line per platform; measured numbers are facts):\n${formData.contentAuditSummary}\n` : ''}
 
 CONSTRAINT CATEGORIES TO DIAGNOSE:
 1. Positioning — Does the market clearly understand who this is for and why it's different?
@@ -672,10 +672,14 @@ export type ContentAuditLeak = { title: string; evidence: string; fix: string; e
 export type ContentAuditResult = {
   platform: string;
   handle: string;
-  dataSource: 'instagram_api' | 'web_search';
+  dataSource: 'instagram_api' | 'tiktok_api' | 'web_search';
   dataQuality: 'sufficient' | 'partial' | 'insufficient';
   metrics: Record<string, any> | null;
   scores: { overall: number | null; consistency: number | null; engagement: number | null; conversionPath: number | null; formatMix: number | null } | null;
+  grade?: string | null;
+  benchmark?: { engagementRatePct: number; label: string } | null;
+  // Present on the combined result: one entry per platform audited.
+  platforms?: ContentAuditResult[];
   analysis: {
     verdict: string;
     whatsWorking: string[];

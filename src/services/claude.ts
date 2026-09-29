@@ -33,6 +33,7 @@ export const generateClaudeContent = async (params: {
   apiKey?: string;
   model?: string;
   useWebSearch?: boolean;
+  webSearchMaxUses?: number;
   prefillAssistant?: string;
 }) => {
   // If in browser, call the server proxy
@@ -108,7 +109,7 @@ export const generateClaudeContent = async (params: {
       ],
       ...(params.useWebSearch ? {
         tools: [
-          { type: "web_search_20250305" as any, name: "web_search", max_uses: 5 }
+          { type: "web_search_20250305" as any, name: "web_search", max_uses: params.webSearchMaxUses ?? 5 }
         ]
       } : {})
     });
