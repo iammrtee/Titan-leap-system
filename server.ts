@@ -303,6 +303,123 @@ Return ONLY the JSON. No markdown. No explanation.`;
     }
   }
 
+  // TikTok: same idea as scrapeInstagramProfile, using Apify's TikTok scraper actor.
+  // Returns null (never throws) on any failure so the route falls back to the web-search path.
+  const tiktokScrapeCache = new Map<string, { data: any; expiresAt: number }>();
+
+  async function scrapeTikTokProfile(handle: string): Promise<any | null> {
+    const token = process.env.APIFY_API_TOKEN;
+    if (!token) return null;
+    try {
+      const usernameMatch = handle.match(/tiktok\.com\/@([A-Za-z0-9._]+)/i);
+      const username = (usernameMatch ? usernameMatch[1] : handle).replace(/^@/, '').replace(/\/$/, '').trim().toLowerCase();
+      if (!username) return null;
+
+      const cached = tiktokScrapeCache.get(username);
+      if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+      const apifyRes = await fetch(
+        `https://api.apify.com/v2/acts/clockworks~tiktok-scraper/run-sync-get-dataset-items?token=${token}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ profiles: [username], resultsPerPage: 12, shouldDownloadCovers: false, shouldDownloadSlideshowImages: false, shouldDownloadVideos: false }),
+        }
+      );
+      if (!apifyRes.ok) {
+        console.error("[ApifyTikTok] non-OK response:", apifyRes.status);
+        return null;
+      }
+      const items = await apifyRes.json();
+      if (!Array.isArray(items) || items.length === 0) return null;
+      // Actor returns one item per video; author info is repeated on each item as authorMeta.
+      const authorMeta = items[0]?.authorMeta;
+      if (!authorMeta) return null;
+      const data = { authorMeta, videos: items };
+      tiktokScrapeCache.set(username, { data, expiresAt: Date.now() + INSTAGRAM_CACHE_TTL_MS });
+      return data;
+    } catch (err: any) {
+      console.error("[ApifyTikTok] scrape failed:", err?.message || err);
+      return null;
+    }
+  }
+
+  function computeTikTokContentMetrics(profile: any) {
+    const DAY = 86_400_000;
+    const now = Date.now();
+    const videos = (Array.isArray(profile.videos) ? profile.videos : [])
+      .filter((v: any) => v && (v.createTimeISO || v.createTime))
+      .sort((a: any, b: any) => +new Date(b.createTimeISO || b.createTime * 1000) - +new Date(a.createTimeISO || a.createTime * 1000));
+    const followers = Number(profile.authorMeta?.fans) || 0;
+    const eng = (v: any) => (Number(v.diggCount) || 0) + (Number(v.commentCount) || 0) + (Number(v.shareCount) || 0);
+    const n = videos.length;
+    const tsOf = (v: any) => v.createTimeISO ? +new Date(v.createTimeISO) : (v.createTime ? v.createTime * 1000 : now);
+
+    const ages = videos.map((v: any) => (now - tsOf(v)) / DAY);
+    const postsLast30 = ages.filter((d: number) => d <= 30).length;
+    const daysSinceLastPost = n ? Math.floor(ages[0]) : null;
+    let longestGapDays = 0;
+    for (let i = 1; i < n; i++) longestGapDays = Math.max(longestGapDays, Math.round(ages[i] - ages[i - 1]));
+    const windowDays = n ? Math.max(7, ages[n - 1]) : 0;
+    const postsPerWeek = n ? +(n / (windowDays / 7)).toFixed(1) : 0;
+
+    const avgLikes = n ? Math.round(videos.reduce((s: number, v: any) => s + (Number(v.diggCount) || 0), 0) / n) : 0;
+    const avgComments = n ? +(videos.reduce((s: number, v: any) => s + (Number(v.commentCount) || 0), 0) / n).toFixed(1) : 0;
+    const avgEngagement = n ? videos.reduce((s: number, v: any) => s + eng(v), 0) / n : 0;
+    const engagementRate = followers > 0 && n ? +((avgEngagement / followers) * 100).toFixed(2) : null;
+
+    const summarise = (v: any) => v && ({
+      format: 'Video',
+      date: new Date(tsOf(v)).toISOString().slice(0, 10),
+      engagement: eng(v),
+      firstLine: String(v.text || '').split('\n')[0].slice(0, 140),
+      url: v.webVideoUrl || null,
+    });
+    const ranked = videos.slice().sort((a: any, b: any) => eng(b) - eng(a));
+    const captions = videos.map((v: any) => String(v.text || ''));
+    const share = (pred: (c: string) => boolean) => (n ? Math.round((captions.filter(pred).length / n) * 100) : 0);
+    const bio = String(profile.authorMeta?.signature || '');
+
+    const metrics = {
+      followers,
+      totalPosts: Number(profile.authorMeta?.video) || null,
+      postsAnalysed: n,
+      postsLast30Days: postsLast30,
+      postsPerWeek,
+      daysSinceLastPost,
+      longestGapDays,
+      avgLikes,
+      avgComments,
+      engagementRatePct: engagementRate,
+      captionsWithCtaPct: share(c => CONTENT_CTA_RE.test(c)),
+      captionsWithQuestionPct: share(c => c.includes('?')),
+      avgCaptionWords: n ? Math.round(captions.reduce((s: number, c: string) => s + (c.trim() ? c.trim().split(/\s+/).length : 0), 0) / n) : 0,
+      bioHasLink: !!profile.authorMeta?.bioLink,
+      bioLink: profile.authorMeta?.bioLink?.link || null,
+      bioHasCta: CONTENT_CTA_RE.test(bio),
+      bestPosts: ranked.slice(0, 3).map(summarise),
+      weakestPosts: ranked.slice(-3).reverse().map(summarise),
+    };
+
+    let consistency = scoreFromBands(postsPerWeek, [[4, 100], [3, 85], [2, 70], [1, 50], [0.5, 30]], 10);
+    if (consistency != null && daysSinceLastPost != null && daysSinceLastPost > 14) consistency = Math.min(consistency, 30);
+    // TikTok's typical engagement rate runs well above Instagram's, so the bands are higher.
+    const engagement = scoreFromBands(engagementRate, [[9, 100], [6, 85], [3, 65], [1, 40]], 15);
+    const conversionPath = Math.round((metrics.bioHasLink ? 40 : 0) + (metrics.bioHasCta ? 20 : 0) + metrics.captionsWithCtaPct * 0.4);
+    // TikTok is inherently single-format (video), so format mix isn't a meaningful signal here —
+    // leave it null rather than invent one; the overall score averages only the non-null parts.
+    const formatMix: number | null = null;
+    const parts = [consistency, engagement, conversionPath, formatMix].filter((v): v is number => v != null);
+    const scores = {
+      overall: parts.length ? Math.round(parts.reduce((a, b) => a + b, 0) / parts.length) : null,
+      consistency,
+      engagement,
+      conversionPath,
+      formatMix,
+    };
+    return { metrics, scores, posts: videos };
+  }
+
   // Keeps only what the prompt actually needs so JSON.stringify() never has to be
   // truncated mid-object â huge profiles (millions of followers, dozens of posts with
   // images/comments) were breaking the JSON sent to Claude before this trim existed.
@@ -557,6 +674,26 @@ ${outputSchemaInstructions}`;
     return { metrics, scores, posts };
   }
 
+  // Industry-typical engagement-rate benchmarks, used to give the client something to
+  // compare their own number against instead of a bare percentage.
+  const ENGAGEMENT_BENCHMARKS: Record<string, number> = {
+    Instagram: 1.5, TikTok: 5.5, LinkedIn: 2, 'Twitter-X': 0.5, YouTube: 3, Facebook: 0.5,
+  };
+  function gradeFromScore(score: number | null): string | null {
+    if (score == null) return null;
+    if (score >= 90) return 'A';
+    if (score >= 80) return 'B+';
+    if (score >= 70) return 'B';
+    if (score >= 60) return 'C+';
+    if (score >= 50) return 'C';
+    if (score >= 35) return 'D';
+    return 'F';
+  }
+  function benchmarkFor(platform: string) {
+    const v = ENGAGEMENT_BENCHMARKS[platform];
+    return v == null ? null : { engagementRatePct: v, label: `Typical ${platform} engagement rate is around ${v}%.` };
+  }
+
   const CONTENT_ANALYSIS_SCHEMA = `Return ONLY this JSON object:
 {
   "verdict": "One plain sentence a founder would understand, e.g. 'You post often, but almost nothing points people to your offer.'",
@@ -596,38 +733,50 @@ The first character of your response must be "{" and the last must be "}".`;
         }
       };
 
-      const profile = platform === "Instagram" ? await scrapeInstagramProfile(handle) : null;
+      const isInstagram = platform === "Instagram";
+      const isTikTok = platform === "TikTok";
+      const profile = isInstagram ? await scrapeInstagramProfile(handle) : isTikTok ? await scrapeTikTokProfile(handle) : null;
 
       if (profile) {
-        const { metrics, scores, posts } = computeInstagramContentMetrics(profile);
+        const { metrics, scores, posts } = isInstagram ? computeInstagramContentMetrics(profile) : computeTikTokContentMetrics(profile);
+        const dataSource = isInstagram ? 'instagram_api' : 'tiktok_api';
+        const grade = gradeFromScore(scores.overall);
+        const benchmark = benchmarkFor(platform);
         if (!metrics.postsAnalysed) {
-          return res.json({ platform, handle, dataSource: 'instagram_api', dataQuality: 'insufficient', metrics, scores, analysis: null });
+          return res.json({ platform, handle, dataSource, dataQuality: 'insufficient', metrics, scores, grade, benchmark, analysis: null });
         }
         const trimmedPosts = posts.slice(0, 12).map((p: any) => ({
-          format: IG_FORMAT_LABELS[p.type] || p.type,
-          date: String(p.timestamp).slice(0, 10),
-          likes: p.likesCount, comments: p.commentsCount,
-          caption: String(p.caption || '').slice(0, 400),
+          format: isInstagram ? (IG_FORMAT_LABELS[p.type] || p.type) : 'Video',
+          date: isInstagram ? String(p.timestamp).slice(0, 10) : (p.createTimeISO ? String(p.createTimeISO).slice(0, 10) : ''),
+          likes: isInstagram ? p.likesCount : p.diggCount,
+          comments: isInstagram ? p.commentsCount : p.commentCount,
+          caption: String((isInstagram ? p.caption : p.text) || '').slice(0, 400),
         }));
-        const prompt = `You are TitanLeap's content auditor. You are looking at REAL data scraped from an Instagram account today.
-Judge whether their content is bringing them customers, not whether it looks nice.
+        const profileHandle = isInstagram ? profile.username : profile.authorMeta?.name;
+        const profileName = isInstagram ? profile.fullName : profile.authorMeta?.nickName;
+        const profileBio = isInstagram ? profile.biography : profile.authorMeta?.signature;
+        const prompt = `You are TitanLeap's content auditor. You are looking at REAL data scraped from a ${platform} account today.
+Judge whether their content is bringing them customers, not whether it looks nice. This is a professional audit: be specific,
+cite the actual numbers below, and compare against the benchmark where relevant.
 
 ${context}
 
-PROFILE: @${profile.username} — ${profile.fullName || ''}
-BIO: ${String(profile.biography || '').slice(0, 300)}
+PROFILE: @${profileHandle} — ${profileName || ''}
+BIO: ${String(profileBio || '').slice(0, 300)}
 
 MEASURED METRICS (computed in code, treat as facts):
 ${JSON.stringify(metrics)}
 
 SCORES (fixed rules, 0-100): ${JSON.stringify(scores)}
+GRADE: ${grade}
+BENCHMARK: ${benchmark?.label || 'n/a'}
 
 LATEST POSTS:
 ${JSON.stringify(trimmedPosts)}
 
 ${CONTENT_ANALYSIS_SCHEMA}`;
         const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, prefillAssistant: "{", temperature: 0.3 });
-        return res.json({ platform, handle, dataSource: 'instagram_api', dataQuality: 'sufficient', metrics, scores, analysis: parse(result.text) });
+        return res.json({ platform, handle, dataSource, dataQuality: 'sufficient', metrics, scores, grade, benchmark, analysis: parse(result.text) });
       }
 
       // Web-search path: LinkedIn, X, TikTok, YouTube, or Instagram when Apify is unavailable.
@@ -654,12 +803,13 @@ Then the analysis. Return ONLY this JSON:
 }
 Rules: at most 3 leaks, exactly 3 nextPosts, no invented numbers. If you cannot open the profile, set dataQuality to "insufficient" and analysis to null.
 The first character of your response must be "{" and the last must be "}".`;
-      const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, useWebSearch: true, temperature: 0.3 });
+      const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, useWebSearch: true, webSearchMaxUses: 3, temperature: 0.3 });
       const parsed = parse(result.text);
       return res.json({
         platform, handle, dataSource: 'web_search',
         dataQuality: parsed.dataQuality || 'partial',
         metrics: parsed.observed || null, scores: null,
+        grade: null, benchmark: benchmarkFor(platform),
         analysis: parsed.analysis || null,
       });
     } catch (error: any) {
