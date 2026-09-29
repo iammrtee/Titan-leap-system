@@ -1673,6 +1673,59 @@ const M: React.CSSProperties = { fontFamily: MONO };
 const gradeColor = (g?: string | null) =>
   !g ? INK_FAINT : g.startsWith('A') || g.startsWith('B') ? '#3DDC97' : g.startsWith('C') ? GOLD : DANGER;
 
+const GOOD = '#3DDC97';
+const trendCell = (v: number | null | undefined) =>
+  v == null ? { text: '—', color: INK_FAINT }
+    : Math.abs(v) < 5 ? { text: '≈ flat', color: INK }
+    : v > 0 ? { text: `▲ ${v}%`, color: GOOD } : { text: `▼ ${Math.abs(v)}%`, color: DANGER };
+const growthText = (g: any) => g ? `${g.change >= 0 ? '+' : ''}${g.change.toLocaleString()} (${g.pct >= 0 ? '+' : ''}${g.pct}%)` : null;
+
+// Last-6-months block: posts per month, regularity, momentum, follower growth.
+const HistoryBlock: React.FC<{ h: any; g: any }> = ({ h, g }) => {
+  const max = Math.max(1, ...h.monthly.map((m: any) => m.posts));
+  const cells: { k: string; v: string; sub?: string; color?: string }[] = [
+    { k: 'Active weeks', v: `${h.activeWeeks}/${h.totalWeeks}`, sub: `${h.weeksActivePct}% of weeks had a post`, color: h.weeksActivePct >= 75 ? GOOD : h.weeksActivePct >= 45 ? GOLD : DANGER },
+    { k: 'Posting', ...(() => { const t = trendCell(h.postingTrendPct); return { v: t.text, color: t.color }; })(), sub: `last ${h.halfLabel} vs the ${h.halfLabel} before` },
+    { k: 'Engagement / post', ...(() => { const t = trendCell(h.engagementTrendPct); return { v: t.text, color: t.color }; })(), sub: 'same comparison' },
+  ];
+  if (h.viewsTrendPct != null) { const t = trendCell(h.viewsTrendPct); cells.push({ k: 'Views / video', v: t.text, color: t.color, sub: 'same comparison' }); }
+  const g90 = growthText(g?.d90), g180 = growthText(g?.d180), g30 = growthText(g?.d30);
+  cells.push(g90 || g180 || g30
+    ? { k: 'Follower growth', v: (g90 || g180 || g30)!, color: ((g?.d90 || g?.d180 || g?.d30)?.change ?? 0) >= 0 ? GOOD : DANGER, sub: g90 && g180 ? `3 mo · 6 mo: ${g180}` : g90 ? 'last 3 months' : g180 ? 'last 6 months' : 'last 30 days' }
+    : { k: 'Follower growth', v: g ? 'Tracking' : '—', sub: g ? `since ${g.trackedSince}. Re-audit monthly to build the curve.` : 'not recorded' });
+
+  return (
+    <div style={{ borderTop: `1px solid ${LINE}`, padding: '16px 22px 18px' }}>
+      <div style={{ ...M, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 12 }}>
+        {h.periodLabel} · {h.postsInWindow} posts{h.capped ? ` (latest ${h.postsInWindow} checked)` : ''} · longest silence {h.longestGapDays}d
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', height: 78, marginBottom: 14 }}>
+        {h.monthly.map((m: any, i: number) => (
+          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%', opacity: m.covered ? 1 : 0.35 }}>
+            <div style={{ ...M, fontSize: 11, fontWeight: 700, color: m.covered ? INK : INK_FAINT, marginBottom: 4 }}>{m.covered ? m.posts : '—'}</div>
+            <div style={{ width: '100%', maxWidth: 34, height: m.covered ? Math.max(3, (m.posts / max) * 44) : 3, background: m.covered ? (m.posts ? PURPLE : DANGER) : LINE_BR, borderRadius: 3 }} />
+            <div style={{ ...M, fontSize: 9, color: INK_FAINT, marginTop: 5 }}>{m.month}{m.partial ? '*' : ''}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10 }}>
+        {cells.map((c, i) => (
+          <div key={i} style={{ background: BG_DEEP, border: `1px solid ${LINE}`, borderRadius: 4, padding: '9px 11px' }}>
+            <div style={{ fontSize: 10, color: INK_FAINT }}>{c.k}</div>
+            <div style={{ ...M, fontSize: 14, fontWeight: 700, color: c.color || INK }}>{c.v}</div>
+            {c.sub && <div style={{ fontSize: 10, color: INK_FAINT, marginTop: 2, lineHeight: 1.35 }}>{c.sub}</div>}
+          </div>
+        ))}
+      </div>
+      {h.monthly.some((m: any) => m.partial || !m.covered) && (
+        <div style={{ fontSize: 10, color: INK_FAINT, marginTop: 8 }}>
+          {h.capped ? `We check their latest ${h.postsInWindow} posts to keep costs down, so faded months weren't reached. ` : ''}* month only partly covered.
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ContentReportSection: React.FC<{ ca: ContentAuditResult }> = ({ ca }) => {
   const platforms = ca.platforms || [];
   const leaks = (ca.analysis?.leaks || []).slice(0, 3);
@@ -1729,6 +1782,7 @@ const ContentReportSection: React.FC<{ ca: ContentAuditResult }> = ({ ca }) => {
                   ))}
                 </div>
               )}
+              {measured && m.history?.postsInWindow != null && <HistoryBlock h={m.history} g={m.growth} />}
               {measured && (m.bestPosts?.length > 0 || r.scores) && (
                 <details data-pdf-hide="true" style={{ borderTop: `1px solid ${LINE}`, padding: '12px 22px' }}>
                   <summary style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: PURPLE, cursor: 'pointer' }}>Full breakdown</summary>
