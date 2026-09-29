@@ -668,6 +668,26 @@ export const researchSocialPresence = async (platform: string, handle: string): 
   return await response.json();
 };
 
+export type DiscoveredSocial = { platform: string; url: string };
+
+// Finds the brand's social profiles by reading links out of their website's source.
+// No AI involved — free and exact. Returns [] rather than throwing.
+export const discoverSocials = async (url: string): Promise<DiscoveredSocial[]> => {
+  try {
+    const authHeader = await getAuthHeader();
+    const response = await fetch('/api/discover-socials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader },
+      body: JSON.stringify({ url }),
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data?.profiles) ? data.profiles : [];
+  } catch {
+    return [];
+  }
+};
+
 export type ContentAuditLeak = { title: string; evidence: string; fix: string; effort: string; impact: string };
 export type ContentAuditResult = {
   platform: string;
