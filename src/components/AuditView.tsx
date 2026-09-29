@@ -39,7 +39,7 @@ import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
 import { Logo } from './Logo';
 import { StrategyHub } from './StrategyHub';
-import { ContentAuditPanel } from './ContentAuditPanel';
+import { ContentAuditPanel, detectProfilePlatform } from './ContentAuditPanel';
 import { LeakReportPanel } from './LeakReportPanel';
 import type { LeakAuditReport } from '@/src/lib/leakReportTemplate';
 import { Activity } from 'lucide-react';
@@ -1248,8 +1248,11 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
         </div>
         ) : activeTab === 'content' ? (
             <ContentAuditPanel
-              initialPlatform={formData.primaryPlatform}
-              initialHandle={formData.socialHandles.find(h => h.trim() !== '') || ''}
+              primaryPlatform={formData.primaryPlatform}
+              initialProfiles={formData.socialHandles
+                .map(h => h.trim())
+                .filter(Boolean)
+                .map((h, i) => ({ platform: detectProfilePlatform(h, formData.primaryPlatform), handle: h }))}
               context={{ businessName: formData.businessName, offer: formData.mainOffer, audience: formData.industry }}
               result={contentAudit}
               onResult={setContentAudit}
