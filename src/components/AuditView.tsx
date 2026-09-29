@@ -31,7 +31,7 @@ import {
   FileCode2
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { auditLandingPage, smartFillForm, generate90DayBlueprint, researchSocialPresence, type SocialResearchResult, getAIEngine, setAIEngine, type AIEngine } from '@/src/services/ai';
+import { auditLandingPage, smartFillForm, generate90DayBlueprint, getAIEngine, setAIEngine, type AIEngine } from '@/src/services/ai';
 import { supabase } from '@/src/services/supabase';
 import { toast } from 'sonner';
 import { Sparkles, Wand2, Loader2, FileDown, Printer, RefreshCw, Search } from 'lucide-react';
@@ -39,7 +39,7 @@ import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
 import { Logo } from './Logo';
 import { StrategyHub } from './StrategyHub';
-import { ContentAuditPanel, detectProfilePlatform } from './ContentAuditPanel';
+import { useContentAudit, ContentAuditInline, profilesFromForm, looksComplete, contentSummaryForAudit, keyOf } from './ContentAuditPanel';
 import { LeakReportPanel } from './LeakReportPanel';
 import type { LeakAuditReport } from '@/src/lib/leakReportTemplate';
 import { Activity } from 'lucide-react';
@@ -139,14 +139,58 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
   const [smartFillUrl, setSmartFillUrl] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'intake' | 'content' | 'leak' | 'result' | 'strategy'>('intake');
+  const [activeTab, setActiveTab] = useState<'intake' | 'leak' | 'result' | 'strategy'>('intake');
   const [leakReport, setLeakReport] = useState<LeakAuditReport | null>(null);
   const [contentAudit, setContentAudit] = useState<ContentAuditResult | null>(null);
   const [strategyTimestamp, setStrategyTimestamp] = useState(0);
   const [detailedBlueprint, setDetailedBlueprint] = useState<any>(null);
   const [isGeneratingBlueprint, setIsGeneratingBlueprint] = useState(false);
-  const [socialResearch, setSocialResearch] = useState<SocialResearchResult | null>(null);
-  const [isResearchingSocial, setIsResearchingSocial] = useState(false);
+  // Content audit now lives inside the main audit: it prefetches in the background as
+  // soon as profile links are in, and "Run Audit" / the Leak Report reuse the same results.
+  const [handlesEdited, setHandlesEdited] = useState(false);
+  const [auditPhase, setAuditPhase] = useState<'content' | 'report'>('report');
+  const autofillSig = React.useRef('');
+  const socialProfiles = useMemo(
+    () => profilesFromForm(formData.socialHandles, formData.primaryPlatform),
+    [formData.socialHandles, formData.primaryPlatform]
+  );
+  const socialProfilesKey = socialProfiles.map(keyOf).join(',');
+
+  // When fresh content-audit numbers arrive, fill the two assessment fields they measure
+  // (replaces the old "Research this profile" button). Only once per new result, so a
+  // manual change isn't overwritten every time the audit is reused.
+  const handleContentResult = (r: ContentAuditResult | null) => {
+    setContentAudit(r);
+    const sig = (r?.platforms || []).map(x => `${keyOf(x)}@${x.auditedAt}`).join(',');
+    if (!r || !sig || sig === autofillSig.current) return;
+    autofillSig.current = sig;
+    const src = r.platforms?.find(x => x.platform === formData.primaryPlatform && x.metrics) || r.platforms?.find(x => x.metrics);
+    const m = src?.metrics || {};
+    const followers = m.followers != null ? Number(m.followers) : null;
+    const perWeek = m.postsPerWeek != null ? Number(m.postsPerWeek) : m.postsLast30Days != null ? Number(m.postsLast30Days) / 4.3 : null;
+    setFormData(prev => ({
+      ...prev,
+      monthlyReach: prev.monthlyReach?.trim() ? prev.monthlyReach : followers ? String(followers) : prev.monthlyReach,
+      postingConsistently: perWeek == null || Number.isNaN(perWeek) ? prev.postingConsistently : perWeek >= 3 ? 'Yes' : perWeek >= 1 ? 'Sometimes' : 'No',
+    }));
+  };
+
+  const contentCtl = useContentAudit({
+    context: { businessName: formData.businessName, offer: formData.mainOffer, audience: formData.industry },
+    primaryPlatform: formData.primaryPlatform,
+    result: contentAudit,
+    onResult: handleContentResult,
+  });
+
+  // Background prefetch: 2.5s after the user stops editing profile links, audit the ones
+  // that look complete. Skipped on page load (restored results are reused instead).
+  useEffect(() => {
+    if (!handlesEdited) return;
+    const ready = socialProfiles.filter(p => looksComplete(p.handle));
+    if (!ready.length) return;
+    const t = setTimeout(() => { contentCtl.ensure(ready).catch(() => {}); }, 2500);
+    return () => clearTimeout(t);
+  }, [socialProfilesKey, handlesEdited]);
   const reportRef = React.useRef<HTMLDivElement>(null);
   const blueprintRef = React.useRef<HTMLDivElement>(null);
 
@@ -177,6 +221,16 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
       }
     }
 
+    const savedContentAudit = localStorage.getItem('titanleap_content_audit');
+    if (savedContentAudit) {
+      try {
+        const parsedCA = JSON.parse(savedContentAudit);
+        if (parsedCA?.platforms) setContentAudit(parsedCA);
+      } catch (e) {
+        localStorage.removeItem('titanleap_content_audit');
+      }
+    }
+
     const savedBlueprint = localStorage.getItem('titanleap_90day_blueprint');
     if (savedBlueprint) {
       try {
@@ -194,6 +248,13 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
   useEffect(() => {
     localStorage.setItem('titanleap_audit_form', JSON.stringify(formData));
   }, [formData]);
+
+  useEffect(() => {
+    try {
+      if (contentAudit) localStorage.setItem('titanleap_content_audit', JSON.stringify(contentAudit));
+      else localStorage.removeItem('titanleap_content_audit');
+    } catch { /* storage full or unavailable — the audit just won't survive a reload */ }
+  }, [contentAudit]);
 
   useEffect(() => {
     if (detailedBlueprint && detailedBlueprint.phases) {
@@ -219,44 +280,6 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
     }
   };
 
-  const handleResearchSocial = async () => {
-    const handle = formData.socialHandles.find(h => h.trim() !== '');
-    if (!formData.primaryPlatform || !handle) {
-      toast.error("Add a primary platform and at least one profile link first.");
-      return;
-    }
-    setIsResearchingSocial(true);
-    setSocialResearch(null);
-    try {
-      const research = await researchSocialPresence(formData.primaryPlatform, handle);
-      setSocialResearch(research);
-
-      if (research.data_quality === 'insufficient') {
-        toast.warning("Couldn't verify enough on this profile — left reach/consistency for you to fill in.");
-        return;
-      }
-
-      setFormData(prev => ({
-        ...prev,
-        postingConsistently: research.posting_consistency === 'yes' ? 'Yes'
-          : research.posting_consistency === 'no' ? 'No'
-          : research.posting_consistency === 'sometimes' ? 'Sometimes'
-          : prev.postingConsistently,
-        // Auto-fill reach from real research whenever we find a number — don't
-        // require the user to type it in, and don't just fill it once and stop.
-        monthlyReach: research.follower_count != null
-          ? String(research.follower_count)
-          : prev.monthlyReach,
-      }));
-      toast.success("Social presence research complete.");
-    } catch (e: any) {
-      console.error("Social research failed", e);
-      toast.error(e?.message || "Social research failed. Please try again.");
-    } finally {
-      setIsResearchingSocial(false);
-    }
-  };
-
   useEffect(() => {
     if (auditReport) {
       localStorage.setItem('titanleap_audit_report', JSON.stringify(auditReport));
@@ -269,8 +292,13 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
     if (window.confirm("Are you sure you want to clear all audit data? This cannot be undone.")) {
       setFormData(INITIAL_FORM_DATA);
       setAuditReport(null);
+      setContentAudit(null);
+      contentCtl.reset();
+      autofillSig.current = '';
+      setHandlesEdited(false);
       localStorage.removeItem('titanleap_audit_form');
       localStorage.removeItem('titanleap_audit_report');
+      localStorage.removeItem('titanleap_content_audit');
       toast.success("Audit data cleared");
     }
   };
@@ -299,6 +327,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
         targetRevenue: sanitizeNumber(data.targetRevenue),
       }));
       setSmartFillUrl('');
+      if (Array.isArray(data?.socialHandles) && data.socialHandles.some((h: string) => h?.trim())) setHandlesEdited(true);
       toast.success("Form filled from your website!", { id: fillToast });
     } catch (error: any) {
       console.error("Smart fill failed:", error);
@@ -361,20 +390,33 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
     });
 
     try {
-      const contentAuditSummary = contentAudit?.analysis
-        ? [
-            contentAudit.analysis.summaryForMainAudit,
-            contentAudit.scores?.overall != null ? `Content score: ${contentAudit.scores.overall}/100.` : '',
-            contentAudit.metrics?.engagementRatePct != null ? `Engagement rate: ${contentAudit.metrics.engagementRatePct}%.` : '',
-            contentAudit.metrics?.postsPerWeek != null ? `Posts per week: ${contentAudit.metrics.postsPerWeek}.` : '',
-            contentAudit.dataSource === 'web_search' ? '(Read via web search, partial data.)' : '',
-          ].filter(Boolean).join(' ')
-        : '';
+      // Content audit first. Profiles already audited (or being prefetched right now) are
+      // reused, so this only costs time/credits for links that are new or changed.
+      let ca = contentAudit;
+      if (socialProfiles.length) {
+        setAuditPhase('content');
+        toast.loading("Auditing social content...", {
+          id: auditToast,
+          description: `${socialProfiles.length} profile${socialProfiles.length > 1 ? 's' : ''}. Anything already audited is reused.`
+        });
+        try {
+          ca = await contentCtl.ensure(socialProfiles);
+        } catch (e) {
+          console.error("Content audit failed, continuing without it", e);
+        }
+        setAuditPhase('report');
+        toast.loading("Building Growth Blueprint...", {
+          id: auditToast,
+          description: ca?.analysis ? `Using your content audit (${ca.grade ?? 'partial'}) plus your funnel, offer, and market position.` : "Analyzing your funnel, offer, and market position."
+        });
+      }
+      const contentAuditSummary = contentSummaryForAudit(ca);
       const dashboardResult = await auditLandingPage({ ...formData, contentAuditSummary });
       if (dashboardResult) {
         setAuditReport({
           ...dashboardResult,
           ...formData, // Include all form data
+          contentAudit: ca?.analysis ? ca : null,
           businessName: formData.businessName || 'Your Business',
           timestamp: new Date().toLocaleString(),
         });
@@ -427,6 +469,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
       });
     } finally {
       setIsAuditing(false);
+      setAuditPhase('report');
     }
   };
 
@@ -618,21 +661,6 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
           >
             <FileText size={16} />
             Business Assessment
-          </button>
-          <button
-            onClick={() => setActiveTab('content')}
-            className={cn(
-              "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0",
-              activeTab === 'content'
-                ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10"
-                : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container"
-            )}
-          >
-            <Activity size={16} />
-            Content Audit
-            {contentAudit?.scores?.overall != null && (
-              <span className="ml-1 px-1.5 py-0.5 rounded-md bg-primary/15 text-primary">{contentAudit.scores.overall}</span>
-            )}
           </button>
           <button
             onClick={() => setActiveTab('leak')}
@@ -938,7 +966,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                   <InputGroup label="Primary platform" tooltip="Where your audience lives. We'll focus our engagement and content strategy recommendations here.">
                     <select 
                       value={formData.primaryPlatform}
-                      onChange={e => setFormData({...formData, primaryPlatform: e.target.value})}
+                      onChange={e => { setHandlesEdited(true); setFormData({...formData, primaryPlatform: e.target.value}); }}
                       className="audit-input"
                     >
                       <option value="">Select Platform</option>
@@ -955,6 +983,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                             onChange={e => {
                               const newHandles = [...formData.socialHandles];
                               newHandles[idx] = e.target.value;
+                              setHandlesEdited(true);
                               setFormData({...formData, socialHandles: newHandles});
                             }}
                             placeholder="https://linkedin.com/in/yourname"
@@ -962,7 +991,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                           />
                           {idx > 0 && (
                             <button 
-                              onClick={() => setFormData({...formData, socialHandles: formData.socialHandles.filter((_, i) => i !== idx)})}
+                              onClick={() => { setHandlesEdited(true); setFormData({...formData, socialHandles: formData.socialHandles.filter((_, i) => i !== idx)}); }}
                               className="p-2 text-error hover:bg-error/10 rounded-xl transition-colors"
                             >
                               <X size={18} />
@@ -1005,82 +1034,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                   </InputGroup>
 
                   <div className="pt-2 border-t border-outline-variant/30">
-                    <button
-                      onClick={handleResearchSocial}
-                      disabled={isResearchingSocial || !formData.primaryPlatform || !formData.socialHandles.some(h => h.trim() !== '')}
-                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary/10 text-primary text-xs font-black uppercase tracking-widest hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      {isResearchingSocial ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                      {isResearchingSocial ? 'Researching profile…' : 'Research this profile'}
-                    </button>
-                    <p className="text-[11px] text-on-surface-variant/60 mt-2 leading-relaxed">
-                      Actually opens the link above — no guessing. Fields only fill in when we find real evidence on the profile.
-                    </p>
-
-                    {socialResearch && (
-                      <div className="mt-4 p-4 rounded-xl bg-surface-container-highest space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">
-                            Research result
-                          </span>
-                          <span className={cn(
-                            "text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full",
-                            socialResearch.data_quality === 'sufficient' ? "bg-primary/15 text-primary" :
-                            socialResearch.data_quality === 'partial' ? "bg-amber-500/15 text-amber-600" :
-                            "bg-error/15 text-error"
-                          )}>
-                            {socialResearch.data_quality}
-                          </span>
-                        </div>
-
-                        {socialResearch.data_quality === 'insufficient' ? (
-                          <p className="text-xs text-on-surface-variant/80">
-                            Couldn't verify this profile (private, broken link, or no visible activity). Fill in reach and posting consistency manually.
-                          </p>
-                        ) : (
-                          <>
-                            <div className="grid grid-cols-2 gap-3 text-xs">
-                              <div>
-                                <div className="text-on-surface-variant/50 uppercase tracking-widest text-[10px] mb-0.5">Followers</div>
-                                <div className="font-bold text-on-surface">{socialResearch.follower_count ?? 'Not visible'}</div>
-                              </div>
-                              <div>
-                                <div className="text-on-surface-variant/50 uppercase tracking-widest text-[10px] mb-0.5">Posts / 30d</div>
-                                <div className="font-bold text-on-surface">{socialResearch.posts_last_30_days ?? 'Not visible'}</div>
-                              </div>
-                            </div>
-
-                            {socialResearch.content_themes?.length > 0 && (
-                              <div>
-                                <div className="text-on-surface-variant/50 uppercase tracking-widest text-[10px] mb-1">Content themes</div>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {socialResearch.content_themes.map((t, i) => (
-                                    <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-surface text-on-surface-variant">{t}</span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {socialResearch.tone && (
-                              <div>
-                                <div className="text-on-surface-variant/50 uppercase tracking-widest text-[10px] mb-0.5">Tone</div>
-                                <div className="text-xs text-on-surface">{socialResearch.tone}</div>
-                              </div>
-                            )}
-
-                            {socialResearch.specific_signal?.found && (
-                              <div className="pt-2 border-t border-outline-variant/30">
-                                <div className="text-on-surface-variant/50 uppercase tracking-widest text-[10px] mb-1">Specific signal</div>
-                                <p className="text-xs text-on-surface leading-relaxed">{socialResearch.specific_signal.description}</p>
-                                {socialResearch.relatability_hook && (
-                                  <p className="text-xs italic text-primary mt-2 leading-relaxed">"{socialResearch.relatability_hook}"</p>
-                                )}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
+                    <ContentAuditInline profiles={socialProfiles} ctl={contentCtl} result={contentAudit} />
                   </div>
                 </div>
               </CollapsibleSection>
@@ -1231,7 +1185,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                   >
                     <Zap size={28} />
                   </motion.div>
-                  Building Blueprint...
+                  {auditPhase === 'content' ? 'Auditing Content...' : 'Building Blueprint...'}
                 </>
               ) : (
                 <>
@@ -1246,19 +1200,8 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
             </p>
           </div>
         </div>
-        ) : activeTab === 'content' ? (
-            <ContentAuditPanel
-              primaryPlatform={formData.primaryPlatform}
-              initialProfiles={formData.socialHandles
-                .map(h => h.trim())
-                .filter(Boolean)
-                .map((h, i) => ({ platform: detectProfilePlatform(h, formData.primaryPlatform), handle: h }))}
-              context={{ businessName: formData.businessName, offer: formData.mainOffer, audience: formData.industry }}
-              result={contentAudit}
-              onResult={setContentAudit}
-            />
         ) : activeTab === 'leak' ? (
-            <LeakReportPanel formData={formData} contentAudit={contentAudit} report={leakReport} onReport={setLeakReport} />
+            <LeakReportPanel formData={formData} contentAudit={contentAudit} ensureContentAudit={socialProfiles.length ? () => contentCtl.ensure(socialProfiles) : undefined} report={leakReport} onReport={setLeakReport} />
         ) : activeTab === 'result' ? (
           <div ref={reportRef}>
             {auditReport ? (
@@ -1656,6 +1599,127 @@ const MONO     = "'JetBrains Mono','SF Mono',ui-monospace,monospace";
 const W: React.CSSProperties = { maxWidth: 760, margin: '0 auto', padding: '0 24px' };
 const M: React.CSSProperties = { fontFamily: MONO };
 
+// ── Content & Social section of the Audit Result (same visual language as the leaks) ──
+const gradeColor = (g?: string | null) =>
+  !g ? INK_FAINT : g.startsWith('A') || g.startsWith('B') ? '#3DDC97' : g.startsWith('C') ? GOLD : DANGER;
+
+const ContentReportSection: React.FC<{ ca: ContentAuditResult }> = ({ ca }) => {
+  const platforms = ca.platforms || [];
+  const leaks = (ca.analysis?.leaks || []).slice(0, 3);
+  const posts = (ca.analysis?.nextPosts || []).slice(0, 3);
+  const fmt = (v: any) => (v == null || v === '' ? '—' : typeof v === 'number' ? v.toLocaleString() : String(v));
+  return (
+    <section style={{ padding: '52px 24px', borderBottom: `1px solid ${LINE}`, background: BG }}>
+      <div style={W}>
+        <div className="rlb-sec-head" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+          <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_FAINT }}>Content &amp; Social</div>
+          <div style={{ ...M, fontSize: 13, color: gradeColor(ca.grade), fontWeight: 600 }}>
+            {ca.grade ? `Grade ${ca.grade} · ${ca.scores?.overall}/100` : 'Partial read'} · {platforms.length} platform{platforms.length > 1 ? 's' : ''}
+          </div>
+        </div>
+        <p style={{ fontSize: 15, color: INK_DIM, marginBottom: 28, maxWidth: '56ch' }}>
+          Is the content actually bringing in customers? Measured from real posts where we could, read from the public profile where we couldn't.
+        </p>
+
+        {/* per-platform cards */}
+        {platforms.map((r, i) => {
+          const m = r.metrics || {};
+          const er = m.engagementRatePct;
+          const bm = r.benchmark?.engagementRatePct;
+          const measured = r.dataSource !== 'web_search';
+          return (
+            <div key={i} style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 6, marginBottom: 14, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', padding: '20px 22px', flexWrap: 'wrap' }}>
+                <div style={{ ...M, fontSize: 18, fontWeight: 800, color: gradeColor(r.grade), border: `1px solid ${LINE_BR}`, borderRadius: 6, width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: BG_DEEP }}>
+                  {r.grade || '~'}
+                </div>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                    <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{r.platform}</h3>
+                    <span style={{ ...M, fontSize: 11, color: INK_FAINT, wordBreak: 'break-all' }}>{r.handle}</span>
+                  </div>
+                  <p style={{ fontSize: 14, color: INK_DIM, margin: '6px 0 0', maxWidth: '58ch' }}>{r.analysis?.verdict || 'Not enough was visible on this profile to judge it.'}</p>
+                </div>
+                <div style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 4, flexShrink: 0, fontWeight: 600, ...(measured ? { background: 'rgba(61,220,151,.1)', color: '#3DDC97', border: '1px solid rgba(61,220,151,.28)' } : { background: 'rgba(245,197,24,.1)', color: GOLD, border: '1px solid rgba(245,197,24,.28)' }) }}>
+                  {measured ? 'Measured' : 'Web read'}
+                </div>
+              </div>
+              {(r.scores?.overall != null || er != null || m.postsPerWeek != null || m.followers != null) && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', borderTop: `1px solid ${LINE}` }}>
+                  {[
+                    ['Score', r.scores?.overall != null ? `${r.scores.overall}/100` : '—'],
+                    ['Followers', fmt(m.followers)],
+                    ['Posts / week', fmt(m.postsPerWeek ?? (m.postsLast30Days != null ? `${m.postsLast30Days} / 30d` : null))],
+                    ['Engagement', er != null ? `${er}%${bm != null ? ` vs ~${bm}%` : ''}` : '—'],
+                  ].map(([k, v], j, arr) => (
+                    <div key={j} style={{ flex: 1, minWidth: 120, padding: '12px 22px', borderRight: j < arr.length - 1 ? `1px solid ${LINE}` : 'none' }}>
+                      <div style={{ ...M, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 4 }}>{k}</div>
+                      <div style={{ ...M, fontSize: 14, fontWeight: 700, color: k === 'Engagement' && er != null && bm != null ? (er >= bm ? '#3DDC97' : DANGER) : INK }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {measured && (m.bestPosts?.length > 0 || r.scores) && (
+                <details data-pdf-hide="true" style={{ borderTop: `1px solid ${LINE}`, padding: '12px 22px' }}>
+                  <summary style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: PURPLE, cursor: 'pointer' }}>Full breakdown</summary>
+                  <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+                    {[
+                      ['Consistency', r.scores?.consistency], ['Engagement score', r.scores?.engagement],
+                      ['Path to offer', r.scores?.conversionPath], ['Format mix', r.scores?.formatMix],
+                      ['Avg likes', m.avgLikes], ['Avg comments', m.avgComments],
+                      ['Days since last post', m.daysSinceLastPost], ['Captions with a CTA', m.captionsWithCtaPct != null ? `${m.captionsWithCtaPct}%` : null],
+                      ['Link in bio', m.bioHasLink == null ? null : m.bioHasLink ? 'Yes' : 'No'],
+                    ].filter(([, v]) => v != null).map(([k, v], j) => (
+                      <div key={j} style={{ background: BG_DEEP, border: `1px solid ${LINE}`, borderRadius: 4, padding: '8px 10px' }}>
+                        <div style={{ fontSize: 10, color: INK_FAINT }}>{k}</div>
+                        <div style={{ ...M, fontSize: 13, fontWeight: 700 }}>{fmt(v)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {m.bestPosts?.length > 0 && (
+                    <div style={{ marginTop: 12, fontSize: 12, color: INK_DIM }}>
+                      <b style={{ color: INK }}>Best post:</b> {m.bestPosts[0].engagement} engagements · {m.bestPosts[0].format} · "{m.bestPosts[0].firstLine || 'no caption'}"
+                      {m.weakestPosts?.[0] && <><br /><b style={{ color: INK }}>Weakest:</b> {m.weakestPosts[0].engagement} engagements · {m.weakestPosts[0].format} · "{m.weakestPosts[0].firstLine || 'no caption'}"</>}
+                    </div>
+                  )}
+                </details>
+              )}
+            </div>
+          );
+        })}
+
+        {leaks.length > 0 && (
+          <div style={{ marginTop: 30 }}>
+            <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 14 }}>Where the content leaks customers</div>
+            {leaks.map((l, i) => (
+              <div key={i} style={{ borderLeft: `2px solid ${l.impact === 'High' ? DANGER : GOLD}`, padding: '4px 0 4px 16px', marginBottom: 18 }}>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>{l.title} <span style={{ ...M, fontSize: 10, color: INK_FAINT, fontWeight: 500 }}>· impact {l.impact} · effort {l.effort}</span></div>
+                <p style={{ fontSize: 13, color: INK_DIM, margin: '4px 0 0' }}><b style={{ color: INK }}>Evidence:</b> {l.evidence}</p>
+                <p style={{ fontSize: 13, color: INK_DIM, margin: '4px 0 0' }}><b style={{ color: PURPLE }}>Fix:</b> {l.fix}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {posts.length > 0 && (
+          <div style={{ marginTop: 26 }}>
+            <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 14 }}>Next posts to make</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12 }}>
+              {posts.map((p, i) => (
+                <div key={i} style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 6, padding: '16px 18px' }}>
+                  <div style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: PURPLE, marginBottom: 8 }}>{p.format}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.4 }}>"{p.hook}"</div>
+                  <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 8 }}>{p.why}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+};
+
 const RevenueLeakBlueprint: React.FC<{
   auditReport: any;
   formData: FormData;
@@ -1838,6 +1902,8 @@ const RevenueLeakBlueprint: React.FC<{
           </div>
         </div>
       </div>
+
+      {auditReport.contentAudit?.platforms?.length > 0 && <ContentReportSection ca={auditReport.contentAudit} />}
 
       {/* ── THIS WEEK'S MOVES ── */}
       {moves.length > 0 && (

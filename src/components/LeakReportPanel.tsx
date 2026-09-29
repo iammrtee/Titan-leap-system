@@ -7,6 +7,8 @@ import { renderLeakReportHtml, type LeakAuditReport } from '@/src/lib/leakReport
 type Props = {
   formData: any;
   contentAudit: ContentAuditResult | null;
+  // Runs (or reuses) the content audit for the assessment's profiles before building.
+  ensureContentAudit?: () => Promise<ContentAuditResult | null>;
   report: LeakAuditReport | null;
   onReport: (r: LeakAuditReport | null) => void;
 };
@@ -14,7 +16,7 @@ type Props = {
 const field = "w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-4 py-3 text-sm text-on-surface";
 const label = "block text-[11px] font-bold text-on-surface-variant/70 mb-1.5";
 
-export function LeakReportPanel({ formData, contentAudit, report, onReport }: Props) {
+export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, report, onReport }: Props) {
   const [f, setF] = useState({
     businessName: formData.businessName || '',
     websiteUrl: formData.websiteUrl || '',
@@ -40,11 +42,15 @@ export function LeakReportPanel({ formData, contentAudit, report, onReport }: Pr
     setRunning(true);
     const t = toast.loading('Building the Customer Leak Audit…', { description: 'Reading their pages and working out the customer gap.' });
     try {
+      let ca = contentAudit;
+      if (ensureContentAudit) {
+        try { ca = (await ensureContentAudit()) ?? contentAudit; } catch { /* build without it */ }
+      }
       const r = await generateLeakAudit({
         ...f,
         visitors: nums[0], signupRate: nums[1], paidRate: nums[2], revenuePerCustomer: nums[3],
-        contentSummary: contentAudit?.analysis?.summaryForMainAudit,
-        contentScore: contentAudit?.scores?.overall ?? null,
+        contentSummary: ca?.analysis?.summaryForMainAudit,
+        contentScore: ca?.scores?.overall ?? null,
       });
       onReport(r);
       const unread = Object.entries(r.pagesRead || {}).filter(([, ok]) => !ok).map(([k]) => k);
