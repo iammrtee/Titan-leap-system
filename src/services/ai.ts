@@ -680,6 +680,7 @@ export type ContentAuditResult = {
   benchmark?: { engagementRatePct: number; label: string } | null;
   // Present on the combined result: one entry per platform audited.
   platforms?: ContentAuditResult[];
+  auditedAt?: number;
   analysis: {
     verdict: string;
     whatsWorking: string[];
