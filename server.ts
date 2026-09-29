@@ -410,6 +410,165 @@ Return ONLY the JSON. No markdown. No explanation.`;
     }
   }
 
+  // ── Post history (last 6 months, capped at 60 posts to keep Apify spend low) ──
+  // ~60 posts × Apify's ~$2.30/1k ≈ $0.14 per profile. The cap means very active accounts
+  // get a shorter window than 6 months; the history reports exactly what it covers.
+  const POST_HISTORY_LIMIT = 60;
+  const HISTORY_DAYS = 183;
+  const instagramPostsCache = new Map<string, { data: any[]; expiresAt: number }>();
+
+  async function scrapeInstagramPosts(username: string): Promise<any[]> {
+    const token = process.env.APIFY_API_TOKEN;
+    if (!token || !username) return [];
+    const key = username.toLowerCase();
+    const cached = instagramPostsCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+    try {
+      const r = await fetch(
+        `https://api.apify.com/v2/acts/apify~instagram-post-scraper/run-sync-get-dataset-items?token=${token}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: [key], resultsLimit: POST_HISTORY_LIMIT, onlyPostsNewerThan: "6 months" }),
+          signal: AbortSignal.timeout(120000),
+        }
+      );
+      if (!r.ok) { console.error("[ApifyInstagramPosts] non-OK response:", r.status); return []; }
+      const items = await r.json();
+      const posts = (Array.isArray(items) ? items : []).filter((p: any) => p && p.timestamp && !p.error).slice(0, POST_HISTORY_LIMIT);
+      instagramPostsCache.set(key, { data: posts, expiresAt: Date.now() + INSTAGRAM_CACHE_TTL_MS });
+      return posts;
+    } catch (err: any) {
+      console.error("[ApifyInstagramPosts] scrape failed:", err?.message || err);
+      return [];
+    }
+  }
+
+  type HistoryItem = { ts: number; engagement: number; views: number | null };
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const pctChange = (now: number, before: number) => (before > 0 ? Math.round(((now - before) / before) * 100) : null);
+  const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+
+  function computeHistory(all: HistoryItem[], sampleSize: number) {
+    const DAY = 86_400_000;
+    const now = Date.now();
+    const items = all.filter(i => i.ts && now - i.ts <= HISTORY_DAYS * DAY).sort((a, b) => b.ts - a.ts);
+    const oldestAll = all.length ? Math.max(...all.map(i => (now - i.ts) / DAY)) : 0;
+    // If we hit the post cap, we only truly see back to the oldest post we got.
+    const capped = sampleSize >= POST_HISTORY_LIMIT;
+    const coverageDays = Math.max(7, Math.round(capped ? Math.min(HISTORY_DAYS, oldestAll) : HISTORY_DAYS));
+    const inWindow = items.filter(i => now - i.ts <= coverageDays * DAY);
+    const n = inWindow.length;
+
+    const totalWeeks = Math.max(1, Math.floor(coverageDays / 7));
+    const weekIdx = inWindow.map(i => Math.floor((now - i.ts) / (7 * DAY))).filter(w => w < totalWeeks);
+    const activeWeeks = new Set(weekIdx).size;
+    const recentWeeks = Math.max(1, Math.floor(totalWeeks / 2));
+    const recentActiveWeeks = new Set(weekIdx.filter(w => w < recentWeeks)).size;
+    let longestGapDays = n ? Math.round((now - inWindow[0].ts) / DAY) : coverageDays;
+    for (let i = 1; i < n; i++) longestGapDays = Math.max(longestGapDays, Math.round((inWindow[i - 1].ts - inWindow[i].ts) / DAY));
+
+    // Calendar months (oldest → newest), flagged when the sample doesn't reach back that far.
+    const coverageStart = now - coverageDays * DAY;
+    const monthly = [];
+    const d = new Date();
+    for (let k = 5; k >= 0; k--) {
+      const start = new Date(d.getFullYear(), d.getMonth() - k, 1).getTime();
+      const end = new Date(d.getFullYear(), d.getMonth() - k + 1, 1).getTime();
+      const inMonth = inWindow.filter(i => i.ts >= start && i.ts < end);
+      const views = inMonth.map(i => i.views).filter((v): v is number => v != null);
+      monthly.push({
+        month: MONTHS[new Date(start).getMonth()],
+        posts: inMonth.length,
+        avgEngagement: inMonth.length ? Math.round(avg(inMonth.map(i => i.engagement))) : null,
+        avgViews: views.length ? Math.round(avg(views)) : null,
+        covered: end > coverageStart,
+        partial: start < coverageStart && end > coverageStart,
+      });
+    }
+
+    // Recent half vs earlier half of the covered window.
+    const half = (coverageDays / 2) * DAY;
+    const recent = inWindow.filter(i => now - i.ts <= half);
+    const earlier = inWindow.filter(i => now - i.ts > half);
+    const enough = coverageDays >= 28 && recent.length >= 3 && earlier.length >= 3;
+    const viewsOf = (xs: HistoryItem[]) => xs.map(i => i.views).filter((v): v is number => v != null);
+    const rv = viewsOf(recent), ev = viewsOf(earlier);
+
+    return {
+      coverageDays,
+      periodLabel: coverageDays >= 150 ? 'last 6 months' : coverageDays >= 45 ? `last ${Math.round(coverageDays / 30)} months` : `last ${coverageDays} days`,
+      capped,
+      postsInWindow: n,
+      postsPerWeek: +(n / (coverageDays / 7)).toFixed(1),
+      activeWeeks,
+      totalWeeks,
+      weeksActivePct: Math.round((activeWeeks / totalWeeks) * 100),
+      recentWeeksActivePct: Math.round((recentActiveWeeks / recentWeeks) * 100),
+      longestGapDays,
+      monthly,
+      halfLabel: `${Math.max(1, Math.round(coverageDays / 2 / 30))} mo`,
+      postingTrendPct: coverageDays >= 28 && earlier.length ? pctChange(recent.length, earlier.length) : null,
+      engagementTrendPct: enough ? pctChange(avg(recent.map(i => i.engagement)), avg(earlier.map(i => i.engagement))) : null,
+      viewsTrendPct: coverageDays >= 28 && rv.length >= 3 && ev.length >= 3 ? pctChange(avg(rv), avg(ev)) : null,
+    };
+  }
+
+  // Blend frequency with regularity, weighted toward the recent half: 3 posts in one
+  // week then nothing scores worse than 3 posts spread over 3 weeks, and an account
+  // that was busy months ago but has gone quiet scores on how it posts now.
+  function applyHistoryToScores(scores: any, history: ReturnType<typeof computeHistory>, daysSinceLastPost: number | null) {
+    if (history.totalWeeks < 4) return scores;
+    const freq = scoreFromBands(history.postsPerWeek, [[4, 100], [3, 85], [2, 70], [1, 50], [0.5, 30]], 10) ?? 10;
+    let consistency = Math.round(freq * 0.4 + history.weeksActivePct * 0.3 + history.recentWeeksActivePct * 0.3);
+    if (daysSinceLastPost != null && daysSinceLastPost > 14) consistency = Math.min(consistency, 30);
+    const next = { ...scores, consistency };
+    const parts = [next.consistency, next.engagement, next.conversionPath, next.formatMix].filter((v: any): v is number => v != null);
+    next.overall = parts.length ? Math.round(parts.reduce((a: number, b: number) => a + b, 0) / parts.length) : null;
+    return next;
+  }
+
+  // Our own follower history: one snapshot per profile per day, saved on every audit.
+  // Growth appears once a profile has been audited again 30/90/180 days later.
+  async function followerGrowth(platform: string, handle: string, followers: number, totalPosts: number | null) {
+    const DAY = 86_400_000;
+    const h = handle.toLowerCase();
+    const { data: rows, error } = await supabase
+      .from('social_snapshots')
+      .select('followers, captured_at')
+      .eq('platform', platform)
+      .eq('handle', h)
+      .order('captured_at', { ascending: true })
+      .limit(1000);
+    if (error) { console.warn("[Snapshots] unavailable:", error.message); return null; }
+    const list = (rows || []).map((r: any) => ({ followers: Number(r.followers), t: +new Date(r.captured_at) })).filter((r: any) => r.t);
+    const last = list[list.length - 1];
+    if (!last || Date.now() - last.t > 20 * 60 * 60 * 1000) {
+      const { error: insErr } = await supabase.from('social_snapshots').insert({ platform, handle: h, followers, posts_count: totalPosts });
+      if (insErr) console.warn("[Snapshots] insert failed:", insErr.message);
+    }
+    const at = (days: number) => {
+      const target = Date.now() - days * DAY;
+      let best: any = null;
+      for (const r of list) if (Math.abs(r.t - target) <= 21 * DAY && (!best || Math.abs(r.t - target) < Math.abs(best.t - target))) best = r;
+      return best;
+    };
+    const growth = (r: any) => r && r.followers ? {
+      from: r.followers,
+      change: followers - r.followers,
+      pct: +(((followers - r.followers) / r.followers) * 100).toFixed(1),
+      days: Math.round((Date.now() - r.t) / DAY),
+    } : null;
+    return {
+      current: followers,
+      d30: growth(at(30)),
+      d90: growth(at(90)),
+      d180: growth(at(180)),
+      trackedSince: new Date(list[0]?.t || Date.now()).toISOString().slice(0, 10),
+      snapshots: list.length || 1,
+    };
+  }
+
   // TikTok: same idea as scrapeInstagramProfile, using Apify's TikTok scraper actor.
   // Returns null (never throws) on any failure so the route falls back to the web-search path.
   const tiktokScrapeCache = new Map<string, { data: any; expiresAt: number }>();
@@ -430,7 +589,7 @@ Return ONLY the JSON. No markdown. No explanation.`;
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ profiles: [username], resultsPerPage: 12, shouldDownloadCovers: false, shouldDownloadSlideshowImages: false, shouldDownloadVideos: false }),
+          body: JSON.stringify({ profiles: [username], resultsPerPage: POST_HISTORY_LIMIT, shouldDownloadCovers: false, shouldDownloadSlideshowImages: false, shouldDownloadVideos: false }),
         }
       );
       if (!apifyRes.ok) {
@@ -842,10 +1001,31 @@ The first character of your response must be "{" and the last must be "}".`;
 
       const isInstagram = platform === "Instagram";
       const isTikTok = platform === "TikTok";
-      const profile = isInstagram ? await scrapeInstagramProfile(handle) : isTikTok ? await scrapeTikTokProfile(handle) : null;
+      let profile = isInstagram ? await scrapeInstagramProfile(handle) : isTikTok ? await scrapeTikTokProfile(handle) : null;
+      // Instagram's profile scrape only carries ~12 latest posts; pull up to 60 from the
+      // last 6 months for real history. Falls back to the 12 if the post scrape fails.
+      let historySampleSize = 0;
+      if (profile && isInstagram) {
+        const recent = await scrapeInstagramPosts(profile.username);
+        historySampleSize = recent.length;
+        if (recent.length > (profile.latestPosts?.length || 0)) profile = { ...profile, latestPosts: recent };
+        else historySampleSize = profile.latestPosts?.length || 0;
+      } else if (profile && isTikTok) {
+        historySampleSize = profile.videos?.length || 0;
+      }
 
       if (profile) {
-        const { metrics, scores, posts } = isInstagram ? computeInstagramContentMetrics(profile) : computeTikTokContentMetrics(profile);
+        const computed = isInstagram ? computeInstagramContentMetrics(profile) : computeTikTokContentMetrics(profile);
+        const { metrics, posts } = computed;
+        let { scores } = computed;
+        const historyItems: HistoryItem[] = posts.map((p: any) => isInstagram
+          ? { ts: +new Date(p.timestamp), engagement: Math.max(0, Number(p.likesCount) || 0) + Math.max(0, Number(p.commentsCount) || 0), views: p.type === 'Video' ? (Number(p.videoPlayCount ?? p.videoViewCount) || null) : null }
+          : { ts: p.createTimeISO ? +new Date(p.createTimeISO) : (p.createTime ? p.createTime * 1000 : 0), engagement: (Number(p.diggCount) || 0) + (Number(p.commentCount) || 0) + (Number(p.shareCount) || 0), views: Number(p.playCount) || null });
+        const history = computeHistory(historyItems, historySampleSize);
+        scores = applyHistoryToScores(scores, history, metrics.daysSinceLastPost);
+        const username = isInstagram ? profile.username : profile.authorMeta?.name;
+        const growth = username && metrics.followers ? await followerGrowth(platform, username, metrics.followers, metrics.totalPosts).catch(() => null) : null;
+        Object.assign(metrics, { history, growth });
         const dataSource = isInstagram ? 'instagram_api' : 'tiktok_api';
         const grade = gradeFromScore(scores.overall);
         const benchmark = benchmarkFor(platform);
@@ -876,6 +1056,10 @@ ${JSON.stringify(metrics)}
 
 SCORES (fixed rules, 0-100): ${JSON.stringify(scores)}
 GRADE: ${grade}
+HISTORY: metrics.history covers the ${history.periodLabel} (${history.postsInWindow} posts). Use its monthly
+counts and trends (posting, engagement per post, views; recent half vs earlier half) to say whether the account is gaining or
+losing momentum. metrics.growth is follower change from our own records; if it is null or its d90/d180 are null, do not
+claim any follower growth number.
 BENCHMARK: ${benchmark?.label || 'n/a'}
 
 LATEST POSTS:

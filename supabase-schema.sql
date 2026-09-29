@@ -146,3 +146,17 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS meta_ig_user_id TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS meta_fb_page_id TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS linkedin_org_id TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS linkedin_person_id TEXT;
+
+-- 11. Follower snapshots for the Content Audit's growth tracking.
+-- One row per profile per day, written every time a profile is audited. Growth over
+-- 30/90/180 days is read from these (no paid history API needed).
+CREATE TABLE IF NOT EXISTS social_snapshots (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  platform TEXT NOT NULL,
+  handle TEXT NOT NULL,
+  followers INTEGER,
+  posts_count INTEGER,
+  captured_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_social_snapshots_lookup ON social_snapshots(platform, handle, captured_at);
+ALTER TABLE social_snapshots DISABLE ROW LEVEL SECURITY;
