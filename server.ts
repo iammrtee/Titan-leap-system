@@ -183,6 +183,92 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
     }
   });
 
+  // ── Social profile discovery ───────────────────────────────────────────────
+  // Reads the brand's social links straight out of the page source (hrefs, JSON-LD
+  // "sameAs", embedded JSON) — no AI call, so it's free and exact. Share buttons,
+  // tracking pixels and embeds are filtered out; if a platform is linked several
+  // times, the most-referenced account wins (usually the brand's own footer link).
+  const SOCIAL_RESERVED = new Set(['embed', 'embed.js', 'about', 'legal', 'developer', 'developers', 'privacy', 'terms', 'help', 'login', 'signup', 'home', 'intent', 'share', 'sharer', 'sharer.php', 'hashtag', 'watch', 'results', 'feed', 'p', 'reel', 'reels', 'accounts', 'explore', 'stories', 'pages', 'groups', 'events', 'plugins', 'dialog', 'tr', 'business', 'policies', 'ads', 'static', 'images', 'i', 'search', 'settings', 'notifications', 'messages', 'tv', 'direct', 'legal', 'discover', 'tag', 'music', 'video', 'profile.php', 'people', 'watch?v', 'shorts', 'playlist', 'jobs', 'feed', 'widgets.js', 'favicon.ico']);
+  const SOCIAL_RULES: Array<{ platform: string; re: RegExp; url: (m: RegExpMatchArray) => string; id: (m: RegExpMatchArray) => string }> = [
+    { platform: 'Instagram', re: /^https?:\/\/(?:www\.)?instagram\.com\/([A-Za-z0-9._]{2,30})\/?(?:[?#].*)?$/i, id: m => m[1], url: m => `https://www.instagram.com/${m[1]}/` },
+    { platform: 'TikTok', re: /^https?:\/\/(?:www\.)?tiktok\.com\/@([A-Za-z0-9._]{2,30})\/?(?:[?#].*)?$/i, id: m => m[1], url: m => `https://www.tiktok.com/@${m[1]}` },
+    { platform: 'LinkedIn', re: /^https?:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/(company|in|school|showcase)\/([^/?#\s]{2,})\/?(?:[?#].*)?$/i, id: m => `${m[1]}/${m[2]}`, url: m => `https://www.linkedin.com/${m[1].toLowerCase()}/${m[2]}/` },
+    { platform: 'Twitter-X', re: /^https?:\/\/(?:www\.|mobile\.)?(?:twitter|x)\.com\/([A-Za-z0-9_]{1,15})\/?(?:[?#].*)?$/i, id: m => m[1], url: m => `https://x.com/${m[1]}` },
+    { platform: 'YouTube', re: /^https?:\/\/(?:www\.|m\.)?youtube\.com\/(@[\w.-]{2,}|channel\/[\w-]{10,}|c\/[\w.-]{2,}|user\/[\w.-]{2,})\/?(?:[?#].*)?$/i, id: m => m[1], url: m => `https://www.youtube.com/${m[1]}` },
+    { platform: 'Facebook', re: /^https?:\/\/(?:www\.|m\.|web\.)?(?:facebook|fb)\.com\/([A-Za-z0-9.\-]{2,})\/?(?:[?#].*)?$/i, id: m => m[1], url: m => `https://www.facebook.com/${m[1]}` },
+  ];
+
+  function extractSocialLinks(html: string): Array<{ platform: string; url: string }> {
+    if (!html) return [];
+    const text = html.replace(/\\\//g, '/').replace(/&amp;/g, '&');
+    const candidates = text.match(/https?:\/\/[^\s"'<>()\\]+/g) || [];
+    const counts = new Map<string, { platform: string; url: string; n: number; order: number; rank: number }>();
+    candidates.forEach((raw, order) => {
+      const u = raw.replace(/[.,;]+$/, '');
+      for (const rule of SOCIAL_RULES) {
+        const m = u.match(rule.re);
+        if (!m) continue;
+        const id = rule.id(m);
+        const last = id.split('/').pop()!.toLowerCase();
+        if (SOCIAL_RESERVED.has(last) || SOCIAL_RESERVED.has(id.toLowerCase())) break;
+        const key = `${rule.platform}|${id.toLowerCase()}`;
+        // LinkedIn: a company page beats a founder's personal profile.
+        const rank = rule.platform === 'LinkedIn' && !/^company\//i.test(id) ? 1 : 0;
+        const prev = counts.get(key);
+        if (prev) prev.n += 1;
+        else counts.set(key, { platform: rule.platform, url: rule.url(m), n: 1, order, rank });
+        break;
+      }
+    });
+    const best = new Map<string, { platform: string; url: string; n: number; order: number; rank: number }>();
+    for (const c of counts.values()) {
+      const b = best.get(c.platform);
+      if (!b || c.rank < b.rank || (c.rank === b.rank && (c.n > b.n || (c.n === b.n && c.order < b.order)))) best.set(c.platform, c);
+    }
+    return [...best.values()].sort((a, b) => a.order - b.order).map(({ platform, url }) => ({ platform, url }));
+  }
+
+  const socialDiscoveryCache = new Map<string, { data: Array<{ platform: string; url: string }>; expiresAt: number }>();
+  async function fetchPageHtml(url: string, timeoutMs = 10000): Promise<string> {
+    try {
+      const r = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36' },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!r.ok) return '';
+      return (await r.text()).slice(0, 2_000_000);
+    } catch { return ''; }
+  }
+  async function discoverSocialProfiles(rawUrl: string, homepageHtml?: string): Promise<Array<{ platform: string; url: string }>> {
+    let base: URL;
+    try { base = new URL(/^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`); } catch { return []; }
+    const cacheKey = base.hostname.replace(/^www\./, '').toLowerCase();
+    const cached = socialDiscoveryCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+    let found = extractSocialLinks(homepageHtml ?? await fetchPageHtml(base.origin + (base.pathname || '/')));
+    // Many sites only link socials on About/Contact, or render the footer with JS.
+    if (found.length < 2) {
+      const extra = await Promise.all(['/contact', '/about', '/contact-us', '/about-us'].map(p => fetchPageHtml(base.origin + p, 6000)));
+      const merged = new Map(found.map(f => [f.platform, f]));
+      for (const f of extractSocialLinks(extra.join('\n'))) if (!merged.has(f.platform)) merged.set(f.platform, f);
+      found = [...merged.values()];
+    }
+    socialDiscoveryCache.set(cacheKey, { data: found, expiresAt: Date.now() + 12 * 60 * 60 * 1000 });
+    return found;
+  }
+
+  app.post("/api/discover-socials", requireUser, async (req, res) => {
+    const { url } = req.body || {};
+    if (!url || typeof url !== 'string') return res.status(400).json({ error: "url is required" });
+    try {
+      res.json({ profiles: await discoverSocialProfiles(url) });
+    } catch (e: any) {
+      console.error("[DiscoverSocials] failed:", e?.message || e);
+      res.json({ profiles: [] });
+    }
+  });
+
   // Smart Fill (protected)
   app.post("/api/ai/smart-fill", requireUser, async (req, res) => {
     try {
@@ -191,12 +277,14 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
 
       // Fetch the page server-side (avoids CORS, can actually read content)
       let pageText = '';
+      let rawHtml = '';
       try {
         const pageRes = await fetch(url, {
           headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TitanLeap/1.0; +https://titanleap.ai)' },
           signal: AbortSignal.timeout(12000)
         });
         const html = await pageRes.text();
+        rawHtml = html;
         // Strip scripts, styles, tags â keep readable text
         pageText = html
           .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
@@ -249,6 +337,25 @@ Return ONLY the JSON. No markdown. No explanation.`;
       });
       const cleaned = (result.text || '').replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
       const parsed = JSON.parse(cleaned);
+      // Social links come from the page source, not Claude's reading of the stripped text
+      // (which never sees icon links). Found links replace Claude's guesses per platform.
+      try {
+        const found = await discoverSocialProfiles(url, rawHtml || undefined);
+        if (found.length) {
+          const foundPlatforms = new Set(found.map(f => f.platform));
+          const platformOf = (h: string) => SOCIAL_RULES.find(r => r.re.test(h))?.platform;
+          const kept = (Array.isArray(parsed.socialHandles) ? parsed.socialHandles : [])
+            .filter((h: any) => typeof h === 'string' && /^https?:\/\//i.test(h) && !foundPlatforms.has(platformOf(h) || ''));
+          parsed.socialHandles = [...found.map(f => f.url), ...kept].slice(0, 6);
+          parsed.discoveredSocials = found;
+          if (!parsed.primaryPlatform || !foundPlatforms.has(parsed.primaryPlatform)) {
+            const pref = ['Instagram', 'TikTok', 'LinkedIn', 'YouTube', 'Twitter-X', 'Facebook'];
+            parsed.primaryPlatform = pref.find(p => foundPlatforms.has(p)) || parsed.primaryPlatform;
+          }
+        }
+      } catch (e: any) {
+        console.warn("[SmartFill] social discovery failed:", e?.message || e);
+      }
       res.json(parsed);
     } catch (error: any) {
       const errMsg = error?.message || String(error) || "Smart fill failed";
