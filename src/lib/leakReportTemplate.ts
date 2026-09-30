@@ -65,10 +65,9 @@ export function renderLeakReportHtml(r: LeakAuditReport, opts: { preparedBy?: st
         <div class="saw">
           <div class="saw-l">What we saw${l.shot ? ` <span class="saw-page">${esc(pageLabel(l))}</span>` : ''}</div>
           ${l.shot ? `<figure class="shot">
-            <div class="shot-bar"><i></i><i></i><i></i><span>${esc(shortUrl(l.shot.url))}</span></div>
+            <div class="shot-bar"><i></i><i></i><i></i><span>${esc(shortUrl(l.shot.url) || pageLabel(l))}</span></div>
             <img src="${l.shot.image}" alt="Screenshot of ${esc(shortUrl(l.shot.url))}${l.shot.highlighted ? ' with the problem circled' : ''}" />
-          </figure>
-          <div class="saw-cap">${l.shot.highlighted ? '<b>Circled:</b> ' : ''}${esc(l.whatWeSaw)}</div>` : `<div class="saw-q">${esc(l.whatWeSaw)}</div>`}
+          </figure>` : `<div class="saw-q">${esc(l.whatWeSaw)}</div>`}
           ${l.customersHigh > 0 ? `<div class="saw-where">Costing you about ${range(l.revenueLow, l.revenueHigh, money)} a month</div>` : ''}
         </div>
         <div class="lk-text">
