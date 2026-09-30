@@ -17,9 +17,14 @@ export type LeakAuditReport = {
     title: string; where: string; whatWeSaw: string; whatsWrong: string; fixes: string[];
     before?: string; after?: string; effort: string; howToKnow: string;
     customersLow: number; customersHigh: number; revenueLow: number; revenueHigh: number;
-    page?: string; quoteOnPage?: string;
-    // Real screenshot of their page (JPEG data URL), with the quoted words circled when found.
-    shot?: { image: string; url: string; highlighted: boolean } | null;
+    page?: string; quoteOnPage?: string; pageUrl?: string | null;
+    // Screenshot of their page added by the user (JPEG data URL). `image` is what the
+    // report shows (with the mark drawn in); `raw` is the untouched upload so the mark
+    // can be redrawn.
+    shot?: {
+      image: string; url: string; highlighted: boolean;
+      raw?: string; box?: { x: number; y: number; w: number; h: number } | null; note?: string; markedBy?: 'ai' | 'you' | null;
+    } | null;
   }>;
   channels: Array<{ name: string; who: string; why: string; firstStep: string }>;
   uncomfortableTruth: string;
