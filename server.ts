@@ -1143,6 +1143,21 @@ The first character of your response must be "{" and the last must be "}".`;
     }
   }
 
+  // Checks the screenshot browser works on this server. No AI call, no credits.
+  app.post("/api/page-shot-check", requireUser, async (req, res) => {
+    const { url, quote } = req.body || {};
+    if (!url) return res.status(400).json({ error: "url is required" });
+    const t = Date.now();
+    try {
+      const { captureEvidence } = await import("./src/services/pageShots.ts");
+      const shots = await captureEvidence([{ id: 'x', url, quote }]);
+      const s = shots.x;
+      res.json({ ok: !!s, ms: Date.now() - t, highlighted: s?.highlighted ?? false, kb: s ? Math.round(s.image.length * 0.75 / 1024) : 0, image: s?.image || null, memoryMb: Math.round(process.memoryUsage().rss / 1048576) });
+    } catch (e: any) {
+      res.json({ ok: false, ms: Date.now() - t, error: e?.message || String(e) });
+    }
+  });
+
   app.post("/api/ai/leak-audit", requireUser, async (req, res) => {
     try {
       const b = req.body || {};
@@ -1160,11 +1175,29 @@ The first character of your response must be "{" and the last must be "}".`;
       const targetCustomers = visitors * Math.max(signupRate, LEAK_TARGET_SIGNUP_PCT) / 100 * Math.max(paidRate, LEAK_TARGET_PAID_PCT) / 100;
       const gap = Math.max(0, targetCustomers - customers);
 
-      const [home, pricing, signup] = await Promise.all([
+      let [home, pricing, signup] = await Promise.all([
         fetchPageTextForAudit(b.websiteUrl),
         fetchPageTextForAudit(b.pricingPageUrl),
         fetchPageTextForAudit(b.signupUrl),
       ]);
+      // JS-built sites and bot walls return little or nothing to a plain fetch; read
+      // those pages in a real browser instead so the audit sees what visitors see.
+      const pageUrls: Record<'home' | 'pricing' | 'signup', string | undefined> = { home: b.websiteUrl, pricing: b.pricingPageUrl, signup: b.signupUrl };
+      const thin = (t: string | null) => !t || t.length < 400;
+      const needRender = (['home', 'pricing', 'signup'] as const).filter(k => pageUrls[k] && thin(k === 'home' ? home : k === 'pricing' ? pricing : signup));
+      if (needRender.length) {
+        try {
+          const { renderPagesText } = await import("./src/services/pageShots.ts");
+          const rendered = await renderPagesText(needRender.map(k => pageUrls[k]!));
+          for (const k of needRender) {
+            const t = rendered[pageUrls[k]!];
+            if (!t) continue;
+            if (k === 'home') home = t; else if (k === 'pricing') pricing = t; else signup = t;
+          }
+        } catch (e: any) {
+          console.warn("[LeakAudit] browser render unavailable:", e?.message || e);
+        }
+      }
 
       const prompt = `You are writing TitanLeap's Customer Leak Audit for a SaaS founder. It is a paid report.
 Find the three places this business loses the most potential customers, and say exactly what to change.
@@ -1194,6 +1227,7 @@ ${signup || '(not provided or could not fetch)'}
 
 RULES:
 1. Every leak must quote or point to something actually on their pages, or to a funnel number above. If a page could not be fetched, say what you would check instead of pretending.
+   The report shows a real screenshot of the page with quoteOnPage circled, so quoteOnPage must be words that are really on that page.
 2. Never invent statistics (exit rates, bounce rates, benchmarks, competitor counts). Only use the numbers given here.
 3. "gapShare" is the fraction of the ${Math.round(gap)}-customer gap this leak explains (0 to 1). The three must add up to 1 or less. Put the biggest first.
 4. Fixes must be concrete enough to do this week: exact copy, exact change, where.
@@ -1206,6 +1240,8 @@ Return ONLY this JSON (first character "{", last character "}"):
     {
       "title": "The problem in plain words",
       "where": "Home page / Pricing page / Signup flow / Onboarding / Content",
+      "page": "home | pricing | signup | none  (which fetched page the screenshot should show; none if the leak isn't about a page)",
+      "quoteOnPage": "3-15 words copied character-for-character from that page's text above, which the screenshot will circle. Never include [h1]/[a]/[button] markers. Empty string if nothing specific to circle.",
       "whatWeSaw": "Short exact quote from their page, or the funnel number, that shows the problem",
       "whatsWrong": "2-3 sentences",
       "fixes": ["exact change 1", "exact change 2", "exact change 3"],
@@ -1249,6 +1285,24 @@ Exactly 3 leaks and exactly 2 channels.`;
           revenueHigh: Math.round(high * revenuePerCustomer),
         };
       });
+      // Real screenshots for "What we saw": open each page once, circle the quoted words.
+      const shotRequests = withNumbers
+        .map((l: any, i: number) => {
+          const key = String(l.page || '').toLowerCase().trim() as 'home' | 'pricing' | 'signup';
+          const url = pageUrls[key];
+          return url ? { id: String(i), url, quote: String(l.quoteOnPage || '').trim() || undefined } : null;
+        })
+        .filter(Boolean) as Array<{ id: string; url: string; quote?: string }>;
+      if (shotRequests.length) {
+        try {
+          const { captureEvidence } = await import("./src/services/pageShots.ts");
+          const shots = await captureEvidence(shotRequests);
+          withNumbers.forEach((l: any, i: number) => { if (shots[String(i)]) l.shot = shots[String(i)]; });
+        } catch (e: any) {
+          console.warn("[LeakAudit] screenshots unavailable:", e?.message || e);
+        }
+      }
+
       const totalLow = withNumbers.reduce((a: number, l: any) => a + l.customersLow, 0);
       const totalHigh = withNumbers.reduce((a: number, l: any) => a + l.customersHigh, 0);
 
