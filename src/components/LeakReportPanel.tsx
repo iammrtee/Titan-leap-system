@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, FileText, Download, ExternalLink, ImagePlus, Trash2, Image as ImageIcon } from 'lucide-react';
-import { generateLeakAudit, type ContentAuditResult } from '@/src/services/ai';
+import { Loader2, FileText, Download, ExternalLink, ImagePlus, Trash2, Image as ImageIcon, PenLine, Sparkles, X } from 'lucide-react';
+import { generateLeakAudit, annotateShot, type ContentAuditResult } from '@/src/services/ai';
+import { readScreenshot, drawMark, type MarkBox } from '@/src/lib/markShot';
 import { renderLeakReportHtml, type LeakAuditReport } from '@/src/lib/leakReportTemplate';
 
 type Props = {
@@ -65,37 +66,65 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
     }
   };
 
-  // Your own screenshot for a leak: replaces (or fills in) the automatic one.
-  // Downscaled to 1400px wide JPEG so the downloadable report stays light.
-  const fileToDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const scale = Math.min(1, 1400 / img.naturalWidth);
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(img.naturalWidth * scale);
-      canvas.height = Math.round(img.naturalHeight * scale);
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { reject(new Error('Could not read image')); return; }
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL('image/jpeg', 0.8));
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file is not an image')); };
-    img.src = url;
-  });
-  const pageUrlFor = (page?: string) =>
-    page === 'pricing' ? f.pricingPageUrl : page === 'signup' ? f.signupUrl : f.websiteUrl;
-  const setShot = async (i: number, file: File | null) => {
-    if (!report) return;
+  // ── Screenshots: you add them (upload, drop or paste), the AI marks the problem,
+  // your browser draws the mark. Nothing runs on the server except one AI call.
+  const [marking, setMarking] = useState<Record<number, boolean>>({});
+  const [editing, setEditing] = useState<number | null>(null);
+  const reportRef = useRef(report);
+  reportRef.current = report;
+  const pageUrlFor = (l: any) =>
+    l?.pageUrl || (l?.page === 'pricing' ? f.pricingPageUrl : l?.page === 'signup' ? f.signupUrl : f.websiteUrl) || '';
+
+  const updateLeak = (i: number, patch: Record<string, any>) => {
+    const r = reportRef.current;
+    if (!r) return;
+    const next = { ...r, leaks: r.leaks.map((l, j) => (j === i ? { ...l, ...patch } : l)) };
+    reportRef.current = next;
+    onReport(next);
+  };
+
+  const addShot = async (i: number, file: File | Blob) => {
+    const leak: any = reportRef.current?.leaks[i];
+    if (!leak) return;
     try {
-      const shot = file ? { image: await fileToDataUrl(file), url: pageUrlFor((report.leaks[i] as any).page) || '', highlighted: false } : null;
-      onReport({ ...report, leaks: report.leaks.map((l, j) => (j === i ? { ...l, shot } : l)) });
-      toast.success(file ? `Screenshot added to leak ${i + 1}` : `Screenshot removed from leak ${i + 1}`);
+      const { dataUrl, width, height } = await readScreenshot(file);
+      const base = { image: dataUrl, raw: dataUrl, url: pageUrlFor(leak), highlighted: false, box: null, note: '', markedBy: null };
+      updateLeak(i, { shot: base });
+      setMarking(m => ({ ...m, [i]: true }));
+      try {
+        const a = await annotateShot({ image: dataUrl, width, height, title: leak.title, whatWeSaw: leak.whatWeSaw, quote: leak.quoteOnPage, whatsWrong: leak.whatsWrong });
+        if (a.found && a.box) {
+          updateLeak(i, { shot: { ...base, image: await drawMark(dataUrl, a.box, a.note), highlighted: true, box: a.box, note: a.note, markedBy: 'ai' } });
+          toast.success(`Leak ${i + 1}: problem marked`, { description: 'Not quite right? Use "Draw mark" to fix it.' });
+        } else {
+          toast.info(`Leak ${i + 1}: couldn't spot the problem in this screenshot`, { description: 'Use "Draw mark" to circle it yourself.' });
+        }
+      } catch (e: any) {
+        toast.error(`Leak ${i + 1}: automatic marking failed`, { description: 'Use "Draw mark" to circle it yourself.' });
+      } finally {
+        setMarking(m => ({ ...m, [i]: false }));
+      }
     } catch (e: any) {
       toast.error(e?.message || 'Could not use that image');
     }
+  };
+
+  const saveMark = async (i: number, box: MarkBox | null, note: string) => {
+    const shot: any = (reportRef.current?.leaks[i] as any)?.shot;
+    if (!shot?.raw) return;
+    updateLeak(i, { shot: { ...shot, image: await drawMark(shot.raw, box, note), highlighted: !!box, box, note, markedBy: box ? 'you' : null } });
+    setEditing(null);
+  };
+
+  const pasteInto = (i: number) => (e: React.ClipboardEvent) => {
+    const item = Array.from(e.clipboardData.items).find(it => it.type.startsWith('image/'));
+    const file = item?.getAsFile();
+    if (file) { e.preventDefault(); addShot(i, file); }
+  };
+  const dropInto = (i: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = Array.from(e.dataTransfer.files).find(f => f.type.startsWith('image/'));
+    if (file) addShot(i, file);
   };
 
   const download = () => {
@@ -163,30 +192,115 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
             </div>
           </div>
           <div className="px-2 grid gap-2">
-            {report.leaks.map((l, i) => (
-              <div key={i} className="flex flex-wrap items-center gap-3 rounded-xl border border-outline-variant/15 bg-surface-container-lowest px-3 py-2.5">
+            <div className="text-xs text-on-surface-variant">
+              <b className="text-on-surface">Screenshots:</b> add one per leak (upload, drag it onto the row, or click the row and paste). The AI marks the problem; fix it with "Draw mark" if needed.
+            </div>
+            {report.leaks.map((l: any, i) => (
+              <div
+                key={i}
+                tabIndex={0}
+                onPaste={pasteInto(i)}
+                onDragOver={e => e.preventDefault()}
+                onDrop={dropInto(i)}
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-outline-variant/15 bg-surface-container-lowest px-3 py-2.5 outline-none focus:border-primary/50"
+              >
                 {l.shot?.image
-                  ? <img src={l.shot.image} alt="" className="w-20 h-12 object-cover object-top rounded-md border border-outline-variant/20" />
-                  : <div className="w-20 h-12 rounded-md border border-dashed border-outline-variant/40 grid place-items-center text-on-surface-variant/40"><ImageIcon size={16} /></div>}
+                  ? <img src={l.shot.image} alt="" className="w-24 h-14 object-cover object-top rounded-md border border-outline-variant/20" />
+                  : <div className="w-24 h-14 rounded-md border border-dashed border-outline-variant/40 grid place-items-center text-on-surface-variant/40"><ImageIcon size={16} /></div>}
                 <div className="flex-1 min-w-[180px]">
                   <div className="text-sm font-bold text-on-surface">{i + 1}. {l.title}</div>
-                  <div className="text-xs text-on-surface-variant">
-                    {l.shot?.image ? (l.shot.highlighted ? 'Screenshot taken automatically, problem circled' : 'Screenshot added') : 'No screenshot yet. The report shows the quote instead.'}
+                  <div className="text-xs text-on-surface-variant flex items-center gap-1.5">
+                    {marking[i] ? <><Loader2 size={12} className="animate-spin" />Marking the problem…</>
+                      : !l.shot?.image ? `Add a screenshot of the ${String(l.where || 'page').toLowerCase()}. Until then the report shows the quote.`
+                      : l.shot.markedBy === 'ai' ? <><Sparkles size={12} className="text-primary" />Marked by AI{l.shot.note ? `: "${l.shot.note}"` : ''}</>
+                      : l.shot.markedBy === 'you' ? 'Marked by you'
+                      : 'No mark yet'}
                   </div>
                 </div>
                 <label className="flex items-center gap-1.5 cursor-pointer rounded-lg px-3 py-2 text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20">
                   <ImagePlus size={14} />{l.shot?.image ? 'Replace' : 'Upload screenshot'}
-                  <input type="file" accept="image/*" className="hidden" onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) setShot(i, file); }} />
+                  <input type="file" accept="image/*" className="hidden" onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) addShot(i, file); }} />
                 </label>
+                {l.shot?.raw && (
+                  <button onClick={() => setEditing(i)} disabled={marking[i]} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold border border-outline-variant/30 text-on-surface disabled:opacity-40">
+                    <PenLine size={14} />Draw mark
+                  </button>
+                )}
                 {l.shot?.image && (
-                  <button onClick={() => setShot(i, null)} className="p-2 rounded-lg text-on-surface-variant/60 hover:text-rose-500" aria-label="Remove screenshot"><Trash2 size={14} /></button>
+                  <button onClick={() => updateLeak(i, { shot: null })} className="p-2 rounded-lg text-on-surface-variant/60 hover:text-rose-500" aria-label="Remove screenshot"><Trash2 size={14} /></button>
                 )}
               </div>
             ))}
           </div>
+          {editing != null && (report.leaks[editing] as any)?.shot?.raw && (
+            <MarkEditor
+              title={`${editing + 1}. ${report.leaks[editing].title}`}
+              raw={(report.leaks[editing] as any).shot.raw}
+              initialBox={(report.leaks[editing] as any).shot.box || null}
+              initialNote={(report.leaks[editing] as any).shot.note || ''}
+              onCancel={() => setEditing(null)}
+              onSave={(box, note) => saveMark(editing, box, note)}
+            />
+          )}
           <iframe title="Customer Leak Audit preview" srcDoc={html} className="w-full rounded-xl bg-white" style={{ height: '75vh', border: 0 }} />
         </div>
       )}
+    </div>
+  );
+}
+
+// Drag on the screenshot to draw the mark. Stores the box as fractions of the image.
+function MarkEditor({ title, raw, initialBox, initialNote, onCancel, onSave }: {
+  title: string; raw: string; initialBox: MarkBox | null; initialNote: string;
+  onCancel: () => void; onSave: (box: MarkBox | null, note: string) => void;
+}) {
+  const [box, setBox] = useState<MarkBox | null>(initialBox);
+  const [note, setNote] = useState(initialNote);
+  const [saving, setSaving] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const pos = (e: React.PointerEvent) => {
+    const r = wrap.current!.getBoundingClientRect();
+    return { x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) };
+  };
+  const down = (e: React.PointerEvent) => { e.preventDefault(); (e.target as Element).setPointerCapture?.(e.pointerId); start.current = pos(e); setBox({ ...start.current, w: 0, h: 0 }); };
+  const move = (e: React.PointerEvent) => {
+    if (!start.current) return;
+    const p = pos(e), s = start.current;
+    setBox({ x: Math.min(s.x, p.x), y: Math.min(s.y, p.y), w: Math.abs(p.x - s.x), h: Math.abs(p.y - s.y) });
+  };
+  const up = () => { start.current = null; setBox(b => (b && (b.w < 0.01 || b.h < 0.01) ? null : b)); };
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4" onClick={onCancel}>
+      <div className="bg-surface-container-lowest rounded-2xl max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-outline-variant/15">
+          <div>
+            <div className="text-sm font-bold text-on-surface">{title}</div>
+            <div className="text-xs text-on-surface-variant">Drag over the problem to mark it.</div>
+          </div>
+          <button onClick={onCancel} className="p-2 rounded-lg text-on-surface-variant hover:text-on-surface" aria-label="Close"><X size={18} /></button>
+        </div>
+        <div className="overflow-auto p-4 bg-surface-container">
+          <div ref={wrap} className="relative mx-auto select-none touch-none cursor-crosshair" style={{ maxWidth: 1000 }}
+            onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+            <img src={raw} alt="" draggable={false} className="block w-full h-auto rounded-md" />
+            {box && (
+              <div className="absolute rounded-xl pointer-events-none" style={{
+                left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.w * 100}%`, height: `${box.h * 100}%`,
+                border: '3px solid #6B21E8', background: 'rgba(245,197,24,.18)', boxShadow: '0 0 0 3px rgba(255,255,255,.9)',
+              }} />
+            )}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 px-5 py-3 border-t border-outline-variant/15">
+          <input value={note} onChange={e => setNote(e.target.value.slice(0, 40))} placeholder="Short note on the mark (optional)"
+            className="flex-1 min-w-[200px] bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm text-on-surface" />
+          <button onClick={() => setBox(null)} className="rounded-lg px-3 py-2 text-xs font-bold border border-outline-variant/30 text-on-surface">Clear mark</button>
+          <button disabled={saving} onClick={async () => { setSaving(true); try { await onSave(box, note); } finally { setSaving(false); } }}
+            className="rounded-lg px-4 py-2 text-xs font-bold bg-primary text-on-primary disabled:opacity-50">{saving ? 'Saving…' : 'Save mark'}</button>
+        </div>
+      </div>
     </div>
   );
 }
