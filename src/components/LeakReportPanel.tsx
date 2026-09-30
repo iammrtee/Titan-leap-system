@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, FileText, Download, ExternalLink } from 'lucide-react';
+import { Loader2, FileText, Download, ExternalLink, ImagePlus, Trash2, Image as ImageIcon } from 'lucide-react';
 import { generateLeakAudit, type ContentAuditResult } from '@/src/services/ai';
 import { renderLeakReportHtml, type LeakAuditReport } from '@/src/lib/leakReportTemplate';
 
@@ -62,6 +62,39 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
       toast.error('Leak audit failed', { id: t, description: e?.message });
     } finally {
       setRunning(false);
+    }
+  };
+
+  // Your own screenshot for a leak: replaces (or fills in) the automatic one.
+  // Downscaled to 1400px wide JPEG so the downloadable report stays light.
+  const fileToDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, 1400 / img.naturalWidth);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Could not read image')); return; }
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file is not an image')); };
+    img.src = url;
+  });
+  const pageUrlFor = (page?: string) =>
+    page === 'pricing' ? f.pricingPageUrl : page === 'signup' ? f.signupUrl : f.websiteUrl;
+  const setShot = async (i: number, file: File | null) => {
+    if (!report) return;
+    try {
+      const shot = file ? { image: await fileToDataUrl(file), url: pageUrlFor((report.leaks[i] as any).page) || '', highlighted: false } : null;
+      onReport({ ...report, leaks: report.leaks.map((l, j) => (j === i ? { ...l, shot } : l)) });
+      toast.success(file ? `Screenshot added to leak ${i + 1}` : `Screenshot removed from leak ${i + 1}`);
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not use that image');
     }
   };
 
@@ -128,6 +161,28 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
               <button onClick={open} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold border border-outline-variant/30 text-on-surface"><ExternalLink size={15} />Open</button>
               <button onClick={download} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold bg-primary text-on-primary"><Download size={15} />Download for client</button>
             </div>
+          </div>
+          <div className="px-2 grid gap-2">
+            {report.leaks.map((l, i) => (
+              <div key={i} className="flex flex-wrap items-center gap-3 rounded-xl border border-outline-variant/15 bg-surface-container-lowest px-3 py-2.5">
+                {l.shot?.image
+                  ? <img src={l.shot.image} alt="" className="w-20 h-12 object-cover object-top rounded-md border border-outline-variant/20" />
+                  : <div className="w-20 h-12 rounded-md border border-dashed border-outline-variant/40 grid place-items-center text-on-surface-variant/40"><ImageIcon size={16} /></div>}
+                <div className="flex-1 min-w-[180px]">
+                  <div className="text-sm font-bold text-on-surface">{i + 1}. {l.title}</div>
+                  <div className="text-xs text-on-surface-variant">
+                    {l.shot?.image ? (l.shot.highlighted ? 'Screenshot taken automatically, problem circled' : 'Screenshot added') : 'No screenshot yet. The report shows the quote instead.'}
+                  </div>
+                </div>
+                <label className="flex items-center gap-1.5 cursor-pointer rounded-lg px-3 py-2 text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20">
+                  <ImagePlus size={14} />{l.shot?.image ? 'Replace' : 'Upload screenshot'}
+                  <input type="file" accept="image/*" className="hidden" onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) setShot(i, file); }} />
+                </label>
+                {l.shot?.image && (
+                  <button onClick={() => setShot(i, null)} className="p-2 rounded-lg text-on-surface-variant/60 hover:text-rose-500" aria-label="Remove screenshot"><Trash2 size={14} /></button>
+                )}
+              </div>
+            ))}
           </div>
           <iframe title="Customer Leak Audit preview" srcDoc={html} className="w-full rounded-xl bg-white" style={{ height: '75vh', border: 0 }} />
         </div>
