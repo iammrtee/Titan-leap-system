@@ -94,8 +94,8 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
       try {
         const a = await annotateShot({ image: dataUrl, width, height, title: leak.title, whatWeSaw: leak.whatWeSaw, quote: leak.quoteOnPage, whatsWrong: leak.whatsWrong });
         if (a.found && a.box) {
-          updateLeak(i, { shot: { ...base, image: await drawMark(dataUrl, a.box, a.note), highlighted: true, box: a.box, note: a.note, markedBy: 'ai' } });
-          toast.success(`Leak ${i + 1}: problem marked`, { description: 'Not quite right? Use "Draw mark" to fix it.' });
+          updateLeak(i, { shot: { ...base, image: await drawMark(dataUrl, a.box), highlighted: true, box: a.box, markedBy: 'ai' } });
+          toast.success(`Leak ${i + 1}: proof circled`, { description: 'Not quite right? Use "Draw mark" to fix it.' });
         } else {
           toast.info(`Leak ${i + 1}: couldn't spot the problem in this screenshot`, { description: 'Use "Draw mark" to circle it yourself.' });
         }
@@ -109,10 +109,10 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
     }
   };
 
-  const saveMark = async (i: number, box: MarkBox | null, note: string) => {
+  const saveMark = async (i: number, box: MarkBox | null) => {
     const shot: any = (reportRef.current?.leaks[i] as any)?.shot;
     if (!shot?.raw) return;
-    updateLeak(i, { shot: { ...shot, image: await drawMark(shot.raw, box, note), highlighted: !!box, box, note, markedBy: box ? 'you' : null } });
+    updateLeak(i, { shot: { ...shot, image: await drawMark(shot.raw, box), highlighted: !!box, box, note: '', markedBy: box ? 'you' : null } });
     setEditing(null);
   };
 
@@ -193,7 +193,7 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
           </div>
           <div className="px-2 grid gap-2">
             <div className="text-xs text-on-surface-variant">
-              <b className="text-on-surface">Screenshots:</b> add one per leak (upload, drag it onto the row, or click the row and paste). The AI marks the problem; fix it with "Draw mark" if needed.
+              <b className="text-on-surface">Screenshots:</b> add one per leak (upload, drag it onto the row, or click the row and paste). The AI circles the proof; adjust it with "Draw mark" if needed.
             </div>
             {report.leaks.map((l: any, i) => (
               <div
@@ -212,7 +212,7 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
                   <div className="text-xs text-on-surface-variant flex items-center gap-1.5">
                     {marking[i] ? <><Loader2 size={12} className="animate-spin" />Marking the problem…</>
                       : !l.shot?.image ? `Add a screenshot of the ${String(l.where || 'page').toLowerCase()}. Until then the report shows the quote.`
-                      : l.shot.markedBy === 'ai' ? <><Sparkles size={12} className="text-primary" />Marked by AI{l.shot.note ? `: "${l.shot.note}"` : ''}</>
+                      : l.shot.markedBy === 'ai' ? <><Sparkles size={12} className="text-primary" />Circled by AI</>
                       : l.shot.markedBy === 'you' ? 'Marked by you'
                       : 'No mark yet'}
                   </div>
@@ -237,9 +237,8 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
               title={`${editing + 1}. ${report.leaks[editing].title}`}
               raw={(report.leaks[editing] as any).shot.raw}
               initialBox={(report.leaks[editing] as any).shot.box || null}
-              initialNote={(report.leaks[editing] as any).shot.note || ''}
               onCancel={() => setEditing(null)}
-              onSave={(box, note) => saveMark(editing, box, note)}
+              onSave={box => saveMark(editing, box)}
             />
           )}
           <iframe title="Customer Leak Audit preview" srcDoc={html} className="w-full rounded-xl bg-white" style={{ height: '75vh', border: 0 }} />
@@ -250,12 +249,11 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
 }
 
 // Drag on the screenshot to draw the mark. Stores the box as fractions of the image.
-function MarkEditor({ title, raw, initialBox, initialNote, onCancel, onSave }: {
-  title: string; raw: string; initialBox: MarkBox | null; initialNote: string;
-  onCancel: () => void; onSave: (box: MarkBox | null, note: string) => void;
+function MarkEditor({ title, raw, initialBox, onCancel, onSave }: {
+  title: string; raw: string; initialBox: MarkBox | null;
+  onCancel: () => void; onSave: (box: MarkBox | null) => void | Promise<void>;
 }) {
   const [box, setBox] = useState<MarkBox | null>(initialBox);
-  const [note, setNote] = useState(initialNote);
   const [saving, setSaving] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
@@ -294,10 +292,9 @@ function MarkEditor({ title, raw, initialBox, initialNote, onCancel, onSave }: {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3 px-5 py-3 border-t border-outline-variant/15">
-          <input value={note} onChange={e => setNote(e.target.value.slice(0, 40))} placeholder="Short note on the mark (optional)"
-            className="flex-1 min-w-[200px] bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm text-on-surface" />
+          <div className="flex-1 text-xs text-on-surface-variant">The report explains the problem; the circle just points to the proof.</div>
           <button onClick={() => setBox(null)} className="rounded-lg px-3 py-2 text-xs font-bold border border-outline-variant/30 text-on-surface">Clear mark</button>
-          <button disabled={saving} onClick={async () => { setSaving(true); try { await onSave(box, note); } finally { setSaving(false); } }}
+          <button disabled={saving} onClick={async () => { setSaving(true); try { await onSave(box); } finally { setSaving(false); } }}
             className="rounded-lg px-4 py-2 text-xs font-bold bg-primary text-on-primary disabled:opacity-50">{saving ? 'Saving…' : 'Save mark'}</button>
         </div>
       </div>
