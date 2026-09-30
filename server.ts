@@ -1143,18 +1143,54 @@ The first character of your response must be "{" and the last must be "}".`;
     }
   }
 
-  // Checks the screenshot browser works on this server. No AI call, no credits.
-  app.post("/api/page-shot-check", requireUser, async (req, res) => {
-    const { url, quote } = req.body || {};
-    if (!url) return res.status(400).json({ error: "url is required" });
-    const t = Date.now();
+  // Marks an uploaded screenshot: Claude looks at the image and returns where the
+  // problem is; the browser draws the mark. No headless browser on the server.
+  app.post("/api/ai/annotate-shot", requireUser, async (req, res) => {
     try {
-      const { captureEvidence } = await import("./src/services/pageShots.ts");
-      const shots = await captureEvidence([{ id: 'x', url, quote }]);
-      const s = shots.x;
-      res.json({ ok: !!s, ms: Date.now() - t, highlighted: s?.highlighted ?? false, kb: s ? Math.round(s.image.length * 0.75 / 1024) : 0, image: s?.image || null, memoryMb: Math.round(process.memoryUsage().rss / 1048576) });
+      const { image, width, height, title, whatWeSaw, quote, whatsWrong } = req.body || {};
+      const m = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(String(image || ''));
+      const W = Math.round(Number(width)), H = Math.round(Number(height));
+      if (!m || !(W > 0) || !(H > 0)) return res.status(400).json({ error: "A screenshot and its size are required" });
+      if (m[2].length > 7_000_000) return res.status(413).json({ error: "Screenshot is too large" });
+      const apiKey = process.env.CLAUDE_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "CLAUDE_API_KEY is not set" });
+
+      const Anthropic = (await import('@anthropic-ai/sdk')).default;
+      const client = new Anthropic({ apiKey });
+      const prompt = `This is a ${W}x${H} px screenshot of a client's website, attached to one finding in a conversion audit.
+FINDING: ${String(title || '').slice(0, 300)}
+WHAT WE SAW: ${String(whatWeSaw || '').slice(0, 500)}
+EXACT WORDS ON THE PAGE (if any): ${String(quote || '').slice(0, 300) || 'none'}
+WHY IT'S A PROBLEM: ${String(whatsWrong || '').slice(0, 600)}
+
+Find the one area of this screenshot that shows the problem: the quoted words, the confusing button, the weak headline,
+or the spot where the missing thing should be. Box the smallest region that makes the point clear.
+Return ONLY this JSON, pixel coordinates in the ${W}x${H} image:
+{"found": true, "box": {"x": <left>, "y": <top>, "w": <width>, "h": <height>}, "note": "<pen note, max 5 words>"}
+If the screenshot does not show anything related to the finding, return {"found": false, "box": null, "note": ""}.`;
+      const r = await client.messages.create({
+        model: process.env.CLAUDE_VISION_MODEL || 'claude-sonnet-4-5',
+        max_tokens: 200,
+        temperature: 0,
+        messages: [
+          { role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: m[1] as any, data: m[2] } },
+            { type: 'text', text: prompt },
+          ] },
+          { role: 'assistant', content: '{' },
+        ],
+      });
+      const text = '{' + r.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
+      const json = JSON.parse(text.slice(0, text.lastIndexOf('}') + 1));
+      const b = json?.box;
+      if (!json?.found || !b) return res.json({ found: false, box: null, note: '' });
+      // Clamp to the image and return fractions so the browser can draw at any size.
+      const x = Math.max(0, Math.min(W - 1, Number(b.x) || 0)), y = Math.max(0, Math.min(H - 1, Number(b.y) || 0));
+      const w = Math.max(8, Math.min(W - x, Number(b.w) || 0)), h = Math.max(8, Math.min(H - y, Number(b.h) || 0));
+      res.json({ found: true, box: { x: x / W, y: y / H, w: w / W, h: h / H }, note: String(json.note || '').slice(0, 40) });
     } catch (e: any) {
-      res.json({ ok: false, ms: Date.now() - t, error: e?.message || String(e) });
+      console.error("[AnnotateShot] failed:", e?.message || e);
+      res.status(500).json({ error: "Could not mark this screenshot. Draw the mark yourself instead." });
     }
   });
 
@@ -1175,29 +1211,12 @@ The first character of your response must be "{" and the last must be "}".`;
       const targetCustomers = visitors * Math.max(signupRate, LEAK_TARGET_SIGNUP_PCT) / 100 * Math.max(paidRate, LEAK_TARGET_PAID_PCT) / 100;
       const gap = Math.max(0, targetCustomers - customers);
 
-      let [home, pricing, signup] = await Promise.all([
+      const [home, pricing, signup] = await Promise.all([
         fetchPageTextForAudit(b.websiteUrl),
         fetchPageTextForAudit(b.pricingPageUrl),
         fetchPageTextForAudit(b.signupUrl),
       ]);
-      // JS-built sites and bot walls return little or nothing to a plain fetch; read
-      // those pages in a real browser instead so the audit sees what visitors see.
       const pageUrls: Record<'home' | 'pricing' | 'signup', string | undefined> = { home: b.websiteUrl, pricing: b.pricingPageUrl, signup: b.signupUrl };
-      const thin = (t: string | null) => !t || t.length < 400;
-      const needRender = (['home', 'pricing', 'signup'] as const).filter(k => pageUrls[k] && thin(k === 'home' ? home : k === 'pricing' ? pricing : signup));
-      if (needRender.length) {
-        try {
-          const { renderPagesText } = await import("./src/services/pageShots.ts");
-          const rendered = await renderPagesText(needRender.map(k => pageUrls[k]!));
-          for (const k of needRender) {
-            const t = rendered[pageUrls[k]!];
-            if (!t) continue;
-            if (k === 'home') home = t; else if (k === 'pricing') pricing = t; else signup = t;
-          }
-        } catch (e: any) {
-          console.warn("[LeakAudit] browser render unavailable:", e?.message || e);
-        }
-      }
 
       const prompt = `You are writing TitanLeap's Customer Leak Audit for a SaaS founder. It is a paid report.
 Find the three places this business loses the most potential customers, and say exactly what to change.
@@ -1285,23 +1304,9 @@ Exactly 3 leaks and exactly 2 channels.`;
           revenueHigh: Math.round(high * revenuePerCustomer),
         };
       });
-      // Real screenshots for "What we saw": open each page once, circle the quoted words.
-      const shotRequests = withNumbers
-        .map((l: any, i: number) => {
-          const key = String(l.page || '').toLowerCase().trim() as 'home' | 'pricing' | 'signup';
-          const url = pageUrls[key];
-          return url ? { id: String(i), url, quote: String(l.quoteOnPage || '').trim() || undefined } : null;
-        })
-        .filter(Boolean) as Array<{ id: string; url: string; quote?: string }>;
-      if (shotRequests.length) {
-        try {
-          const { captureEvidence } = await import("./src/services/pageShots.ts");
-          const shots = await captureEvidence(shotRequests);
-          withNumbers.forEach((l: any, i: number) => { if (shots[String(i)]) l.shot = shots[String(i)]; });
-        } catch (e: any) {
-          console.warn("[LeakAudit] screenshots unavailable:", e?.message || e);
-        }
-      }
+      // Screenshots are added by the user in the Leak Report panel (then marked by
+      // /api/ai/annotate-shot). Attach each leak's page URL for the screenshot frame.
+      withNumbers.forEach((l: any) => { const k = String(l.page || '').toLowerCase().trim() as 'home' | 'pricing' | 'signup'; l.pageUrl = pageUrls[k] || null; });
 
       const totalLow = withNumbers.reduce((a: number, l: any) => a + l.customersLow, 0);
       const totalHigh = withNumbers.reduce((a: number, l: any) => a + l.customersHigh, 0);
