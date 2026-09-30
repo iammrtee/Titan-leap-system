@@ -733,6 +733,25 @@ export const auditContent = async (
 
 // Customer Leak Audit: the $297 deliverable. Server fetches the client's pages and does
 // the funnel maths; returns data for renderLeakReportHtml() in src/lib/leakReportTemplate.ts.
+// Asks the AI where the problem is in an uploaded screenshot. Returns box fractions
+// (0-1 of width/height); the browser draws the mark.
+export const annotateShot = async (input: {
+  image: string; width: number; height: number;
+  title?: string; whatWeSaw?: string; quote?: string; whatsWrong?: string;
+}): Promise<{ found: boolean; box: { x: number; y: number; w: number; h: number } | null; note: string }> => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch('/api/ai/annotate-shot', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Could not mark the screenshot' }));
+    throw new Error(err.error || 'Could not mark the screenshot');
+  }
+  return await response.json();
+};
+
 export const generateLeakAudit = async (input: {
   businessName?: string; websiteUrl: string; pricingPageUrl?: string; signupUrl?: string;
   mainOffer?: string; audience?: string; notes?: string;
