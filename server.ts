@@ -8,6 +8,7 @@ import { executePublishingDaemon } from "./src/services/daemon.ts";
 import { authRouter } from "./src/services/auth.ts";
 import { twitterManualRouter } from "./src/services/twitter-manual.ts";
 import { createClient } from '@supabase/supabase-js';
+import { extractJsonObject } from "./src/lib/extractJson.ts";
 
 // Initialize Supabase Client for Server-side (env vars only â no hardcoded keys)
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
@@ -351,7 +352,8 @@ Return ONLY the JSON. No markdown. No explanation.`;
         model: "claude-haiku-4-5-20251001"
       });
       const cleaned = (result.text || '').replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
-      const parsed = JSON.parse(cleaned);
+      const parsed = extractJsonObject(cleaned);
+      if (!parsed) throw new Error("Could not parse smart-fill response as JSON");
       // Social links come from the page source, not Claude's reading of the stripped text
       // (which never sees icon links). Found links replace Claude's guesses per platform.
       try {
@@ -832,18 +834,10 @@ ${outputSchemaInstructions}`;
       });
 
       const cleaned = (result.text || '').replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
-      let parsed;
-      try {
-        parsed = JSON.parse(cleaned);
-      } catch {
-        const firstBracket = cleaned.search(/[\[{]/);
-        const lastBracket = cleaned.lastIndexOf('}');
-        if (firstBracket !== -1 && lastBracket > firstBracket) {
-          parsed = JSON.parse(cleaned.slice(firstBracket, lastBracket + 1));
-        } else {
-          console.error("[SocialResearch] Unparseable raw text:", cleaned.slice(0, 2000));
-          throw new Error("Could not parse research response as JSON");
-        }
+      const parsed = extractJsonObject(cleaned);
+      if (!parsed) {
+        console.error("[SocialResearch] Unparseable raw text:", cleaned.slice(0, 2000));
+        throw new Error("Could not parse research response as JSON");
       }
       res.json(parsed);
     } catch (error: any) {
@@ -1006,12 +1000,9 @@ The first character of your response must be "{" and the last must be "}".`;
 
       const { generateClaudeContent } = await import("./src/services/claude.ts");
       const parse = (text: string) => {
-        const cleaned = (text || '').replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
-        try { return JSON.parse(cleaned); } catch {
-          const a = cleaned.indexOf('{'), b = cleaned.lastIndexOf('}');
-          if (a !== -1 && b > a) return JSON.parse(cleaned.slice(a, b + 1));
-          throw new Error("Could not parse content audit response");
-        }
+        const obj = extractJsonObject(text);
+        if (!obj) throw new Error("Could not parse content audit response");
+        return obj;
       };
 
       const isInstagram = platform === "Instagram";
@@ -1195,17 +1186,18 @@ Return ONLY this JSON, pixel coordinates in the ${W}x${H} image:
 If the screenshot does not show anything related to the finding, return {"found": false, "box": null, "note": ""}.`;
       const r = await client.messages.create({
         model: (await import('./src/services/claude.ts')).VISION_CLAUDE_MODEL,
-        max_tokens: 200,
+        max_tokens: 1500,
+        output_config: { effort: 'low' } as any,
         messages: [
           { role: 'user', content: [
             { type: 'image', source: { type: 'base64', media_type: m[1] as any, data: m[2] } },
             { type: 'text', text: prompt },
           ] },
-          { role: 'assistant', content: '{' },
         ],
-      });
-      const text = '{' + r.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
-      const json = JSON.parse(text.slice(0, text.lastIndexOf('}') + 1));
+      } as any);
+      const text = (r as any).content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
+      const json = extractJsonObject(text);
+      if (!json) throw new Error("Could not parse screenshot mark response");
       const b = json?.box;
       if (!json?.found || !b) return res.json({ found: false, box: null, note: '' });
       // Clamp to the image and return fractions so the browser can draw at any size.
@@ -1359,11 +1351,8 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
       const { generateClaudeContent } = await import("./src/services/claude.ts");
       const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, prefillAssistant: "{", temperature: 0.4 });
       const cleaned = (result.text || '').replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
-      let ai: any;
-      try { ai = JSON.parse(cleaned); } catch {
-        const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
-        ai = JSON.parse(cleaned.slice(s, e + 1));
-      }
+      const ai: any = extractJsonObject(cleaned);
+      if (!ai) throw new Error("Could not parse leak audit response");
 
       // Customer and revenue ranges come from the bottleneck's loss, not from the model.
       const leaks = (Array.isArray(ai.leaks) ? ai.leaks : []).slice(0, 3);
