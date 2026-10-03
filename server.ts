@@ -269,6 +269,21 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
     }
   });
 
+  // Market check via Treg: demand, Google visibility, local trust. Skips cleanly without TREG_TOKEN.
+  app.post("/api/market-check", requireUser, async (req, res) => {
+    const { keyword, location, domain } = req.body || {};
+    if (!keyword || typeof keyword !== 'string' || !location || typeof location !== 'string') {
+      return res.status(400).json({ error: "keyword and location are required" });
+    }
+    try {
+      const { marketCheck } = await import("./src/services/treg.ts");
+      res.json(await marketCheck({ keyword: keyword.slice(0, 120), location: location.slice(0, 120), domain }));
+    } catch (e: any) {
+      console.error("[MarketCheck] failed:", e?.message || e);
+      res.json({ skipped: true, reason: "market check failed" });
+    }
+  });
+
   // Smart Fill (protected)
   app.post("/api/ai/smart-fill", requireUser, async (req, res) => {
     try {
