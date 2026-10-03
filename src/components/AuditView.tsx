@@ -142,6 +142,24 @@ const CHALLENGES = ['Getting leads', 'Converting leads', 'Retaining clients', 'C
 const TOOLS = ['Mailchimp', 'ConvertKit', 'ClickFunnels', 'Webflow', 'Shopify', 'Kajabi', 'None', 'Other'];
 const CONTENT_TYPES = ['Short-form video', 'Long-form video', 'Carousels', 'Blogs', 'Emails', 'Podcasts'];
 
+// Identical inputs within 24h reuse the last AI diagnosis, so re-running an audit costs nothing.
+const AUDIT_CACHE_KEY = 'titanleap_audit_cache';
+const AUDIT_CACHE_TTL = 24 * 60 * 60 * 1000;
+const hashKey = (str: string) => { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return String(h >>> 0); };
+const readAuditCache = (key: string) => {
+  try {
+    const all = JSON.parse(localStorage.getItem(AUDIT_CACHE_KEY) || '[]');
+    const hit = all.find((e: any) => e.k === key && Date.now() - e.at < AUDIT_CACHE_TTL);
+    return hit ? hit.result : null;
+  } catch { return null; }
+};
+const writeAuditCache = (key: string, result: any) => {
+  try {
+    const all = JSON.parse(localStorage.getItem(AUDIT_CACHE_KEY) || '[]').filter((e: any) => e.k !== key && Date.now() - e.at < AUDIT_CACHE_TTL);
+    localStorage.setItem(AUDIT_CACHE_KEY, JSON.stringify([{ k: key, at: Date.now(), result }, ...all].slice(0, 5)));
+  } catch { /* storage full or blocked: skip caching */ }
+};
+
 export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onViewStrategy?: (data: any) => void }> = ({ onStartStrategy, onViewStrategy }) => {
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM_DATA);
   const [expandedSections, setExpandedSections] = useState<number[]>([1]);
@@ -500,7 +518,12 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
         marketOk?.trust?.competitors?.length ? `Top local competitors: ${marketOk.trust.competitors.slice(0, 3).map(c => `${c.name} (${c.rating ?? '?'}★, ${c.reviews ?? '?'} reviews)`).join('; ')}.` : '',
         shop ? `Mystery shop: ${shop.label}. ${shop.followUpNote}` : '',
       ].filter(Boolean).join('\n');
-      const dashboardResult = await auditLandingPage({ ...formData, contentAuditSummary, marketSummary });
+      const auditCacheKey = hashKey(JSON.stringify({ f: formData, c: contentAuditSummary, m: marketSummary }));
+      let dashboardResult = readAuditCache(auditCacheKey);
+      if (!dashboardResult) {
+        dashboardResult = await auditLandingPage({ ...formData, contentAuditSummary, marketSummary });
+        if (dashboardResult) writeAuditCache(auditCacheKey, dashboardResult);
+      }
       if (dashboardResult) {
         setAuditReport({
           ...dashboardResult,
@@ -601,7 +624,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
 
       const imgData = await toPng(container, {
         cacheBust: true,
-        backgroundColor: '#f5f5f0',
+        backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--rl-bg-deep').trim() || '#f5f5f0',
         pixelRatio: 2,
         width: container.scrollWidth,
         height: container.scrollHeight,
@@ -1354,11 +1377,11 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                 onClear={handleClearAudit}
               />
             ) : (
-              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:400,gap:24,textAlign:'center',padding:'48px 24px',background:'#06030D',color:'#EDE9F5'}}>
-                <div style={{width:64,height:64,borderRadius:16,background:'#100823',border:'1px solid #1F1430',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>📋</div>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:400,gap:24,textAlign:'center',padding:'48px 24px',background:'var(--rl-bg-deep)',color:'var(--rl-ink)'}}>
+                <div style={{width:64,height:64,borderRadius:16,background:'var(--rl-card)',border:'1px solid var(--rl-line)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>📋</div>
                 <div>
                   <h3 style={{fontSize:21,fontWeight:800,margin:'0 0 8px'}}>No Audit Yet</h3>
-                  <p style={{fontSize:15,color:'#9B91B4',maxWidth:'36ch',margin:0}}>Complete the assessment and run the analysis to generate your Revenue Leak Audit.</p>
+                  <p style={{fontSize:15,color:'var(--rl-ink-dim)',maxWidth:'36ch',margin:0}}>Complete the assessment and run the analysis to generate your Revenue Leak Audit.</p>
                 </div>
                 <button onClick={() => setActiveTab('intake')} style={{padding:'14px 28px',background:'#6B21E8',color:'#EDE9F5',border:'none',borderRadius:10,fontWeight:700,fontSize:13,textTransform:'uppercase',letterSpacing:'0.1em',cursor:'pointer'}}>
                   Start Assessment
@@ -1379,11 +1402,11 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                 isExporting={isExporting}
               />
             ) : (
-              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:400,gap:24,textAlign:'center',padding:'48px 24px',background:'#06030D',color:'#EDE9F5'}}>
-                <div style={{width:64,height:64,borderRadius:16,background:'#100823',border:'1px solid #1F1430',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>🚀</div>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:400,gap:24,textAlign:'center',padding:'48px 24px',background:'var(--rl-bg-deep)',color:'var(--rl-ink)'}}>
+                <div style={{width:64,height:64,borderRadius:16,background:'var(--rl-card)',border:'1px solid var(--rl-line)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>🚀</div>
                 <div>
                   <h3 style={{fontSize:21,fontWeight:800,margin:'0 0 8px'}}>No Blueprint Yet</h3>
-                  <p style={{fontSize:15,color:'#9B91B4',maxWidth:'36ch',margin:0}}>Run your audit first — the Growth Blueprint is built from your audit results.</p>
+                  <p style={{fontSize:15,color:'var(--rl-ink-dim)',maxWidth:'36ch',margin:0}}>Run your audit first — the Growth Blueprint is built from your audit results.</p>
                 </div>
                 <button onClick={() => setActiveTab('intake')} style={{padding:'14px 28px',background:'#6B21E8',color:'#EDE9F5',border:'none',borderRadius:10,fontWeight:700,fontSize:13,textTransform:'uppercase',letterSpacing:'0.1em',cursor:'pointer'}}>
                   Start Assessment
@@ -1718,18 +1741,18 @@ const Chip: React.FC<{ label: string, selected: boolean, onClick: () => void }> 
 // ─────────────────────────────────────────────────────────────────────────────
 //  REVENUE LEAK BLUEPRINT  —  matches revenue-leak-audit.html exactly
 // ─────────────────────────────────────────────────────────────────────────────
-const BG_DEEP  = '#06030D';
-const BG       = '#0B0418';
-const CARD     = '#100823';
-const CARD_HI  = '#160B30';
-const INK      = '#EDE9F5';
-const INK_DIM  = '#9B91B4';
-const INK_FAINT= '#665C7E';
-const LINE     = '#1F1430';
-const LINE_BR  = '#2E1F47';
+const BG_DEEP  = 'var(--rl-bg-deep)';
+const BG       = 'var(--rl-bg)';
+const CARD     = 'var(--rl-card)';
+const CARD_HI  = 'var(--rl-card-hi)';
+const INK      = 'var(--rl-ink)';
+const INK_DIM  = 'var(--rl-ink-dim)';
+const INK_FAINT= 'var(--rl-ink-faint)';
+const LINE     = 'var(--rl-line)';
+const LINE_BR  = 'var(--rl-line-br)';
 const PURPLE   = '#6B21E8';
-const GOLD     = '#F5C518';
-const DANGER   = '#FF5A5A';
+const GOLD     = 'var(--rl-gold)';
+const DANGER   = 'var(--rl-danger)';
 const MONO     = "'JetBrains Mono','SF Mono',ui-monospace,monospace";
 
 const W: React.CSSProperties = { maxWidth: 760, margin: '0 auto', padding: '0 24px' };
@@ -1737,9 +1760,9 @@ const M: React.CSSProperties = { fontFamily: MONO };
 
 // ── Content & Social section of the Audit Result (same visual language as the leaks) ──
 const gradeColor = (g?: string | null) =>
-  !g ? INK_FAINT : g.startsWith('A') || g.startsWith('B') ? '#3DDC97' : g.startsWith('C') ? GOLD : DANGER;
+  !g ? INK_FAINT : g.startsWith('A') || g.startsWith('B') ? GOOD : g.startsWith('C') ? GOLD : DANGER;
 
-const GOOD = '#3DDC97';
+const GOOD = 'var(--rl-good)';
 const trendCell = (v: number | null | undefined) =>
   v == null ? { text: '—', color: INK_FAINT }
     : Math.abs(v) < 5 ? { text: '≈ flat', color: INK }
@@ -1828,9 +1851,10 @@ const ContentReportSection: React.FC<{ ca: ContentAuditResult }> = ({ ca }) => {
                     <span style={{ ...M, fontSize: 11, color: INK_FAINT, wordBreak: 'break-all' }}>{r.handle}</span>
                   </div>
                   <p style={{ fontSize: 14, color: INK_DIM, margin: '6px 0 0', maxWidth: '58ch' }}>{r.analysis?.verdict || 'Not enough was visible on this profile to judge it.'}</p>
+                  {!measured && (r as any).judgementBasis && <p style={{ fontSize: 12, color: INK_FAINT, margin: '6px 0 0', maxWidth: '58ch' }}>Judged from the public profile: {(r as any).judgementBasis}</p>}
                 </div>
-                <div style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 4, flexShrink: 0, fontWeight: 600, ...(measured ? { background: 'rgba(61,220,151,.1)', color: '#3DDC97', border: '1px solid rgba(61,220,151,.28)' } : { background: 'rgba(245,197,24,.1)', color: GOLD, border: '1px solid rgba(245,197,24,.28)' }) }}>
-                  {measured ? 'Measured' : 'Web read'}
+                <div style={{ ...M, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 4, flexShrink: 0, fontWeight: 600, ...(measured ? { background: 'rgba(61,220,151,.1)', color: GOOD, border: '1px solid rgba(61,220,151,.28)' } : { background: 'rgba(245,197,24,.1)', color: GOLD, border: '1px solid rgba(245,197,24,.28)' }) }}>
+                  {measured ? 'Measured' : r.grade ? 'Judged' : 'Web read'}
                 </div>
               </div>
               {(r.scores?.overall != null || er != null || m.postsPerWeek != null || m.followers != null) && (
@@ -1843,7 +1867,7 @@ const ContentReportSection: React.FC<{ ca: ContentAuditResult }> = ({ ca }) => {
                   ].map(([k, v], j, arr) => (
                     <div key={j} style={{ flex: 1, minWidth: 120, padding: '12px 22px', borderRight: j < arr.length - 1 ? `1px solid ${LINE}` : 'none' }}>
                       <div style={{ ...M, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 4 }}>{k}</div>
-                      <div style={{ ...M, fontSize: 14, fontWeight: 700, color: k === 'Engagement' && er != null && bm != null ? (er >= bm ? '#3DDC97' : DANGER) : INK }}>{v}</div>
+                      <div style={{ ...M, fontSize: 14, fontWeight: 700, color: k === 'Engagement' && er != null && bm != null ? (er >= bm ? GOOD : DANGER) : INK }}>{v}</div>
                     </div>
                   ))}
                 </div>

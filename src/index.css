@@ -270,3 +270,18 @@
 .funnel-flow.horizontal {
   flex-direction: row;
 }
+
+
+/* Audit report palette: follows the app's light/dark toggle (html.dark). */
+:root {
+  --rl-bg-deep: #FAF9FD; --rl-bg: #F2EFFA; --rl-card: #FFFFFF; --rl-card-hi: #F7F4FF;
+  --rl-ink: #1B1230; --rl-ink-dim: #5A5072; --rl-ink-faint: #8A819F;
+  --rl-line: #E6E1F0; --rl-line-br: #D3CAE6;
+  --rl-gold: #B77A00; --rl-danger: #D63A3A; --rl-good: #0F8F5B;
+}
+html.dark {
+  --rl-bg-deep: #06030D; --rl-bg: #0B0418; --rl-card: #100823; --rl-card-hi: #160B30;
+  --rl-ink: #EDE9F5; --rl-ink-dim: #9B91B4; --rl-ink-faint: #665C7E;
+  --rl-line: #1F1430; --rl-line-br: #2E1F47;
+  --rl-gold: #F5C518; --rl-danger: #FF5A5A; --rl-good: #3DDC97;
+}
