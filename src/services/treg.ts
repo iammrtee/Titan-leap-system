@@ -13,11 +13,11 @@ const cache = new Map<string, { data: unknown; expiresAt: number }>();
 
 export const tregEnabled = () => !!process.env.TREG_TOKEN;
 
-async function tregCall<T>(tool: string, body: Record<string, unknown>): Promise<TregResult<T>> {
+export async function tregCall<T>(tool: string, body: Record<string, unknown>, method: 'POST' | 'GET' = 'POST'): Promise<TregResult<T>> {
   const token = process.env.TREG_TOKEN;
   if (!token) return { skipped: true, reason: "TREG_TOKEN not set" };
 
-  const key = `${tool}:${JSON.stringify(body)}`;
+  const key = `${method}:${tool}:${JSON.stringify(body)}`;
   const hit = cache.get(key);
   if (hit && hit.expiresAt > Date.now()) return { skipped: false, data: hit.data as T };
 
@@ -31,10 +31,11 @@ async function tregCall<T>(tool: string, body: Record<string, unknown>): Promise
     "X-Treg-Route-Max-Cost": "0.005",
   };
   try {
-    const r = await fetch(`${TREG_BASE}/${tool}`, {
-      method: "POST",
+    const qs = method === 'GET' ? `?${new URLSearchParams(Object.entries(body).map(([k, v]) => [k, String(v)]))}` : '';
+    const r = await fetch(`${TREG_BASE}/${tool}${qs}`, {
+      method,
       headers,
-      body: JSON.stringify(body),
+      ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(30_000),
     });
     if (!r.ok) return { skipped: true, reason: `treg ${tool} HTTP ${r.status}` };
