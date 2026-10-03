@@ -246,6 +246,7 @@ Running Ads: ${formData.runningAds ? 'Yes — ' + formData.adPlatform : 'No'}
 Content Types: ${formData.contentTypes?.join(', ') || 'Not specified'}
 Tools Used: ${formData.tools?.join(', ') || 'Not specified'}
 ${formData.contentAuditSummary ? `\nCONTENT AUDIT (from their real social profiles, one line per platform; measured numbers are facts):\n${formData.contentAuditSummary}\n` : ''}
+${formData.marketSummary ? `\nMARKET + MYSTERY SHOP (measured facts about demand, Google visibility, reviews vs competitors and speed-to-lead; base the top fixes on these where relevant):\n${formData.marketSummary}\n` : ''}
 
 CONSTRAINT CATEGORIES TO DIAGNOSE:
 1. Positioning — Does the market clearly understand who this is for and why it's different?
@@ -1119,6 +1120,21 @@ export const analyzeCompetitorFunnel = async (competitorUrl: string) => {
     return parseJSON(response.text, {});
   } catch (error) {
     console.error("Competitor Funnel Analysis Error:", error);
+    return null;
+  }
+};
+
+export const fetchMarketCheck = async (opts: { keyword: string; location: string; domain?: string }) => {
+  try {
+    const authHeader = await getAuthHeader();
+    const response = await fetch('/api/market-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader },
+      body: JSON.stringify(opts),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
     return null;
   }
 };

@@ -31,7 +31,7 @@ import {
   FileCode2
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { auditLandingPage, smartFillForm, generate90DayBlueprint, getAIEngine, setAIEngine, type AIEngine, discoverSocials, type DiscoveredSocial } from '@/src/services/ai';
+import { fetchMarketCheck, auditLandingPage, smartFillForm, generate90DayBlueprint, getAIEngine, setAIEngine, type AIEngine, discoverSocials, type DiscoveredSocial } from '@/src/services/ai';
 import { supabase } from '@/src/services/supabase';
 import { toast } from 'sonner';
 import { Sparkles, Wand2, Loader2, FileDown, Printer, RefreshCw, Search } from 'lucide-react';
@@ -41,6 +41,7 @@ import { Logo } from './Logo';
 import { StrategyHub } from './StrategyHub';
 import { useContentAudit, ContentAuditInline, profilesFromForm, looksComplete, contentSummaryForAudit, keyOf, detectProfilePlatform } from './ContentAuditPanel';
 import { LeakReportPanel } from './LeakReportPanel';
+import { marketOpportunity, speedToLead, type MarketData } from '@/src/lib/moneyPath';
 import type { LeakAuditReport } from '@/src/lib/leakReportTemplate';
 import { Activity } from 'lucide-react';
 import type { ContentAuditResult } from '@/src/services/ai';
@@ -52,6 +53,13 @@ interface FormData {
   industry: string;
   websiteUrl: string;
   businessDuration: string;
+  // Market (money path)
+  searchKeyword: string;
+  serviceArea: string;
+  // Mystery shop: we enquired as a customer and logged what happened
+  shopEnquiredAt: string;
+  shopRepliedAt: string;
+  shopFollowUps: string;
   // Section 2
   primaryPlatform: string;
   socialHandles: string[];
@@ -92,6 +100,11 @@ const INITIAL_FORM_DATA: FormData = {
   industry: '',
   websiteUrl: '',
   businessDuration: '',
+  searchKeyword: '',
+  serviceArea: '',
+  shopEnquiredAt: '',
+  shopRepliedAt: '',
+  shopFollowUps: '',
   primaryPlatform: '',
   socialHandles: [''],
   monthlyReach: '',
@@ -246,7 +259,7 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
     
     if (savedFormData) {
       try {
-        setFormData(JSON.parse(savedFormData));
+        setFormData({ ...INITIAL_FORM_DATA, ...JSON.parse(savedFormData) });
       } catch (e) {
         console.error("Failed to parse saved form data", e);
       }
@@ -442,6 +455,13 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
       description: "Analyzing your funnel, offer, and market position."
     });
 
+    // Market data (demand, Google visibility, local trust) runs alongside the content audit.
+    // Optional: resolves to null if Treg isn't configured or fails.
+    const marketKeyword = (formData.searchKeyword || formData.mainOffer || '').trim().split('\n')[0].slice(0, 100);
+    const marketPromise: Promise<MarketData | null> = marketKeyword
+      ? fetchMarketCheck({ keyword: marketKeyword, location: (formData.serviceArea || 'United States').trim(), domain: formData.websiteUrl })
+      : Promise.resolve(null);
+
     try {
       // Content audit first. Profiles already audited (or being prefetched right now) are
       // reused, so this only costs time/credits for links that are new or changed.
@@ -470,12 +490,23 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
         });
       }
       const contentAuditSummary = contentSummaryForAudit(ca);
-      const dashboardResult = await auditLandingPage({ ...formData, contentAuditSummary });
+      const market = await marketPromise;
+      const marketOk = market && !market.skipped ? market : null;
+      const shop = speedToLead(formData);
+      const marketSummary = [
+        marketOk?.demand?.monthlySearches ? `Google demand: "${marketOk.demand.keyword}" gets ${marketOk.demand.monthlySearches.toLocaleString()} searches/month in their area.` : '',
+        marketOk?.visibility ? (marketOk.visibility.ranksOnPage1 ? `They rank #${marketOk.visibility.position} on Google for it.` : 'They do NOT rank on page 1 of Google for it.') : '',
+        marketOk?.trust?.own ? `Their Google rating: ${marketOk.trust.own.rating} from ${marketOk.trust.own.reviews} reviews.` : '',
+        marketOk?.trust?.competitors?.length ? `Top local competitors: ${marketOk.trust.competitors.slice(0, 3).map(c => `${c.name} (${c.rating ?? '?'}★, ${c.reviews ?? '?'} reviews)`).join('; ')}.` : '',
+        shop ? `Mystery shop: ${shop.label}. ${shop.followUpNote}` : '',
+      ].filter(Boolean).join('\n');
+      const dashboardResult = await auditLandingPage({ ...formData, contentAuditSummary, marketSummary });
       if (dashboardResult) {
         setAuditReport({
           ...dashboardResult,
           ...formData, // Include all form data
           contentAudit: ca?.analysis ? ca : null,
+          market: marketOk,
           businessName: formData.businessName || 'Your Business',
           timestamp: new Date().toLocaleString(),
         });
@@ -846,6 +877,24 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                       {DURATIONS.map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
                   </InputGroup>
+                  <InputGroup label="What would a customer search on Google?" tooltip="The phrase a buyer types when they need what you sell, e.g. 'emergency plumber' or 'project management software'. We pull real monthly search volume and see who ranks. Leave blank to use your main offer.">
+                    <input
+                      type="text"
+                      value={formData.searchKeyword || ''}
+                      onChange={e => setFormData({...formData, searchKeyword: e.target.value})}
+                      placeholder="emergency plumber"
+                      className="audit-input"
+                    />
+                  </InputGroup>
+                  <InputGroup label="Where do your customers live?" tooltip="City and state/country for local businesses (e.g. 'Austin, Texas, United States'). Online businesses can enter their country.">
+                    <input
+                      type="text"
+                      value={formData.serviceArea || ''}
+                      onChange={e => setFormData({...formData, serviceArea: e.target.value})}
+                      placeholder="Austin, Texas, United States"
+                      className="audit-input"
+                    />
+                  </InputGroup>
                 </div>
               </CollapsibleSection>
 
@@ -990,6 +1039,23 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
                         </button>
                       ))}
                     </div>
+                  </InputGroup>
+                  <InputGroup label="Mystery shop: how fast did they reply to our enquiry?" tooltip="Send them an enquiry as a customer, then log when you sent it, when they first replied, and how many follow-ups arrived in 7 days. Free, and usually the most persuasive finding in the audit.">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-1">Enquired at</div>
+                        <input type="datetime-local" value={formData.shopEnquiredAt || ''} onChange={e => setFormData({...formData, shopEnquiredAt: e.target.value})} className="audit-input" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-1">First reply at</div>
+                        <input type="datetime-local" value={formData.shopRepliedAt || ''} onChange={e => setFormData({...formData, shopRepliedAt: e.target.value})} className="audit-input" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-1">Follow-ups in 7 days</div>
+                        <input type="number" min="0" value={formData.shopFollowUps || ''} onChange={e => setFormData({...formData, shopFollowUps: e.target.value})} placeholder="0" className="audit-input" />
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-on-surface-variant mt-2">No reply yet? Fill only "Enquired at". The report will say they hadn't answered.</p>
                   </InputGroup>
                   <InputGroup label="What tools are you currently using?" tooltip="Your tech stack. We identify if your tools are helping you scale or holding you back with 'tech debt'.">
                     <div className="flex flex-wrap gap-2">
@@ -1844,6 +1910,104 @@ const ContentReportSection: React.FC<{ ca: ContentAuditResult }> = ({ ca }) => {
   );
 };
 
+const MarketReportSection: React.FC<{ market: MarketData | null | undefined; formData: FormData }> = ({ market, formData }) => {
+  const shop = speedToLead(formData);
+  const opp = marketOpportunity(market, formData);
+  if (!market && !shop) return null;
+  const d = market?.demand;
+  const v = market?.visibility;
+  const t = market?.trust;
+  const comps = (t?.competitors || []).filter(c => c.rating != null).slice(0, 3);
+  const best = comps.reduce<any>((a, c) => (!a || (c.reviews || 0) > (a.reviews || 0) ? c : a), null);
+  const shopColor = !shop ? INK : shop.verdict === 'fast' ? GOOD : shop.verdict === 'slow' ? GOLD : DANGER;
+  const label = (txt: string) => <div style={{ ...M, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 8 }}>{txt}</div>;
+  const card: React.CSSProperties = { background: CARD, border: `1px solid ${LINE}`, borderRadius: 6, padding: '20px 22px', marginBottom: 14 };
+
+  return (
+    <section style={{ padding: '52px 24px', borderBottom: `1px solid ${LINE}`, background: BG }}>
+      <div style={W}>
+        <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_FAINT, marginBottom: 6 }}>Market & Money Path</div>
+        <p style={{ fontSize: 15, color: INK_DIM, marginBottom: 30, maxWidth: '56ch' }}>
+          Do people want this, can they find you, do they trust you, and what happens when they enquire.
+        </p>
+
+        {d?.monthlySearches ? (
+          <div style={card}>
+            {label('1 · Demand')}
+            <div style={{ ...M, fontSize: 30, fontWeight: 800, color: GOLD }}>{d.monthlySearches.toLocaleString()}<span style={{ fontSize: 14, color: INK_DIM, fontWeight: 500 }}> searches / month</span></div>
+            <div style={{ fontSize: 14, color: INK_DIM, marginTop: 6 }}>
+              for “{d.keyword}” on Google (country-wide volume for that exact phrase).
+              {d.cpc ? ` Advertisers pay about $${d.cpc.toFixed(2)} a click for it, a sign of how valuable these searches are.` : ''}
+            </div>
+          </div>
+        ) : null}
+
+        {v && (
+          <div style={card}>
+            {label('2 · Visibility on Google')}
+            <div style={{ fontSize: 18, fontWeight: 700, color: v.ranksOnPage1 ? GOOD : DANGER }}>
+              {v.ranksOnPage1 ? `You rank #${v.position} for this search.` : 'You are not on page 1 for this search.'}
+            </div>
+            {v.topResults?.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ ...M, fontSize: 10, color: INK_FAINT, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Who gets the clicks instead</div>
+                {v.topResults.slice(0, 5).map(r => (
+                  <div key={r.position} style={{ display: 'flex', gap: 12, fontSize: 13, color: INK_DIM, padding: '4px 0' }}>
+                    <span style={{ ...M, color: INK_FAINT, width: 22 }}>#{r.position}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {t && (comps.length > 0 || t.own) && (
+          <div style={card}>
+            {label('3 · Trust (Google reviews)')}
+            {t.own ? (
+              <div style={{ fontSize: 16, fontWeight: 700 }}>
+                You: {t.own.rating}★ from {(t.own.reviews ?? 0).toLocaleString()} reviews
+                {best && best.name !== t.own.name && <span style={{ color: INK_DIM, fontWeight: 400 }}> · top competitor {best.name}: {best.rating}★ from {(best.reviews ?? 0).toLocaleString()}</span>}
+              </div>
+            ) : (
+              <div style={{ fontSize: 15, color: DANGER, fontWeight: 600 }}>You do not appear in the local results for this search.</div>
+            )}
+            {comps.map(c => (
+              <div key={c.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: INK_DIM, padding: '5px 0', borderTop: `1px solid ${LINE}`, marginTop: 6 }}>
+                <span>{c.name}</span><span style={M}>{c.rating}★ · {(c.reviews ?? 0).toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {shop && (
+          <div style={{ ...card, borderLeft: `3px solid ${shopColor}` }}>
+            {label('4 · Speed to lead (mystery shop)')}
+            <div style={{ fontSize: 20, fontWeight: 700, color: shopColor }}>{shop.label}</div>
+            {shop.followUpNote && <div style={{ fontSize: 14, color: INK_DIM, marginTop: 6 }}>{shop.followUpNote}</div>}
+            <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 8 }}>We enquired as a customer and logged what happened.</div>
+          </div>
+        )}
+
+        {opp && (
+          <div style={{ ...card, borderColor: LINE_BR, background: `linear-gradient(180deg,${CARD_HI},${CARD})` }}>
+            {label('Unclaimed Google demand')}
+            <div style={{ ...M, fontSize: 26, fontWeight: 800, color: DANGER }}>${opp.low.toLocaleString()} – ${opp.high.toLocaleString()}<span style={{ fontSize: 13, color: INK_DIM, fontWeight: 500 }}> / month</span></div>
+            <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, color: INK_FAINT }}>
+              {opp.assumptions.map((a, i) => <li key={i}>{a}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {market && (market as any).skipped === true && !shop && (
+          <div style={{ fontSize: 13, color: INK_FAINT }}>Market data was unavailable for this run.</div>
+        )}
+      </div>
+    </section>
+  );
+};
+
 const RevenueLeakBlueprint: React.FC<{
   auditReport: any;
   formData: FormData;
@@ -1867,11 +2031,21 @@ const RevenueLeakBlueprint: React.FC<{
     { lo: 0.08, hi: 0.13, note: `Secondary constraint recovery at 8–13% of $${rev.toLocaleString()}/mo baseline.` },
     { lo: 0.04, hi: 0.08, note: `Third constraint recovery at 4–8% of $${rev.toLocaleString()}/mo baseline.` },
   ];
-  const costs = RATES.map(r => ({
-    low:  Math.round(rev * r.lo),
-    high: Math.round(rev * r.hi),
-    note: r.note,
-  }));
+  // Measured path: split the unclaimed Google demand (their price x their conversion rate)
+  // across the leaks 50/30/20. Fallback: the old planning ranges, labelled as such.
+  const opp = marketOpportunity(auditReport.market, formData);
+  const SPLIT = [0.5, 0.3, 0.2];
+  const costs = RATES.map((r, i) => opp
+    ? {
+        low:  Math.round(opp.low * SPLIT[i]),
+        high: Math.round(opp.high * SPLIT[i]),
+        note: `Share of the ${opp.low.toLocaleString()}–${opp.high.toLocaleString()}/mo of Google demand you are not capturing (see Market section).`,
+      }
+    : {
+        low:  Math.round(rev * r.lo),
+        high: Math.round(rev * r.hi),
+        note: `Planning range, not measured: ${r.note.replace(' recovery at', ' at')}`,
+      });
   const totalLow  = costs.slice(0, leaks.length).reduce((s, c) => s + c.low,  0);
   const totalHigh = costs.slice(0, leaks.length).reduce((s, c) => s + c.high, 0);
 
@@ -2022,10 +2196,12 @@ const RevenueLeakBlueprint: React.FC<{
           <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_DIM, marginBottom: 14 }}>Total estimated monthly leak</div>
           <div style={{ ...M, fontSize: 'clamp(34px,8vw,52px)' as any, fontWeight: 800, color: GOLD, letterSpacing: '-0.02em' }}>${totalLow.toLocaleString()} – ${totalHigh.toLocaleString()}</div>
           <div style={{ fontSize: 14, color: INK_FAINT, marginTop: 14, maxWidth: '46ch', marginLeft: 'auto', marginRight: 'auto' }}>
-            Conservative estimate based on ${rev.toLocaleString()}/mo revenue baseline. The primary fix recovers the most.
+            {opp ? 'Measured from real Google search demand and your own price and conversion rate. Assumptions are listed in the Market section.' : `Planning range based on a ${rev.toLocaleString()}/mo revenue baseline. Add a search phrase and area to the form to replace this with measured numbers.`}
           </div>
         </div>
       </div>
+
+      <MarketReportSection market={auditReport.market} formData={formData} />
 
       {auditReport.contentAudit?.platforms?.length > 0 && <ContentReportSection ca={auditReport.contentAudit} />}
 
