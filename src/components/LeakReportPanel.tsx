@@ -30,6 +30,11 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
     signupRate: '',
     paidRate: '',
     revenuePerCustomer: formData.pricePoint || '',
+    payingCustomers: '',
+    cancelledLastMonth: '',
+    currentChannels: '',
+    competitor: '',
+    onboardingNotes: '',
   });
   const [running, setRunning] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF(p => ({ ...p, [k]: e.target.value }));
@@ -40,6 +45,7 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
     const nums = [f.visitors, f.signupRate, f.paidRate, f.revenuePerCustomer].map(Number);
     if (!f.websiteUrl.trim()) { toast.error('Add the website URL.'); return; }
     if (nums.some(v => !(v > 0))) { toast.error('Fill in visitors, signup %, trial-to-paid % and revenue per customer. Ask the client for these on the intake form.'); return; }
+    if (!f.onboardingNotes.trim() && !window.confirm('No new-user walkthrough yet. The report will mark onboarding as not checked. Build anyway?')) return;
     setRunning(true);
     const t = toast.loading('Building the Customer Leak Audit…', { description: 'Reading their pages and working out the customer gap.' });
     try {
@@ -50,6 +56,8 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
       const r = await generateLeakAudit({
         ...f,
         visitors: nums[0], signupRate: nums[1], paidRate: nums[2], revenuePerCustomer: nums[3],
+        payingCustomers: f.payingCustomers.trim() ? Number(f.payingCustomers) : null,
+        cancelledLastMonth: f.cancelledLastMonth.trim() ? Number(f.cancelledLastMonth) : null,
         contentSummary: ca?.analysis?.summaryForMainAudit,
         contentScore: ca?.scores?.overall ?? null,
       });
@@ -166,7 +174,18 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
             <div><label className={label}>Sign up / trial % *</label><input className={field} inputMode="decimal" value={f.signupRate} onChange={set('signupRate')} placeholder="1.2" /></div>
             <div><label className={label}>Trial to paid % *</label><input className={field} inputMode="decimal" value={f.paidRate} onChange={set('paidRate')} placeholder="9" /></div>
             <div><label className={label}>Revenue per customer / mo *</label><input className={field} inputMode="decimal" value={f.revenuePerCustomer} onChange={set('revenuePerCustomer')} placeholder="49" /></div>
+            <div><label className={label}>Paying customers today</label><input className={field} inputMode="numeric" value={f.payingCustomers} onChange={set('payingCustomers')} placeholder="120" /></div>
+            <div><label className={label}>Cancelled last month</label><input className={field} inputMode="numeric" value={f.cancelledLastMonth} onChange={set('cancelledLastMonth')} placeholder="9" /></div>
+            <div className="col-span-2"><label className={label}>Where customers come from today</label><input className={field} value={f.currentChannels} onChange={set('currentChannels')} placeholder="Mostly Twitter, some Google" /></div>
+            <div className="col-span-2 md:col-span-4"><label className={label}>Competitor they lose deals to</label><input className={field} value={f.competitor} onChange={set('competitor')} placeholder="Intercom" /></div>
           </div>
+          <p className="text-xs text-on-surface-variant mt-2">Paying and cancelled let us price churn. Leave them empty and the report flags churn as "check next" instead of guessing.</p>
+        </div>
+
+        <div>
+          <label className={label}>Your new-user walkthrough (check 4, the one that matters most)</label>
+          <textarea className={field} rows={6} value={f.onboardingNotes} onChange={set('onboardingNotes')}
+            placeholder={'Sign up as a real user and note what happens, with times. For example:\n0 min: signup asks for card and company size\n4 min: empty dashboard, no guide, had to read docs\n22 min: first useful moment (sent a test message)\nDay 1 email: generic welcome, no link back to setup\nDay 3: nothing\nDay 7 email: "your trial ends soon"'} />
         </div>
 
         <div><label className={label}>Your notes (anything the client told you)</label><textarea className={field} rows={3} value={f.notes} onChange={set('notes')} /></div>
