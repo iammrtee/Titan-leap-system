@@ -9,6 +9,7 @@ import { authRouter } from "./src/services/auth.ts";
 import { twitterManualRouter } from "./src/services/twitter-manual.ts";
 import { createClient } from '@supabase/supabase-js';
 import { extractJsonObject } from "./src/lib/extractJson.ts";
+import { fetchPlatformPosts, TREG_POST_PLATFORMS, type PlatformPosts } from "./src/services/platformPosts.ts";
 
 // Initialize Supabase Client for Server-side (env vars only â no hardcoded keys)
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
@@ -703,6 +704,80 @@ Return ONLY the JSON. No markdown. No explanation.`;
     return { metrics, scores, posts: videos };
   }
 
+  // Real posts for X / LinkedIn / Facebook / YouTube (via Treg). Same shape as the Instagram and
+  // TikTok computers so scores, history and the report all work unchanged. Anything the
+  // provider does not return (dates, likes, views) is left null and not scored.
+  function computePlatformPostMetrics(platform: string, data: PlatformPosts) {
+    const DAY = 86_400_000;
+    const now = Date.now();
+    const posts = data.posts.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    const n = posts.length;
+    const dated = posts.filter(p => p.ts);
+    const ages = dated.map(p => (now - (p.ts as number)) / DAY);
+    const postsLast30 = data.datesAvailable ? ages.filter(d => d <= 30).length : null;
+    const daysSinceLastPost = ages.length ? Math.floor(ages[0]) : null;
+    let longestGapDays: number | null = null;
+    if (ages.length > 1) { longestGapDays = 0; for (let i = 1; i < ages.length; i++) longestGapDays = Math.max(longestGapDays, Math.round(ages[i] - ages[i - 1])); }
+    const windowDays = ages.length ? Math.max(7, ages[ages.length - 1]) : 0;
+    const postsPerWeek = ages.length >= 3 ? +(ages.length / (windowDays / 7)).toFixed(1) : null;
+
+    const withEng = posts.filter(p => p.engagement != null);
+    const avgEngagement = withEng.length ? withEng.reduce((s, p) => s + (p.engagement as number), 0) / withEng.length : null;
+    const followers = data.followers || 0;
+    const views = posts.filter(p => p.views != null).map(p => p.views as number);
+    const avgViews = views.length ? Math.round(views.reduce((a, b) => a + b, 0) / views.length) : null;
+    // Engagement rate: interactions per post vs followers; YouTube has views only, so views per post vs subscribers.
+    const engagementRate = data.engagementAvailable && avgEngagement != null && followers > 0 ? +((avgEngagement / followers) * 100).toFixed(2)
+      : platform === 'YouTube' && avgViews != null && followers > 0 ? +((avgViews / followers) * 100).toFixed(1) : null;
+
+    const URL_RE = /https?:\/\/|www\.|\b[a-z0-9-]+\.(com|co|io|ai|net|org)\b/i;
+    const texts = posts.map(p => p.text);
+    const share = (pred: (t: string) => boolean) => (n ? Math.round((texts.filter(pred).length / n) * 100) : 0);
+    const ctaOrLinkPct = share(t => CONTENT_CTA_RE.test(t) || URL_RE.test(t));
+    const rankKey = (p: any) => p.engagement ?? p.views ?? 0;
+    const ranked = posts.slice().sort((a, b) => rankKey(b) - rankKey(a));
+    const summarise = (p: any) => p && ({
+      format: platform === 'YouTube' ? 'Video' : 'Post',
+      date: p.ts ? new Date(p.ts).toISOString().slice(0, 10) : '',
+      engagement: p.engagement ?? p.views ?? null,
+      firstLine: String(p.text || '').split('\n')[0].slice(0, 140),
+      url: p.url,
+    });
+
+    const metrics: any = {
+      followers: followers || null,
+      totalPosts: null,
+      postsAnalysed: n,
+      postsLast30Days: postsLast30,
+      postsPerWeek,
+      daysSinceLastPost,
+      longestGapDays,
+      avgViews,
+      engagementRatePct: engagementRate,
+      captionsWithCtaPct: share(t => CONTENT_CTA_RE.test(t)),
+      captionsWithLinkPct: share(t => URL_RE.test(t)),
+      captionsWithQuestionPct: share(t => t.includes('?')),
+      avgCaptionWords: n ? Math.round(texts.reduce((s, t) => s + (t.trim() ? t.trim().split(/\s+/).length : 0), 0) / n) : 0,
+      bestPosts: ranked.slice(0, 3).map(summarise),
+      weakestPosts: ranked.slice(-3).reverse().map(summarise),
+      dataNotes: data.note,
+    };
+
+    let consistency = postsPerWeek != null ? scoreFromBands(postsPerWeek, [[4, 100], [3, 85], [2, 70], [1, 50], [0.5, 30]], 10) : null;
+    if (consistency != null && daysSinceLastPost != null && daysSinceLastPost > 14) consistency = Math.min(consistency, 30);
+    const b = ENGAGEMENT_BENCHMARKS[platform] || 1;
+    const engagement = engagementRate != null && platform !== 'YouTube'
+      ? scoreFromBands(engagementRate, [[b * 2, 100], [b * 1.4, 80], [b, 60], [b * 0.5, 40]], 20)
+      : engagementRate != null ? scoreFromBands(engagementRate, [[5, 100], [2, 80], [1, 60], [0.3, 40]], 20) : null;
+    const conversionPath = Math.min(100, ctaOrLinkPct);
+    const parts = [consistency, engagement, conversionPath].filter((v): v is number => v != null);
+    const scores = {
+      overall: parts.length ? Math.round(parts.reduce((a, c) => a + c, 0) / parts.length) : null,
+      consistency, engagement, conversionPath, formatMix: null as number | null,
+    };
+    return { metrics, scores, posts };
+  }
+
   // Keeps only what the prompt actually needs so JSON.stringify() never has to be
   // truncated mid-object â huge profiles (millions of followers, dozens of posts with
   // images/comments) were breaking the JSON sent to Claude before this trim existed.
@@ -1074,6 +1149,53 @@ ${JSON.stringify(trimmedPosts)}
 ${CONTENT_ANALYSIS_SCHEMA}`;
         const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, prefillAssistant: "{", temperature: 0.3 });
         return res.json({ platform, handle, dataSource, dataQuality: 'sufficient', metrics, scores, grade, benchmark, analysis: parse(result.text) });
+      }
+
+      // Real posts via Treg for X, LinkedIn, Facebook and YouTube. Falls through to the web-read
+      // audit below when Treg is off or the platform returns too little.
+      if (!profile && TREG_POST_PLATFORMS.includes(platform)) {
+       try {
+        const platformData = await fetchPlatformPosts(platform, handle).catch(() => null);
+        if (platformData) {
+          const { metrics, scores: baseScores, posts } = computePlatformPostMetrics(platform, platformData);
+          let scores = baseScores;
+          const datedPosts = posts.filter(p => p.ts);
+          if (datedPosts.length >= 8) {
+            const history = computeHistory(datedPosts.map(p => ({ ts: p.ts as number, engagement: p.engagement ?? 0, views: p.views })), datedPosts.length);
+            scores = applyHistoryToScores(scores, history, metrics.daysSinceLastPost);
+            metrics.history = history;
+          }
+          const grade = gradeFromScore(scores.overall);
+          const benchmark = benchmarkFor(platform);
+          const trimmed = posts.slice(0, 12).map(p => ({
+            date: p.ts ? new Date(p.ts).toISOString().slice(0, 10) : 'n/a',
+            interactions: p.engagement, views: p.views, text: p.text.slice(0, 400),
+          }));
+          const prompt = `You are TitanLeap's content auditor. You are looking at REAL posts pulled from a ${platform} account today.
+Judge whether their content is bringing them customers, not whether it looks nice. Be specific, cite the actual numbers below, and compare against the benchmark where relevant.
+
+${context}
+
+PROFILE: ${handle}
+DATA LIMITS: ${platformData.note}. Fields shown as null were not available; never estimate them.
+
+MEASURED METRICS (computed in code, treat as facts):
+${JSON.stringify(metrics)}
+
+SCORES (fixed rules, 0-100; null parts are not scored): ${JSON.stringify(scores)}
+GRADE: ${grade}
+BENCHMARK: ${benchmark?.label || 'n/a'}
+
+LATEST POSTS:
+${JSON.stringify(trimmed)}
+
+${CONTENT_ANALYSIS_SCHEMA}`;
+          const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, prefillAssistant: "{", temperature: 0.3 });
+          return res.json({ platform, handle, dataSource: 'platform_posts', dataQuality: 'sufficient', metrics, scores, grade, benchmark, analysis: parse(result.text) });
+        }
+       } catch (e: any) {
+        console.error(`[ContentAudit] ${platform} real-posts path failed, using web read:`, e?.message || e);
+       }
       }
 
       // Web-search path: LinkedIn, X, TikTok, YouTube, or Instagram when Apify is unavailable.

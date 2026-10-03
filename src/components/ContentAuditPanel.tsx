@@ -8,7 +8,7 @@ import { auditContent, type ContentAuditResult } from '@/src/services/ai';
 // prefetch, "Run Audit" and the Leak Report never pay for the same profile twice.
 
 export const CONTENT_PLATFORMS = ['Instagram', 'TikTok', 'LinkedIn', 'Twitter-X', 'YouTube', 'Facebook'];
-const MEASURED = ['Instagram', 'TikTok']; // real scraped numbers; everything else is a web-search read
+const MEASURED = ['Instagram', 'TikTok', 'Twitter-X', 'LinkedIn', 'YouTube']; // real post data (Facebook often falls back to a web read)
 const MAX_PROFILES = 6;
 const FRESH_MS = 12 * 60 * 60 * 1000; // matches the server-side Apify cache
 

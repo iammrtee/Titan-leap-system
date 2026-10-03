@@ -693,7 +693,7 @@ export type ContentAuditLeak = { title: string; evidence: string; fix: string; e
 export type ContentAuditResult = {
   platform: string;
   handle: string;
-  dataSource: 'instagram_api' | 'tiktok_api' | 'web_search';
+  dataSource: 'instagram_api' | 'tiktok_api' | 'platform_posts' | 'web_search';
   dataQuality: 'sufficient' | 'partial' | 'insufficient';
   metrics: Record<string, any> | null;
   scores: { overall: number | null; consistency: number | null; engagement: number | null; conversionPath: number | null; formatMix: number | null } | null;
