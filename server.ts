@@ -1116,6 +1116,8 @@ The first character of your response must be "{" and the last must be "}".`;
   // explains; the customer and revenue ranges are computed here, never invented.
   const LEAK_TARGET_SIGNUP_PCT = 3;
   const LEAK_TARGET_PAID_PCT = 18;
+  // Monthly churn we treat as realistic for an early SaaS; above it, churn is priced as a leak.
+  const LEAK_TARGET_CHURN_PCT = 5;
 
   async function fetchPageTextForAudit(url: string | undefined, limit = 7000): Promise<string | null> {
     if (!url || !String(url).trim()) return null;
@@ -1209,7 +1211,27 @@ If the screenshot does not show anything related to the finding, return {"found"
       const trials = visitors * signupRate / 100;
       const customers = trials * paidRate / 100;
       const targetCustomers = visitors * Math.max(signupRate, LEAK_TARGET_SIGNUP_PCT) / 100 * Math.max(paidRate, LEAK_TARGET_PAID_PCT) / 100;
-      const gap = Math.max(0, targetCustomers - customers);
+
+      // ── Spec v2: price each step of the path to paying, then pick the bottleneck.
+      // customers lost = people reaching the step × (target rate − their rate) × share who go on to pay.
+      // High end = they close the whole gap to target, low end = half of it.
+      const paying = Number(b.payingCustomers) > 0 ? Number(b.payingCustomers) : null;
+      const cancelled = Number(b.cancelledLastMonth) >= 0 && b.cancelledLastMonth !== '' && b.cancelledLastMonth != null ? Number(b.cancelledLastMonth) : null;
+      const churnRate = paying && cancelled != null ? (cancelled / paying) * 100 : null;
+      const stepRange = (high: number) => ({ low: Math.round(high * 0.5), high: Math.round(high) });
+      const steps: Array<{ key: 'signup' | 'paid' | 'churn'; label: string; rate: number | null; target: number; low: number; high: number; known: boolean }> = [
+        { key: 'signup', label: 'Visitor to signup', rate: signupRate, target: LEAK_TARGET_SIGNUP_PCT,
+          ...stepRange(visitors * Math.max(0, LEAK_TARGET_SIGNUP_PCT - signupRate) / 100 * paidRate / 100), known: true },
+        { key: 'paid', label: 'Signup to paying', rate: paidRate, target: LEAK_TARGET_PAID_PCT,
+          ...stepRange(trials * Math.max(0, LEAK_TARGET_PAID_PCT - paidRate) / 100), known: true },
+        { key: 'churn', label: 'Keeping customers', rate: churnRate, target: LEAK_TARGET_CHURN_PCT,
+          ...stepRange(paying && churnRate != null ? paying * Math.max(0, churnRate - LEAK_TARGET_CHURN_PCT) / 100 : 0), known: churnRate != null },
+      ];
+      const ranked = steps.filter(s => s.known && s.high >= 1).sort((x, y) => y.high - x.high);
+      const bottleneckKey: 'signup' | 'paid' | 'churn' | 'traffic' = ranked[0]?.key || 'traffic';
+      const bottleneckStep = steps.find(s => s.key === bottleneckKey) || null;
+      // The fixes are sized against the bottleneck's loss (or the old whole-funnel gap when traffic is the issue).
+      const gap = bottleneckStep ? bottleneckStep.high : 0;
 
       const [home, pricing, signup] = await Promise.all([
         fetchPageTextForAudit(b.websiteUrl),
@@ -1217,21 +1239,36 @@ If the screenshot does not show anything related to the finding, return {"found"
         fetchPageTextForAudit(b.signupUrl),
       ]);
       const pageUrls: Record<'home' | 'pricing' | 'signup', string | undefined> = { home: b.websiteUrl, pricing: b.pricingPageUrl, signup: b.signupUrl };
+      const onboarding = String(b.onboardingNotes || '').trim();
+
+      const stepLines = steps.map(s => s.known
+        ? `- ${s.label}: ${s.key === 'churn' ? `${s.rate!.toFixed(1)}% of paying customers cancel a month (target ${s.target}% or less)` : `${s.rate}% (target ${s.target}%)`} -> losing ${s.low}-${s.high} paying customers a month`
+        : `- ${s.label}: not known (no churn numbers given). Never call this the bottleneck; flag it as "check this next".`).join('\n');
+      const bottleneckLine = bottleneckKey === 'traffic'
+        ? 'BOTTLENECK: TRAFFIC. Signup and paying rates are at or above target, so the fixes are about who they talk to and where (positioning and channels), not page tweaks.'
+        : `BOTTLENECK: ${bottleneckStep!.label.toUpperCase()} (losing ${bottleneckStep!.low}-${bottleneckStep!.high} paying customers a month, the biggest of the steps). All three fixes must attack this step.`;
 
       const prompt = `You are writing TitanLeap's Customer Leak Audit for a SaaS founder. It is a paid report.
-Find the three places this business loses the most potential customers, and say exactly what to change.
+It follows the customer from stranger to paying customer, finds the ONE step losing the most customers, and gives the 3 fixes for that step.
 Write like a sharp, honest operator talking to the founder: plain English, specific, no jargon, no filler.
 
 BUSINESS: ${b.businessName || 'unknown'}
 WHAT THEY SELL: ${b.mainOffer || 'unknown'}
 WHO BUYS: ${b.audience || 'unknown'}
+WHERE CUSTOMERS COME FROM TODAY (founder's words): ${b.currentChannels || 'not given'}
+COMPETITOR THEY LOSE TO: ${b.competitor || 'not given'}
 FOUNDER NOTES: ${b.notes || 'none'}
 
-THEIR FUNNEL (their own numbers, treat as facts):
-- ${Math.round(visitors)} visitors a month
-- ${signupRate}% sign up or start a trial (TitanLeap target ${LEAK_TARGET_SIGNUP_PCT}%) -> ${Math.round(trials)} trials
-- ${paidRate}% of trials pay (target ${LEAK_TARGET_PAID_PCT}%) -> ${Math.round(customers)} new customers a month
-- At target rates: ${Math.round(targetCustomers)} a month. Gap: ${Math.round(gap)} customers a month.
+THEIR NUMBERS (their own, treat as facts):
+- ${Math.round(visitors)} visitors a month -> ${Math.round(trials)} signups (${signupRate}%) -> ${Math.round(customers)} new paying customers a month (${paidRate}% of signups)
+${paying ? `- ${Math.round(paying)} paying customers today${cancelled != null ? `, ${Math.round(cancelled)} cancelled last month` : ''}` : '- Paying customers today: not given'}
+
+WHAT EACH STEP COSTS (computed by TitanLeap, do not change these numbers):
+${stepLines}
+${bottleneckLine}
+
+TRIUMPH'S NEW-USER WALKTHROUGH (he signed up as a real user; his notes, treat as facts):
+${onboarding || '(not done yet. Do not describe their onboarding; set onboarding.done to false.)'}
 
 CONTENT AUDIT SUMMARY: ${b.contentSummary || 'not run'}
 
@@ -1244,24 +1281,41 @@ ${pricing || '(not provided or could not fetch)'}
 SIGNUP PAGE:
 ${signup || '(not provided or could not fetch)'}
 
+THE FIVE CHECKS (score each "leaking", "weak" or "fine", or "unknown" if there is no evidence):
+1. positioning: does a stranger know in 5 seconds who this is for and why they'd switch? Judge the headline against the buyer's problem.
+2. channels: is effort going where their buyers actually are?
+3. signup: do interested visitors sign up? (pages + the signup rate)
+4. paying: do new users reach the first useful moment and pay? (walkthrough + trial-to-paid rate)
+5. keeping: do customers stay, and does pricing let them pay more? (churn, annual plan, tiers, upgrade path on the pricing page)
+
 RULES:
-1. Every leak must quote or point to something actually on their pages, or to a funnel number above. If a page could not be fetched, say what you would check instead of pretending.
-   The report shows a real screenshot of the page with quoteOnPage circled, so quoteOnPage must be words that are really on that page.
-2. Never invent statistics (exit rates, bounce rates, benchmarks, competitor counts). Only use the numbers given here.
-3. "gapShare" is the fraction of the ${Math.round(gap)}-customer gap this leak explains (0 to 1). The three must add up to 1 or less. Put the biggest first.
+1. Every claim must point to something actually on their pages, in the walkthrough notes, or to a number above. If a page could not be fetched, say what you would check instead of pretending.
+   quoteOnPage must be words that are really on that page; the report circles them on a screenshot.
+2. Never invent statistics (exit rates, bounce rates, benchmarks, competitor traffic, review quotes). Only use what is given here.
+3. The three "leaks" are the 3 fixes for the bottleneck, biggest first. "gapShare" is the fraction of the bottleneck's loss each fix wins back (0 to 1, the three add up to 1 or less).
 4. Fixes must be concrete enough to do this week: exact copy, exact change, where.
-5. If the gap is 0, the funnel already beats our targets: still give the three biggest improvements, set gapShare to 0, and lean on the channels.
+5. No page-speed, SEO or design-taste points unless they directly lose customers. Nothing generic that fits any SaaS ("add social proof", "improve your CTA").
+6. The onboarding timeline only uses Triumph's notes. If there are no notes, return "onboarding": {"done": false, "summary": "", "timeline": []}.
 
 Return ONLY this JSON (first character "{", last character "}"):
 {
+  "headline": "One sentence with their numbers and the bottleneck, e.g. 'You lose 8-16 customers a month between visit and signup.'",
   "verdict": "2-3 sentences. The honest read on why visitors are not becoming customers.",
+  "bottleneck": { "whatsHappening": "2-3 sentences on what goes wrong at this step", "evidence": ["short exact quote, walkthrough moment, or number", "..."] },
+  "checks": [
+    { "key": "positioning", "score": "leaking | weak | fine | unknown", "finding": "One line." },
+    { "key": "channels", "score": "...", "finding": "..." },
+    { "key": "signup", "score": "...", "finding": "..." },
+    { "key": "paying", "score": "...", "finding": "..." },
+    { "key": "keeping", "score": "...", "finding": "..." }
+  ],
   "leaks": [
     {
-      "title": "The problem in plain words",
-      "where": "Home page / Pricing page / Signup flow / Onboarding / Content",
-      "page": "home | pricing | signup | none  (which fetched page the screenshot should show; none if the leak isn't about a page)",
-      "quoteOnPage": "3-15 words copied character-for-character from that page's text above, which the screenshot will circle. Never include [h1]/[a]/[button] markers. Empty string if nothing specific to circle.",
-      "whatWeSaw": "Short exact quote from their page, or the funnel number, that shows the problem",
+      "title": "The fix's problem in plain words",
+      "where": "Home page / Pricing page / Signup flow / Onboarding / Emails / Positioning / Channels",
+      "page": "home | pricing | signup | none  (which fetched page the screenshot should show; none if not about a page)",
+      "quoteOnPage": "3-15 words copied character-for-character from that page's text above. Never include [h1]/[a]/[button] markers. Empty string if nothing to circle.",
+      "whatWeSaw": "Short exact quote, walkthrough moment or number that shows the problem",
       "whatsWrong": "2-3 sentences",
       "fixes": ["exact change 1", "exact change 2", "exact change 3"],
       "before": "Current copy if the fix is a copy change, else empty string",
@@ -1271,13 +1325,14 @@ Return ONLY this JSON (first character "{", last character "}"):
       "gapShare": 0.4
     }
   ],
+  "onboarding": { "done": true, "summary": "1-2 sentences: how long to the first useful moment and the biggest stall", "timeline": [ { "when": "e.g. 0 min / Day 2", "what": "what happened", "problem": "what went wrong, or empty string" } ] },
   "channels": [
     { "name": "Channel name", "who": "Exactly who to reach", "why": "Why it fits their buyers", "firstStep": "What to do this week" }
   ],
   "uncomfortableTruth": "One honest thing the founder probably doesn't want to hear, 2-3 sentences.",
-  "plan": { "weeks1to2": ["..."], "month1": ["..."], "month3": ["..."] }
+  "plan": { "week1": ["..."], "week2": ["..."], "week3": ["..."], "week4": ["..."] }
 }
-Exactly 3 leaks and exactly 2 channels.`;
+Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
 
       const { generateClaudeContent } = await import("./src/services/claude.ts");
       const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, prefillAssistant: "{", temperature: 0.4 });
@@ -1288,7 +1343,7 @@ Exactly 3 leaks and exactly 2 channels.`;
         ai = JSON.parse(cleaned.slice(s, e + 1));
       }
 
-      // Customer and revenue ranges come from the gap, not from the model.
+      // Customer and revenue ranges come from the bottleneck's loss, not from the model.
       const leaks = (Array.isArray(ai.leaks) ? ai.leaks : []).slice(0, 3);
       const shares = leaks.map((l: any) => Math.max(0, Math.min(1, Number(l.gapShare) || 0)));
       const shareSum = shares.reduce((a: number, v: number) => a + v, 0);
@@ -1310,8 +1365,17 @@ Exactly 3 leaks and exactly 2 channels.`;
 
       const totalLow = withNumbers.reduce((a: number, l: any) => a + l.customersLow, 0);
       const totalHigh = withNumbers.reduce((a: number, l: any) => a + l.customersHigh, 0);
+      const SCORES = ['leaking', 'weak', 'fine', 'unknown'];
+      const CHECK_KEYS = ['positioning', 'channels', 'signup', 'paying', 'keeping'];
+      const checks = CHECK_KEYS.map(k => {
+        const c = (Array.isArray(ai.checks) ? ai.checks : []).find((x: any) => String(x?.key).toLowerCase() === k) || {};
+        const score = SCORES.includes(String(c.score).toLowerCase()) ? String(c.score).toLowerCase() : 'unknown';
+        return { key: k, score, finding: String(c.finding || '') };
+      });
+      const ob = ai.onboarding || {};
 
       res.json({
+        version: 2,
         businessName: b.businessName || '',
         websiteUrl: b.websiteUrl,
         generatedAt: new Date().toISOString(),
@@ -1320,6 +1384,24 @@ Exactly 3 leaks and exactly 2 channels.`;
           visitors: Math.round(visitors), signupRate, trials: Math.round(trials), paidRate,
           customers: Math.round(customers), targetSignupRate: LEAK_TARGET_SIGNUP_PCT, targetPaidRate: LEAK_TARGET_PAID_PCT,
           targetCustomers: Math.round(targetCustomers), gap: Math.round(gap), revenuePerCustomer,
+          payingCustomers: paying, cancelledLastMonth: cancelled,
+          churnRate: churnRate != null ? Math.round(churnRate * 10) / 10 : null, targetChurnRate: LEAK_TARGET_CHURN_PCT,
+        },
+        steps: steps.map(s => ({ ...s, revenueLow: Math.round(s.low * revenuePerCustomer), revenueHigh: Math.round(s.high * revenuePerCustomer) })),
+        bottleneck: {
+          key: bottleneckKey,
+          label: bottleneckStep ? bottleneckStep.label : 'Traffic',
+          customersLow: bottleneckStep?.low ?? 0, customersHigh: bottleneckStep?.high ?? 0,
+          revenueLow: Math.round((bottleneckStep?.low ?? 0) * revenuePerCustomer), revenueHigh: Math.round((bottleneckStep?.high ?? 0) * revenuePerCustomer),
+          whatsHappening: String(ai.bottleneck?.whatsHappening || ''),
+          evidence: (Array.isArray(ai.bottleneck?.evidence) ? ai.bottleneck.evidence : []).slice(0, 4).map(String),
+        },
+        headline: String(ai.headline || ''),
+        checks,
+        onboarding: {
+          done: !!onboarding && ob.done !== false,
+          summary: String(ob.summary || ''),
+          timeline: (Array.isArray(ob.timeline) ? ob.timeline : []).slice(0, 10).map((s: any) => ({ when: String(s?.when || ''), what: String(s?.what || ''), problem: String(s?.problem || '') })),
         },
         totals: {
           customersLow: totalLow, customersHigh: totalHigh,
@@ -1330,7 +1412,9 @@ Exactly 3 leaks and exactly 2 channels.`;
         leaks: withNumbers,
         channels: (Array.isArray(ai.channels) ? ai.channels : []).slice(0, 2),
         uncomfortableTruth: ai.uncomfortableTruth || '',
-        plan: ai.plan || { weeks1to2: [], month1: [], month3: [] },
+        plan: {
+          week1: ai.plan?.week1 || [], week2: ai.plan?.week2 || [], week3: ai.plan?.week3 || [], week4: ai.plan?.week4 || [],
+        },
         contentSummary: b.contentSummary || null,
         contentScore: b.contentScore ?? null,
       });
