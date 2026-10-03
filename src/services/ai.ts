@@ -757,6 +757,9 @@ export const generateLeakAudit = async (input: {
   mainOffer?: string; audience?: string; notes?: string;
   visitors: number; signupRate: number; paidRate: number; revenuePerCustomer: number;
   contentSummary?: string; contentScore?: number | null;
+  // Spec v2: the whole path to paying, not just the website.
+  payingCustomers?: number | null; cancelledLastMonth?: number | null;
+  currentChannels?: string; competitor?: string; onboardingNotes?: string;
 }) => {
   const authHeader = await getAuthHeader();
   const response = await fetch('/api/ai/leak-audit', {
