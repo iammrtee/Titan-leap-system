@@ -1105,17 +1105,25 @@ Then the analysis. Return ONLY this JSON:
     "bioHasLink": <true/false/null>,
     "postsWithCtaPct": <number or null>
   },
+  "judgement": { "score": <0-100 or null>, "basis": "one line: what you saw that justifies the score" },
   "analysis": ${CONTENT_ANALYSIS_SCHEMA.replace('Return ONLY this JSON object:\n', '').split('\nRules:')[0]}
 }
-Rules: at most 3 leaks, exactly 3 nextPosts, no invented numbers. If you cannot open the profile, set dataQuality to "insufficient" and analysis to null.
+Rules: at most 3 leaks, exactly 3 nextPosts, no invented numbers. If you cannot open the profile, set dataQuality to "insufficient", analysis to null and judgement.score to null.
+JUDGEMENT: score how well this profile works as a channel that brings customers, from 0 to 100, using only what you actually saw: how recently and consistently they post (35 points), how the audience responds relative to their size (30 points), and whether the bio, links and posts give a clear offer and next step (35 points). If you saw too little to judge fairly, use null instead of guessing.
 The first character of your response must be "{" and the last must be "}".`;
       const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, useWebSearch: true, webSearchMaxUses: 3, temperature: 0.3 });
       const parsed = parse(result.text);
+      const rawScore = Number(parsed.judgement?.score);
+      const judgedScore = parsed.dataQuality === 'insufficient' || parsed.judgement?.score == null || !Number.isFinite(rawScore)
+        ? null : Math.max(0, Math.min(100, Math.round(rawScore)));
       return res.json({
         platform, handle, dataSource: 'web_search',
         dataQuality: parsed.dataQuality || 'partial',
-        metrics: parsed.observed || null, scores: null,
-        grade: null, benchmark: benchmarkFor(platform),
+        metrics: parsed.observed || null,
+        scores: judgedScore != null ? { overall: judgedScore, consistency: null, engagement: null, conversionPath: null, formatMix: null, judged: true } : null,
+        grade: gradeFromScore(judgedScore),
+        judgementBasis: judgedScore != null ? String(parsed.judgement?.basis || '').slice(0, 240) : null,
+        benchmark: benchmarkFor(platform),
         analysis: parsed.analysis || null,
       });
     } catch (error: any) {
@@ -1186,9 +1194,8 @@ Return ONLY this JSON, pixel coordinates in the ${W}x${H} image:
 {"found": true, "box": {"x": <left>, "y": <top>, "w": <width>, "h": <height>}, "note": "<pen note, max 5 words>"}
 If the screenshot does not show anything related to the finding, return {"found": false, "box": null, "note": ""}.`;
       const r = await client.messages.create({
-        model: process.env.CLAUDE_VISION_MODEL || 'claude-sonnet-4-5',
+        model: (await import('./src/services/claude.ts')).VISION_CLAUDE_MODEL,
         max_tokens: 200,
-        temperature: 0,
         messages: [
           { role: 'user', content: [
             { type: 'image', source: { type: 'base64', media_type: m[1] as any, data: m[2] } },

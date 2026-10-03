@@ -55,8 +55,12 @@ const IMPACT_ORDER = ['High', 'Medium', 'Low'];
 // (main audit prompt, Audit Result, Leak Report).
 export function combineResults(results: ContentAuditResult[], primaryPlatform?: string): ContentAuditResult | null {
   if (!results.length) return null;
-  const scored = results.map(r => r.scores?.overall).filter((v): v is number => v != null);
-  const overall = scored.length ? Math.round(scored.reduce((a, b) => a + b, 0) / scored.length) : null;
+  // Measured platforms count double; a judged score (web read) is real evidence but softer.
+  const weighted = results
+    .filter(r => r.scores?.overall != null)
+    .map(r => ({ v: r.scores!.overall as number, w: r.dataSource === 'web_search' ? 1 : 2 }));
+  const totalW = weighted.reduce((a, b) => a + b.w, 0);
+  const overall = totalW ? Math.round(weighted.reduce((a, b) => a + b.v * b.w, 0) / totalW) : null;
   const primary = results.find(r => r.platform === primaryPlatform && r.metrics) || results.find(r => r.metrics) || results[0];
   const withAnalysis = results.filter(r => r.analysis);
   // Primary platform first so its leaks and post ideas lead.
@@ -81,7 +85,7 @@ export function combineResults(results: ContentAuditResult[], primaryPlatform?: 
       contentToOffer: ordered.map(r => r.analysis!.contentToOffer).join(' '),
       nextPosts: ordered.flatMap(r => (r.analysis!.nextPosts || []).map(p => ({ ...p, format: results.length > 1 ? `${r.platform} · ${p.format}` : p.format }))),
       summaryForMainAudit: ordered
-        .map(r => `${r.platform} (${r.dataSource === 'web_search' ? 'web read, partial' : 'measured'}${r.scores?.overall != null ? `, ${r.scores.overall}/100` : ''}): ${r.analysis!.summaryForMainAudit}`)
+        .map(r => `${r.platform} (${r.dataSource === 'web_search' ? (r.grade ? 'judged from web read' : 'web read, partial') : 'measured'}${r.scores?.overall != null ? `, ${r.scores.overall}/100` : ''}): ${r.analysis!.summaryForMainAudit}`)
         .join('\n'),
     } : null,
   };
@@ -219,7 +223,7 @@ export function ContentAuditInline({ profiles, ctl, result }: { profiles: Profil
               ) : r ? (
                 <span className="flex items-center gap-1.5 shrink-0">
                   <span className={cn('px-1.5 py-0.5 rounded font-black', gradeTone(r.grade))}>{r.grade || (r.analysis ? '~' : '—')}</span>
-                  <span className="text-on-surface-variant/60">{r.dataSource === 'web_search' ? 'web read' : 'measured'}</span>
+                  <span className="text-on-surface-variant/60" title={(r as any).judgementBasis || undefined}>{r.dataSource === 'web_search' ? (r.grade ? 'judged' : 'web read') : 'measured'}</span>
                 </span>
               ) : (
                 <span className="text-on-surface-variant/50 shrink-0">{MEASURED.includes(p.platform) ? 'real data' : 'web read'} · queued</span>
