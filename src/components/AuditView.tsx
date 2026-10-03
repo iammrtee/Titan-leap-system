@@ -1936,7 +1936,7 @@ const MarketReportSection: React.FC<{ market: MarketData | null | undefined; for
             {label('1 · Demand')}
             <div style={{ ...M, fontSize: 30, fontWeight: 800, color: GOLD }}>{d.monthlySearches.toLocaleString()}<span style={{ fontSize: 14, color: INK_DIM, fontWeight: 500 }}> searches / month</span></div>
             <div style={{ fontSize: 14, color: INK_DIM, marginTop: 6 }}>
-              for “{d.keyword}”{formData.serviceArea ? ` in ${formData.serviceArea}` : ''}.
+              for “{d.keyword}” on Google (country-wide volume for that exact phrase).
               {d.cpc ? ` Advertisers pay about $${d.cpc.toFixed(2)} a click for it, a sign of how valuable these searches are.` : ''}
             </div>
           </div>

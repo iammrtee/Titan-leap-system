@@ -26,8 +26,9 @@ async function tregCall<T>(tool: string, body: Record<string, unknown>): Promise
     "Content-Type": "application/json",
     // Identity tokens need the team slug; per-org keys ignore it.
     "X-Treg-Org": process.env.TREG_ORG || "titan-leap",
-    // Hard cap per call so a routed waterfall can never surprise us.
-    "X-Treg-Route-Max-Cost": "0.05",
+    // Hard cap per call. Treg refuses (free, HTTP 402) any route dearer than this, e.g. the
+    // $0.09 DataForSEO volume endpoint the router would otherwise pick.
+    "X-Treg-Route-Max-Cost": "0.005",
   };
   try {
     const r = await fetch(`${TREG_BASE}/${tool}`, {
@@ -46,9 +47,27 @@ async function tregCall<T>(tool: string, body: Record<string, unknown>): Promise
   }
 }
 
-/** Monthly search volume for a seed keyword in a place (~$0.001). */
-export const keywordIdeas = (keyword: string, location: string, limit = 10) =>
-  tregCall<{ keywords: any[] }>("treg.google.keywords.ideas", { keyword, location, limit });
+const SERPSTAT_SE: Record<string, string> = {
+  'united states': 'g_us', usa: 'g_us', 'united kingdom': 'g_uk', uk: 'g_uk', canada: 'g_ca', australia: 'g_au',
+  germany: 'g_de', france: 'g_fr', spain: 'g_es', italy: 'g_it', netherlands: 'g_nl', ireland: 'g_ie',
+  'new zealand': 'g_nz', 'south africa': 'g_za', india: 'g_in', nigeria: 'g_ng', brazil: 'g_br', mexico: 'g_mx',
+};
+const seFor = (location: string) => {
+  const last = (location.split(',').pop() || '').trim().toLowerCase();
+  return SERPSTAT_SE[last] || 'g_us';
+};
+
+/**
+ * Monthly Google searches for ONE phrase (~$0.0005, billed per returned row). Volume is
+ * country-level, so local intent comes from the phrase itself ("plumber austin").
+ * Serpstat is called directly (not via the routed volume endpoint, which can bill $0.09).
+ */
+export const keywordVolume = (phrase: string, location: string) =>
+  tregCall<{ result?: { data?: any[] } }>("serpstat.google.keywords.volume", {
+    method: "SerpstatKeywordProcedure.getKeywordsInfo",
+    id: "1",
+    params: { keywords: [phrase], se: seFor(location) },
+  });
 
 /** Google organic results for a query in a place (~$0.001). */
 export const serpOrganic = (q: string, location: string, limit = 10) =>
@@ -59,14 +78,17 @@ export const serpLocal = (q: string, location: string, limit = 5) =>
   tregCall<{ results: any[] }>("treg.google.serp.local", { q, location, limit });
 
 /**
- * One market check: demand, who ranks, and local-pack trust. ~$0.005 per audit, cached 24h.
+ * One market check: demand, who ranks, and local-pack trust. ~$0.003 per audit, cached 24h.
  * Returns raw provider rows reduced to what the audit shows.
  */
 export async function marketCheck(opts: { keyword: string; location: string; domain?: string }) {
   if (!tregEnabled()) return { skipped: true as const, reason: "TREG_TOKEN not set" };
   const { keyword, location, domain } = opts;
-  const [ideas, organic, local] = await Promise.all([
-    keywordIdeas(keyword, location),
+  // Put the city in the phrase unless the keyword already has it: volume is country-level.
+  const city = (location.split(',')[0] || '').trim();
+  const phrase = city && !keyword.toLowerCase().includes(city.toLowerCase()) ? `${keyword} ${city}` : keyword;
+  const [volume, organic, local] = await Promise.all([
+    keywordVolume(phrase, location),
     serpOrganic(keyword, location),
     serpLocal(keyword, location),
   ]);
@@ -74,12 +96,12 @@ export async function marketCheck(opts: { keyword: string; location: string; dom
   const norm = (d?: string) => (d || "").replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
   const me = norm(domain);
 
-  const top = dataOf(ideas)?.keywords?.[0]?.keyword_data?.keyword_info;
+  const top = dataOf(volume)?.result?.data?.[0];
   const demand = top && {
-    keyword,
-    monthlySearches: top.search_volume ?? null,
-    cpc: top.cpc ?? null,
-    trend: top.search_volume_trend ?? null,
+    keyword: phrase,
+    monthlySearches: top.region_queries_count ?? null,
+    cpc: top.cost ?? null,
+    trend: null,
   };
 
   const rows = dataOf(organic)?.results || [];
