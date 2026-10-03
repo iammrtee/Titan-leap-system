@@ -85,7 +85,8 @@ export async function marketCheck(opts: { keyword: string; location: string; dom
   if (!tregEnabled()) return { skipped: true as const, reason: "TREG_TOKEN not set" };
   const { keyword, location, domain } = opts;
   // Put the city in the phrase unless the keyword already has it: volume is country-level.
-  const city = (location.split(',')[0] || '').trim();
+  const parts = location.split(',').map(x => x.trim()).filter(Boolean);
+  const city = parts.length >= 2 ? parts[0] : ''; // a bare country ("United States") is not a city
   const phrase = city && !keyword.toLowerCase().includes(city.toLowerCase()) ? `${keyword} ${city}` : keyword;
   const [volume, organic, local] = await Promise.all([
     keywordVolume(phrase, location),

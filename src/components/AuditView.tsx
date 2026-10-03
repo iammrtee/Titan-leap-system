@@ -2196,7 +2196,7 @@ const RevenueLeakBlueprint: React.FC<{
           <div style={{ ...M, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: INK_DIM, marginBottom: 14 }}>Total estimated monthly leak</div>
           <div style={{ ...M, fontSize: 'clamp(34px,8vw,52px)' as any, fontWeight: 800, color: GOLD, letterSpacing: '-0.02em' }}>${totalLow.toLocaleString()} – ${totalHigh.toLocaleString()}</div>
           <div style={{ fontSize: 14, color: INK_FAINT, marginTop: 14, maxWidth: '46ch', marginLeft: 'auto', marginRight: 'auto' }}>
-            {opp ? 'Measured from real Google search demand and your own price and conversion rate. Assumptions are listed in the Market section.' : `Planning range based on a ${rev.toLocaleString()}/mo revenue baseline. Add a search phrase and area to the form to replace this with measured numbers.`}
+            {opp ? 'Measured from real Google search demand and your own price and conversion rate. Assumptions are listed in the Market section.' : `Planning range based on a ${rev.toLocaleString()}/mo revenue baseline. Add a price point and a Google search phrase (and rank below page 1) to get a measured figure.`}
           </div>
         </div>
       </div>
