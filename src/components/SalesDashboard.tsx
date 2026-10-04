@@ -5,6 +5,7 @@ import { Users, TrendingUp, DollarSign, Target, ArrowUpRight, MoreHorizontal, Ro
 import { cn } from '@/src/lib/utils';
 import { supabase } from '@/src/services/supabase';
 import { toast } from 'sonner';
+import { parseCsv, toLeadRows } from '@/src/lib/leadCsv';
 
 interface Lead {
   id: string;
@@ -41,6 +42,28 @@ export const SalesDashboard: React.FC = () => {
   const [totalConverted, setTotalConverted] = useState(0);
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  // Import a prospect CSV into the leads table. Existing emails are skipped, so re-importing is safe.
+  const importLeadsCsv = async (file: File) => {
+    setImporting(true);
+    try {
+      const { leads: rows, skipped } = toLeadRows(parseCsv(await file.text()));
+      if (!rows.length) { toast.error('No rows with a valid email found in that CSV.'); return; }
+      const { data: existing } = await supabase.from('leads').select('email');
+      const have = new Set((existing || []).map((l: any) => String(l.email).toLowerCase()));
+      const fresh = rows.filter(r => !have.has(r.email));
+      for (let i = 0; i < fresh.length; i += 50) {
+        const { error } = await supabase.from('leads').insert(fresh.slice(i, i + 50));
+        if (error) throw error;
+      }
+      toast.success(`Imported ${fresh.length} leads`, { description: `${rows.length - fresh.length} already existed, ${skipped} had no valid email.` });
+    } catch (e: any) {
+      toast.error('Import failed', { description: e?.message || String(e) });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -206,6 +229,11 @@ export const SalesDashboard: React.FC = () => {
               <span>Test Sync</span>
             </button>
             )}
+            <label className={cn("flex items-center gap-2 px-4 py-2 bg-surface-container-highest rounded-xl hover:bg-surface-container-high transition-all text-xs font-bold cursor-pointer", importing && "opacity-60 pointer-events-none")}>
+              <Upload size={14} />
+              <span>{importing ? 'Importing…' : 'Import CSV'}</span>
+              <input type="file" accept=".csv,text/csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) importLeadsCsv(f); e.target.value = ''; }} />
+            </label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={14} />
               <input 
