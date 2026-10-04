@@ -5,7 +5,7 @@ import { Users, TrendingUp, DollarSign, Target, ArrowUpRight, MoreHorizontal, Ro
 import { cn } from '@/src/lib/utils';
 import { supabase } from '@/src/services/supabase';
 import { toast } from 'sonner';
-import { parseCsv, toLeadRows } from '@/src/lib/leadCsv';
+import { parseCsv, toLeadRows, parseLeadNotes } from '@/src/lib/leadCsv';
 
 interface Lead {
   id: string;
@@ -252,6 +252,7 @@ export const SalesDashboard: React.FC = () => {
           <thead>
             <tr className="bg-surface-container-highest/30">
               <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Name</th>
+              <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Contact</th>
               <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Source</th>
               <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Status</th>
               <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Product</th>
@@ -272,6 +273,20 @@ export const SalesDashboard: React.FC = () => {
                       <span className="text-[10px] font-medium text-on-surface-variant/60">{lead.email}</span>
                     </div>
                   </div>
+                </td>
+                <td className="px-8 py-4 text-[11px] font-medium text-on-surface-variant">
+                  {(() => {
+                    const d = parseLeadNotes(lead.score_reason);
+                    return (
+                      <div className="flex flex-col gap-0.5">
+                        {lead.phone && <a href={`tel:${lead.phone}`} className="hover:text-primary">{lead.phone}</a>}
+                        <div className="flex gap-2">
+                          {d.instagram && <a href={d.instagram} target="_blank" rel="noreferrer" className="text-primary hover:underline">Instagram</a>}
+                          {d.website && <a href={d.website} target="_blank" rel="noreferrer" className="text-primary hover:underline">Website</a>}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </td>
                 <td className="px-8 py-4 text-xs font-medium text-on-surface-variant">{lead.source}</td>
                 <td className="px-8 py-4">
@@ -349,7 +364,7 @@ export const SalesDashboard: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/10">
                     <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-1">Email</p>
-                    <p className="text-sm font-medium text-on-surface truncate" title={selectedLead.email}>{selectedLead.email}</p>
+                    <a href={`mailto:${selectedLead.email}`} className="text-sm font-medium text-primary hover:underline truncate block" title={selectedLead.email}>{selectedLead.email}</a>
                   </div>
                   <div className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/10">
                     <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-1">Phone</p>
@@ -378,12 +393,42 @@ export const SalesDashboard: React.FC = () => {
                   </div>
                 </div>
                 
-                {selectedLead.score_reason && (
-                  <div className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/10">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-1">Score Reason</p>
-                    <p className="text-sm font-medium text-on-surface">{selectedLead.score_reason}</p>
-                  </div>
-                )}
+                {(() => {
+                  const d = parseLeadNotes(selectedLead.score_reason);
+                  const outbound = selectedLead.source?.startsWith('Outbound:');
+                  return (
+                    <>
+                      {(d.instagram || d.website || d.emailQuality) && (
+                        <div className="grid grid-cols-2 gap-4">
+                          {d.instagram && (
+                            <div className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/10">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-1">Instagram</p>
+                              <a href={d.instagram} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline truncate block" title={d.instagram}>{d.instagram.replace(/^https?:\/\/(www\.)?instagram\.com\//, '@')}</a>
+                            </div>
+                          )}
+                          {d.website && (
+                            <div className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/10">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-1">Website</p>
+                              <a href={d.website} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline truncate block" title={d.website}>{d.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</a>
+                            </div>
+                          )}
+                          {d.emailQuality && (
+                            <div className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/10">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-1">Email quality</p>
+                              <p className="text-sm font-medium text-on-surface">{d.emailQuality}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {d.hook && (
+                        <div className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/10">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-1">{outbound ? 'Why they are a fit' : 'Score Reason'}</p>
+                          <p className="text-sm font-medium text-on-surface">{d.hook}</p>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </motion.div>
           </div>
