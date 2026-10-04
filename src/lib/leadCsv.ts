@@ -44,7 +44,7 @@ export function toLeadRows(rows: Record<string, string>[]): { leads: LeadInsert[
       r.hook,
       r.instagram && `IG: ${r.instagram}`,
       r.website && `Site: ${r.website}`,
-      r.email_type && `Email: ${r.email_type}`,
+      (r.email_type || r.email_status) && `Email: ${[r.email_type, r.email_status].filter(Boolean).join(', ')}`,
     ].filter(Boolean).join(' | ');
     leads.push({
       name: r.contact_name || company || email,
@@ -59,4 +59,18 @@ export function toLeadRows(rows: Record<string, string>[]): { leads: LeadInsert[
     });
   }
   return { leads, skipped };
+}
+
+export interface LeadDetails { hook: string; instagram: string; website: string; emailQuality: string }
+
+/** Reads back what toLeadRows packed into score_reason: "hook | IG: url | Site: url | Email: type, status". */
+export function parseLeadNotes(notes: string | null | undefined): LeadDetails {
+  const d: LeadDetails = { hook: '', instagram: '', website: '', emailQuality: '' };
+  for (const part of String(notes || '').split(' | ')) {
+    if (part.startsWith('IG: ')) d.instagram = part.slice(4).trim();
+    else if (part.startsWith('Site: ')) d.website = part.slice(6).trim();
+    else if (part.startsWith('Email: ')) d.emailQuality = part.slice(7).trim();
+    else if (!d.hook) d.hook = part.trim();
+  }
+  return d;
 }
