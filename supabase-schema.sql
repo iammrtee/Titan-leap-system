@@ -160,3 +160,9 @@ CREATE TABLE IF NOT EXISTS social_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_social_snapshots_lookup ON social_snapshots(platform, handle, captured_at);
 ALTER TABLE social_snapshots DISABLE ROW LEVEL SECURITY;
+
+-- 12. TikTok connection per client (Direct Post). Tokens are stored encrypted by the server
+-- (enc:v1:...), so the public anon key can't use them even though this table has no RLS.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tiktok_token TEXT;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tiktok_refresh_token TEXT;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tiktok_open_id TEXT;

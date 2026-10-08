@@ -6,7 +6,13 @@ function base64url(input: Buffer) {
 }
 
 // naive in-memory store for TikTok PKCE verifiers (fine for low volume; not multi-instance safe)
-const tiktokPkceStore = new Map<string, { verifier: string; expires: number }>();
+const tiktokPkceStore = new Map<string, { verifier: string; expires: number; profileId: string }>();
+
+// server.ts registers how TikTok tokens are stored, so they stay server-side and never
+// reach the browser.
+type TikTokTokenSaver = (profileId: string, tokens: any) => Promise<void>;
+let saveTikTokTokens: TikTokTokenSaver | null = null;
+export function setTikTokTokenSaver(fn: TikTokTokenSaver) { saveTikTokTokens = fn; }
 
 
 const router = express.Router();
@@ -163,7 +169,8 @@ router.get('/tiktok/url', (req, res) => {
   const codeVerifier = base64url(crypto.randomBytes(32));
   const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
 
-  tiktokPkceStore.set(state, { verifier: codeVerifier, expires: Date.now() + 10 * 60 * 1000 });
+  const profileId = String(req.query.profile_id || 'default').slice(0, 100);
+  tiktokPkceStore.set(state, { verifier: codeVerifier, expires: Date.now() + 10 * 60 * 1000, profileId });
 
   const params = new URLSearchParams({
     client_key: process.env.TIKTOK_CLIENT_KEY || '',
@@ -187,6 +194,7 @@ router.get('/tiktok/callback', async (req, res) => {
   tiktokPkceStore.delete(state as string);
 
   try {
+    if (req.query.error) throw new Error(String(req.query.error_description || req.query.error));
     if (!pkce || pkce.expires < Date.now()) {
       throw new Error('Missing or expired PKCE verifier for this state');
     }
@@ -210,32 +218,31 @@ router.get('/tiktok/callback', async (req, res) => {
     const tokenData = await tokenResponse.json();
 
     if (!tokenResponse.ok || tokenData.error) {
-      console.error('TikTok Token Error:', tokenData);
+      console.error('TikTok Token Error:', tokenData?.error, tokenData?.error_description);
       throw new Error('Failed to get TikTok tokens');
     }
+    if (!saveTikTokTokens) throw new Error('TikTok token storage is not configured');
+    await saveTikTokTokens(pkce.profileId, tokenData);
 
+    // Same-tab flow returns to the Auto Post screen; popup flow notifies the opener (same origin only).
     res.send(`
       <html>
         <body>
           <script>
             if (window.opener) {
-              window.opener.postMessage({ 
-                type: 'OAUTH_AUTH_SUCCESS', 
-                platform: 'tiktok',
-                tokens: ${JSON.stringify(tokenData)}
-              }, '*');
+              window.opener.postMessage({ type: 'TIKTOK_CONNECTED' }, window.location.origin);
               window.close();
             } else {
-              window.location.href = '/';
+              window.location.href = '/?tiktok=connected';
             }
           </script>
-          <p>Authentication successful. This window should close automatically.</p>
+          <p>TikTok connected. Returning to TitanLeap…</p>
         </body>
       </html>
     `);
-  } catch (error) {
-    console.error('OAuth Callback Error:', error);
-    res.status(500).send('Authentication failed');
+  } catch (error: any) {
+    console.error('TikTok OAuth Callback Error:', error?.message || error);
+    res.status(500).send(`<html><body><p>TikTok connection failed: ${String(error?.message || 'unknown error').replace(/[<>&]/g, '')}</p><p><a href="/">Back to TitanLeap</a></p></body></html>`);
   }
 });
 
