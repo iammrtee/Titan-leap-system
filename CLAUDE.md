@@ -33,6 +33,14 @@ Leak Report), and a content/scheduling system.
 `CLAUDE_API_KEY`, `GEMINI_API_KEY`, `APIFY_API_TOKEN`, `APP_URL`, Meta/LinkedIn/TikTok
 tokens. Planned: `TREG_TOKEN` (see Next work). Optional: `CLAUDE_VISION_MODEL`.
 
+Connected Accounts (Auto Post → Connected Accounts) use OAuth and store tokens encrypted in
+`user_settings` (`src/services/tokenVault.ts`; key from `TOKEN_VAULT_KEY`, else the first of
+the TikTok/LinkedIn/Meta secrets or `CLAUDE_API_KEY`). Connect buttons need: Meta
+`META_APP_ID` + `META_APP_SECRET` (redirect `<APP_URL>/api/auth/meta/callback`), LinkedIn
+`LINKEDIN_CLIENT_ID` + `LINKEDIN_CLIENT_SECRET` (+ `LINKEDIN_COMPANY_POSTING=true` once the
+Community Management API is approved), TikTok `TIKTOK_CLIENT_KEY` + `TIKTOK_CLIENT_SECRET`.
+Env-var tokens (`META_ACCESS_TOKEN`, `LINKEDIN_ACCESS_TOKEN`, …) still work as a fallback.
+
 ## Auth
 
 Per-user Supabase Auth. `src/components/Login.tsx`; `App.tsx` gates the app. Server

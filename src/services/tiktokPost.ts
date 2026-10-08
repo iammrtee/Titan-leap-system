@@ -1,37 +1,14 @@
 // TikTok Direct Post (Content Posting API), built to TikTok's Content Sharing Guidelines:
 // the user picks privacy and interactions on every post, discloses commercial content,
 // and consents before anything is sent. Server-only.
-import crypto from 'crypto';
 import { Readable } from 'stream';
+import { seal, unseal } from './tokenVault.ts';
 import type { Express, RequestHandler } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 const TT_API = 'https://open.tiktokapis.com/v2';
 const PRIVACY_LEVELS = ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'];
 const isVideoUrl = (u: string) => /\.(mp4|mov|webm)(\?|$)/i.test(u);
-
-// user_settings is readable with the public anon key, so TikTok tokens are stored encrypted
-// with a key only the server has.
-const sealKey = () => crypto.createHash('sha256').update(`titanleap-tiktok:${process.env.TIKTOK_CLIENT_SECRET || ''}`).digest();
-function seal(value?: string | null) {
-  if (!value) return null;
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', sealKey(), iv);
-  const ct = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
-  return 'enc:v1:' + Buffer.concat([iv, cipher.getAuthTag(), ct]).toString('base64');
-}
-function unseal(value?: string | null) {
-  if (!value) return null;
-  if (!value.startsWith('enc:v1:')) return value;
-  try {
-    const raw = Buffer.from(value.slice(7), 'base64');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', sealKey(), raw.subarray(0, 12));
-    decipher.setAuthTag(raw.subarray(12, 28));
-    return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString('utf8');
-  } catch {
-    return null;
-  }
-}
 
 class TikTokError extends Error {
   constructor(message: string, public code?: string, public status = 400) { super(message); }
@@ -253,5 +230,17 @@ export function registerTikTokRoutes(app: Express, opts: {
     }
   });
 
-  return { saveTokens };
+  // Account name for the Connected Accounts list.
+  async function status(profileId: string) {
+    try {
+      const c = await ttPost(profileId, '/post/publish/creator_info/query/', {});
+      return { connected: true, account: c.creator_username ? `@${c.creator_username}` : c.creator_nickname || 'Connected' };
+    } catch (err: any) {
+      if (err?.code === 'not_connected') return { connected: false, error: 'Not connected' };
+      if (err?.code === 'access_token_invalid' || err?.code === 'scope_not_authorized') return { connected: false, error: err.message };
+      return { connected: true, account: 'Connected', error: err?.message };
+    }
+  }
+
+  return { saveTokens, status };
 }
