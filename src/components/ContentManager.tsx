@@ -658,13 +658,48 @@ const AutoPostTab: React.FC = () => {
   };
 
   const removeAsset = (index: number) => { setUploadedAssets(prev => prev.filter((_, i) => i !== index)); };
+  // Carousel order = upload order; arrows move a slide one place left/right.
+  const moveAsset = (index: number, dir: -1 | 1) => {
+    setUploadedAssets(prev => {
+      const to = index + dir;
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[to]] = [next[to], next[index]];
+      return next;
+    });
+  };
+
+  // Which platforms are actually connected, and what happened to recent posts.
+  const [connections, setConnections] = useState<Record<string, { connected: boolean; account?: string | null; error?: string }>>({});
+  const [recentPosts, setRecentPosts] = useState<any[]>([]);
+  const loadConnections = async (refresh = false) => {
+    try {
+      const res = await fetch(`/api/posts/connections?profile_id=${encodeURIComponent(profileId)}${refresh ? '&refresh=1' : ''}`, { headers: await getAuthHeader() });
+      if (res.ok) setConnections(await res.json());
+    } catch {}
+  };
+  const loadRecentPosts = async () => {
+    try {
+      const res = await fetch(`/api/posts/recent?profile_id=${encodeURIComponent(profileId)}`, { headers: await getAuthHeader() });
+      if (res.ok) setRecentPosts((await res.json()).posts || []);
+    } catch {}
+  };
+  useEffect(() => { loadConnections(); loadRecentPosts(); }, [profileId]);
+  // Poll while anything is still waiting to go out.
+  useEffect(() => {
+    if (!recentPosts.some(p => p.status === 'pending' || p.status === 'publishing')) return;
+    const t = setInterval(loadRecentPosts, 8000);
+    return () => clearInterval(t);
+  }, [recentPosts]);
 
   const handlePublish = async () => {
     if (!caption.trim() && uploadedAssets.length === 0) { toast.error("Add a caption or media before publishing."); return; }
     if (selectedPlatforms.length === 0) { toast.error("Select at least one platform."); return; }
-    if (selectedPlatforms.includes('li') && !linkedinCompanyId.trim()) {
-      toast.error("LinkedIn Company ID required.", { description: "Add it in Advanced Settings." });
-      setShowAdvanced(true);
+    const platformKey: Record<string, string> = { ig: 'instagram', tt: 'tiktok', li: 'linkedin', fb: 'facebook', tw: 'twitter', yt: 'youtube' };
+    const notConnected = selectedPlatforms.filter(p => connections[platformKey[p]] && !connections[platformKey[p]].connected);
+    if (notConnected.length > 0) {
+      const p = platformKey[notConnected[0]];
+      toast.error(`${POST_PLATFORMS.find(x => x.id === notConnected[0])?.label} isn't ready.`, { description: connections[p]?.error });
       return;
     }
     const mediaRequiredLabels: Record<string, string> = { ig: 'Instagram', tt: 'TikTok', yt: 'YouTube' };
@@ -700,6 +735,7 @@ const AutoPostTab: React.FC = () => {
       }));
 
       setDistributionJobs(prev => [...newJobs, ...prev].slice(0, 20));
+      loadRecentPosts();
       toast.success(`Scheduled across ${selectedPlatforms.length} platform(s)!`);
       setCaption('');
       setUploadedAssets([]);
@@ -735,14 +771,24 @@ const AutoPostTab: React.FC = () => {
             {uploadedAssets.length > 0 && (
               <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {uploadedAssets.map((asset, idx) => (
-                  <div key={idx} className="relative group rounded-xl overflow-hidden border border-outline-variant/10 bg-surface-container-highest/30">
+                  <div key={asset.url} className="relative group rounded-xl overflow-hidden border border-outline-variant/10 bg-surface-container-highest/30">
                     {asset.type === 'image' ? (
                       <img src={asset.url} alt={asset.name} className="w-full h-24 object-cover" />
                     ) : (
                       <div className="w-full h-24 flex items-center justify-center bg-surface-container-highest"><Play size={24} className="text-on-surface-variant/50" /></div>
                     )}
-                    <button onClick={() => removeAsset(idx)}
+                    <span className="absolute top-1 left-1 min-w-6 h-6 px-1.5 rounded-full bg-primary text-white text-[11px] font-black flex items-center justify-center shadow"
+                      title={`Slide ${idx + 1} of ${uploadedAssets.length}`}>{idx + 1}</span>
+                    <button onClick={() => removeAsset(idx)} title="Remove"
                       className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><X size={12} /></button>
+                    {uploadedAssets.length > 1 && (
+                      <div className="absolute bottom-9 inset-x-1 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => moveAsset(idx, -1)} disabled={idx === 0} title="Move earlier"
+                          className="w-6 h-6 rounded-full bg-black/70 text-white text-xs font-black disabled:opacity-0">‹</button>
+                        <button onClick={() => moveAsset(idx, 1)} disabled={idx === uploadedAssets.length - 1} title="Move later"
+                          className="w-6 h-6 rounded-full bg-black/70 text-white text-xs font-black disabled:opacity-0">›</button>
+                      </div>
+                    )}
                     <div className="p-2"><p className="text-[10px] font-medium text-on-surface-variant truncate">{asset.name}</p></div>
                   </div>
                 ))}
@@ -820,12 +866,21 @@ const AutoPostTab: React.FC = () => {
             <div className="space-y-2">
               {POST_PLATFORMS.map(platform => {
                 const isSelected = selectedPlatforms.includes(platform.id);
+                const conn = connections[{ ig: 'instagram', tt: 'tiktok', li: 'linkedin', fb: 'facebook', tw: 'twitter', yt: 'youtube' }[platform.id]];
                 return (
                   <button key={platform.id} onClick={() => togglePlatform(platform.id)}
                     className={cn("w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all text-left",
                       isSelected ? cn(platform.color, "border-current/30") : "border-outline-variant/10 text-on-surface-variant/50 hover:border-outline-variant/30 hover:text-on-surface-variant")}>
                     {platform.icon}
-                    <span className="text-sm font-bold flex-1">{platform.label}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="text-sm font-bold block">{platform.label}</span>
+                      {conn && (
+                        <span className={cn("text-[10px] font-medium block truncate", conn.connected ? "text-green-500" : "text-on-surface-variant/50")}
+                          title={conn.connected ? conn.account || 'Connected' : conn.error}>
+                          {conn.connected ? `● ${conn.account || 'Connected'}` : `○ ${conn.error}`}
+                        </span>
+                      )}
+                    </span>
                     {platform.badge && (
                       <span className={cn("text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-full", platform.badgeColor)}>{platform.badge}</span>
                     )}
@@ -842,7 +897,38 @@ const AutoPostTab: React.FC = () => {
             {isPublishing ? (<><Loader2 size={18} className="animate-spin" /> Publishing...</>) : (<><Send size={18} /> Schedule & Publish</>)}
           </button>
 
-          {distributionJobs.length > 0 && (
+          {recentPosts.length > 0 && (
+            <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 p-6">
+              <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-4 flex items-center justify-between">
+                <span>Post Results</span>
+                <button onClick={() => { loadRecentPosts(); loadConnections(true); }} className="normal-case tracking-normal font-bold text-primary">Refresh</button>
+              </div>
+              <div className="space-y-2 max-h-[420px] overflow-y-auto">
+                {recentPosts.map(post => (
+                  <div key={post.id} className="p-3 rounded-xl bg-surface-container-highest/30 border border-outline-variant/5 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] text-on-surface-variant/60 truncate">{post.media_count} media · {new Date(post.scheduled_for).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+                      <span className={cn("text-[9px] font-black uppercase tracking-widest",
+                        post.status === 'sent' ? "text-green-500" : post.status === 'failed' ? "text-red-500" : "text-amber-500")}>
+                        {post.status === 'pending' && new Date(post.scheduled_for).getTime() > Date.now() ? 'scheduled' : post.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-on-surface truncate">{post.caption || '(no caption)'}</p>
+                    {(post.platforms || []).map((p: string) => {
+                      const r = post.platform_results?.[p];
+                      return (
+                        <p key={p} className={cn("text-[10px] font-medium", !r ? "text-on-surface-variant/50" : r.success ? "text-green-500" : "text-red-500")}>
+                          <span className="capitalize font-bold">{p}</span>: {!r ? 'waiting…' : r.success ? `posted${r.slides ? ` (${r.slides} slides)` : r.images ? ` (${r.images} images)` : r.photos ? ` (${r.photos} photos)` : ''}` : r.error}
+                        </p>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {distributionJobs.length > 0 && recentPosts.length === 0 && (
             <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 p-6">
               <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-4">Recent Jobs</div>
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
