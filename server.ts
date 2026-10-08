@@ -1707,6 +1707,11 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
         });
       }
 
+      // Platforms fetch media by URL, so browser-only blob:/data: links would fail at publish time.
+      if (Array.isArray(mediaUrls) && mediaUrls.some((u: any) => typeof u !== 'string' || !/^https?:\/\//i.test(u))) {
+        return res.status(400).json({ error: "A media file didn't upload to storage. Remove it and upload it again." });
+      }
+
       const { data, error } = await supabase
         .from('scheduled_posts')
         .insert({
