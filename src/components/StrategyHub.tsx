@@ -6,6 +6,7 @@ import { cn } from '@/src/lib/utils';
 import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent, generateCalendarFromBlueprint } from '@/src/services/ai';
 import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
+import { safeStorageName, toPostableJpeg } from '@/src/lib/postMedia';
 import localforage from 'localforage';
 
 type StrategyTab = 'competitor' | 'calendar' | 'plan';
@@ -831,51 +832,30 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       const isVideo = file.type?.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(file.name || '');
 
       if (isImage || isVideo) {
-        let finalUrl = '';
+        // Platforms fetch media by URL, so a failed upload is reported instead of
+        // falling back to a browser-only blob: URL that can never be published.
         try {
-          if (!isSupabaseConfigured) {
-            finalUrl = URL.createObjectURL(file);
-          } else {
-            const fileExt = file.name?.split('.').pop() || 'tmp';
-            const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-            const filePath = `${profileId}/${fileName}`;
+          if (!isSupabaseConfigured) throw new Error('Storage is not configured');
+          if (file.size > 50 * 1024 * 1024) throw new Error('File is over 50MB');
+          const upload = isImage ? (await toPostableJpeg(file)).file : file;
+          const filePath = `${profileId}/${Date.now()}_${safeStorageName(upload.name)}`;
 
-            const { error: uploadError } = await supabase.storage
-              .from('media')
-              .upload(filePath, file, {
-                cacheControl: '3600',
-                upsert: false
-              });
+          const { error: uploadError } = await supabase.storage
+            .from('media')
+            .upload(filePath, upload, {
+              cacheControl: '3600',
+              contentType: upload.type || undefined,
+              upsert: false
+            });
+          if (uploadError) throw uploadError;
 
-            if (uploadError) {
-              console.warn('Supabase upload failed, forcing local fallback:', uploadError);
-              finalUrl = URL.createObjectURL(file);
-            } else {
-              const { data: { publicUrl } } = supabase.storage
-                .from('media')
-                .getPublicUrl(filePath);
-              finalUrl = publicUrl || URL.createObjectURL(file); // Extra safety fallback
-            }
-          }
-          
-          if (finalUrl) {
-            newAssets.push({ url: finalUrl, type: isImage ? 'image' : 'video' });
-          } else {
-            invalidFilesCount++;
-          }
-        } catch (error) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('media')
+            .getPublicUrl(filePath);
+          newAssets.push({ url: publicUrl, type: isImage ? 'image' : 'video' });
+        } catch (error: any) {
           console.error('Error uploading file:', error);
-          try {
-            finalUrl = URL.createObjectURL(file); 
-            if(finalUrl) {
-                newAssets.push({ url: finalUrl, type: isImage ? 'image' : 'video' });
-            } else {
-              invalidFilesCount++;
-            }
-          } catch (innerError) {
-            console.error('Fallback URL generation failed:', innerError);
-            invalidFilesCount++;
-          }
+          toast.error(`Couldn't upload ${file.name}`, { description: error?.message || 'Storage upload failed.' });
         }
       } else {
         invalidFilesCount++;
@@ -899,7 +879,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       } else {
         toast.success(`Successfully uploaded ${newAssets.length} files.`);
       }
-    } else {
+    } else if (invalidFilesCount > 0) {
       toast.error('Please upload valid image or video files (e.g. .jpg, .png, .mp4).');
     }
   };

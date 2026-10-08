@@ -5,6 +5,7 @@ import { Plus, X, Play, Image, Check, AlertCircle, Link as LinkIcon, ExternalLin
 import { toast } from 'sonner';
 import { cn } from '@/src/lib/utils';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
+import { safeStorageName, toPostableJpeg, instagramRatioProblem } from '@/src/lib/postMedia';
 
 // ─── Content Manager Tab Types ───
 type ContentManagerTab = 'production' | 'autopost';
@@ -610,30 +611,41 @@ const AutoPostTab: React.FC = () => {
     setSelectedPlatforms(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
   };
 
-  const handleFileUpload = async (files: FileList) => {
-    const newAssets: UploadedAsset[] = [];
-    for (const file of Array.from(files)) {
-      const isVideo = file.type.startsWith('video/');
-      const isImage = file.type.startsWith('image/');
-      if (!isVideo && !isImage) { toast.error(`Unsupported file type: ${file.name}`); continue; }
+  const [isUploading, setIsUploading] = useState(false);
 
-      if (isSupabaseConfigured()) {
+  // Uploads to the public "media" bucket so the platforms can fetch the file by URL.
+  // A browser-only blob: URL can't be published, so failures are reported, not hidden.
+  const handleFileUpload = async (files: FileList) => {
+    if (!isSupabaseConfigured) { toast.error('Storage is not configured, so media cannot be uploaded.'); return; }
+    const newAssets: UploadedAsset[] = [];
+    setIsUploading(true);
+    try {
+      for (const original of Array.from(files)) {
+        const isVideo = original.type.startsWith('video/');
+        const isImage = original.type.startsWith('image/');
+        if (!isVideo && !isImage) { toast.error(`Unsupported file type: ${original.name}`); continue; }
+        if (original.size > 50 * 1024 * 1024) { toast.error(`${original.name} is over 50MB.`, { description: 'Compress it and try again.' }); continue; }
+
         try {
-          const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-          const filePath = `${profileId}/${fileName}`;
-          const { error } = await supabase.storage.from('post-media').upload(filePath, file);
+          let file = original;
+          if (isImage) {
+            const prepared = await toPostableJpeg(original);
+            file = prepared.file;
+            const ratioIssue = selectedPlatforms.includes('ig') ? instagramRatioProblem(prepared.width, prepared.height) : null;
+            if (ratioIssue) toast.warning(`${original.name} is ${ratioIssue}.`, { description: 'Crop it to 1:1 or 4:5 or Instagram will reject it.' });
+          }
+          const filePath = `${profileId}/${Date.now()}_${safeStorageName(file.name)}`;
+          const { error } = await supabase.storage.from('media').upload(filePath, file, { contentType: file.type, upsert: false });
           if (error) throw error;
-          const { data: { publicUrl } } = supabase.storage.from('post-media').getPublicUrl(filePath);
-          newAssets.push({ url: publicUrl, type: isVideo ? 'video' : 'image', name: file.name });
-        } catch (err) {
+          const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(filePath);
+          newAssets.push({ url: publicUrl, type: isVideo ? 'video' : 'image', name: original.name });
+        } catch (err: any) {
           console.error('Upload error:', err);
-          const blobUrl = URL.createObjectURL(file);
-          newAssets.push({ url: blobUrl, type: isVideo ? 'video' : 'image', name: file.name });
+          toast.error(`Couldn't upload ${original.name}`, { description: err?.message || 'Storage upload failed.' });
         }
-      } else {
-        const blobUrl = URL.createObjectURL(file);
-        newAssets.push({ url: blobUrl, type: isVideo ? 'video' : 'image', name: file.name });
       }
+    } finally {
+      setIsUploading(false);
     }
     setUploadedAssets(prev => [...prev, ...newAssets]);
     if (newAssets.length > 0) toast.success(`Uploaded ${newAssets.length} file(s)`);
@@ -712,11 +724,14 @@ const AutoPostTab: React.FC = () => {
               onClick={() => fileInputRef.current?.click()}
               className={cn("border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all",
                 isDragging ? "border-primary bg-primary/5" : "border-outline-variant/20 hover:border-outline-variant/40 hover:bg-surface-container-highest/20")}>
-              <Upload size={32} className="mx-auto mb-3 text-on-surface-variant/40" />
-              <p className="text-sm font-bold text-on-surface-variant/60">{isDragging ? "Drop files here" : "Drag & drop media or click to browse"}</p>
-              <p className="text-[10px] text-on-surface-variant/40 mt-1">Supports images (PNG, JPG, WebP) and videos (MP4, MOV)</p>
+              {isUploading
+                ? <Loader2 size={32} className="mx-auto mb-3 text-primary animate-spin" />
+                : <Upload size={32} className="mx-auto mb-3 text-on-surface-variant/40" />}
+              <p className="text-sm font-bold text-on-surface-variant/60">{isUploading ? "Uploading…" : isDragging ? "Drop files here" : "Drag & drop media or click to browse"}</p>
+              <p className="text-[10px] text-on-surface-variant/40 mt-1">Images (PNG, JPG, WebP; sent as JPEG) and videos (MP4, MOV), up to 50MB</p>
             </div>
-            <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" className="hidden" onChange={(e) => e.target.files && handleFileUpload(e.target.files)} />
+            <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" className="hidden"
+              onChange={(e) => { const input = e.currentTarget; if (input.files?.length) handleFileUpload(input.files).finally(() => { input.value = ''; }); }} />
             {uploadedAssets.length > 0 && (
               <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {uploadedAssets.map((asset, idx) => (
@@ -821,7 +836,7 @@ const AutoPostTab: React.FC = () => {
             </div>
           </div>
 
-          <button onClick={handlePublish} disabled={isPublishing}
+          <button onClick={handlePublish} disabled={isPublishing || isUploading}
             className={cn("w-full flex items-center justify-center gap-3 px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all",
               isPublishing ? "bg-primary/50 text-white cursor-not-allowed" : "bg-primary text-white hover:bg-primary/90 shadow-lg hover:shadow-xl")}>
             {isPublishing ? (<><Loader2 size={18} className="animate-spin" /> Publishing...</>) : (<><Send size={18} /> Schedule & Publish</>)}
