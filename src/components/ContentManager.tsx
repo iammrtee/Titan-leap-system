@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { cn } from '@/src/lib/utils';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 import { safeStorageName, toPostableJpeg, instagramRatioProblem } from '@/src/lib/postMedia';
+import { TikTokComposer } from './TikTokComposer';
 
 // ─── Content Manager Tab Types ───
 type ContentManagerTab = 'production' | 'autopost';
@@ -133,7 +134,9 @@ function getProgressPct(card: Task) { return Math.round((getCountChecked(card) /
 //  MAIN COMPONENT
 // ═══════════════════════════════════════════
 export const ContentManager: React.FC = () => {
-  const [managerTab, setManagerTab] = useState<ContentManagerTab>('production');
+  // Land on Auto Post when returning from TikTok's connect screen.
+  const [managerTab, setManagerTab] = useState<ContentManagerTab>(() =>
+    new URLSearchParams(window.location.search).has('tiktok') ? 'autopost' : 'production');
   const [sendToProductionSignal, setSendToProductionSignal] = useState<number>(0);
 
   return (
@@ -674,7 +677,7 @@ const AutoPostTab: React.FC = () => {
   const [recentPosts, setRecentPosts] = useState<any[]>([]);
   const loadConnections = async (refresh = false) => {
     try {
-      const res = await fetch(`/api/posts/connections?profile_id=${encodeURIComponent(profileId)}${refresh ? '&refresh=1' : ''}`, { headers: await getAuthHeader() });
+      const res = await fetch(`/api/posts/connections?profile_id=${encodeURIComponent(profileId)}&linkedin_company_id=${encodeURIComponent(linkedinCompanyId.trim())}${refresh ? '&refresh=1' : ''}`, { headers: await getAuthHeader() });
       if (res.ok) setConnections(await res.json());
     } catch {}
   };
@@ -685,6 +688,21 @@ const AutoPostTab: React.FC = () => {
     } catch {}
   };
   useEffect(() => { loadConnections(); loadRecentPosts(); }, [profileId]);
+  // Re-check LinkedIn when the Company ID changes (debounced).
+  useEffect(() => { const t = setTimeout(() => loadConnections(), 800); return () => clearTimeout(t); }, [linkedinCompanyId]);
+
+  // Returning from TikTok's connect screen: select TikTok so its panel opens.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tt = params.get('tiktok');
+    if (!tt) return;
+    if (tt === 'connected') {
+      toast.success('TikTok connected');
+      setSelectedPlatforms(prev => prev.includes('tt') ? prev : [...prev, 'tt']);
+    }
+    params.delete('tiktok');
+    window.history.replaceState({}, '', window.location.pathname + (params.toString() ? `?${params}` : ''));
+  }, []);
   // Poll while anything is still waiting to go out.
   useEffect(() => {
     if (!recentPosts.some(p => p.status === 'pending' || p.status === 'publishing')) return;
@@ -694,16 +712,21 @@ const AutoPostTab: React.FC = () => {
 
   const handlePublish = async () => {
     if (!caption.trim() && uploadedAssets.length === 0) { toast.error("Add a caption or media before publishing."); return; }
-    if (selectedPlatforms.length === 0) { toast.error("Select at least one platform."); return; }
+    // TikTok posts from its own panel (it needs per-post privacy and disclosure choices).
+    const schedulePlatforms = selectedPlatforms.filter(p => p !== 'tt');
+    if (schedulePlatforms.length === 0) {
+      toast.error(selectedPlatforms.includes('tt') ? "Use the Post to TikTok button in the TikTok panel." : "Select at least one platform.");
+      return;
+    }
     const platformKey: Record<string, string> = { ig: 'instagram', tt: 'tiktok', li: 'linkedin', fb: 'facebook', tw: 'twitter', yt: 'youtube' };
-    const notConnected = selectedPlatforms.filter(p => connections[platformKey[p]] && !connections[platformKey[p]].connected);
+    const notConnected = schedulePlatforms.filter(p => connections[platformKey[p]] && !connections[platformKey[p]].connected);
     if (notConnected.length > 0) {
       const p = platformKey[notConnected[0]];
       toast.error(`${POST_PLATFORMS.find(x => x.id === notConnected[0])?.label} isn't ready.`, { description: connections[p]?.error });
       return;
     }
     const mediaRequiredLabels: Record<string, string> = { ig: 'Instagram', tt: 'TikTok', yt: 'YouTube' };
-    const missingMediaPlatforms = selectedPlatforms.filter(p => mediaRequiredLabels[p]);
+    const missingMediaPlatforms = schedulePlatforms.filter(p => mediaRequiredLabels[p]);
     if (missingMediaPlatforms.length > 0 && uploadedAssets.length === 0) {
       toast.error(`${missingMediaPlatforms.map(p => mediaRequiredLabels[p]).join(', ')} require media.`, { description: "Text-only posts fail silently on these platforms — add a photo or video." });
       return;
@@ -720,7 +743,7 @@ const AutoPostTab: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...scheduleAuthHeader },
         body: JSON.stringify({
-          platforms: selectedPlatforms.map(p => platformMap[p] || p),
+          platforms: schedulePlatforms.map(p => platformMap[p] || p),
           scheduledTime, caption, mediaUrls, linkedinCompanyId, profile_id: profileId,
         }),
       });
@@ -728,7 +751,7 @@ const AutoPostTab: React.FC = () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || `Server responded with ${response.status}`);
 
-      const newJobs: DistributionJob[] = selectedPlatforms.map(pId => ({
+      const newJobs: DistributionJob[] = schedulePlatforms.map(pId => ({
         id: `${Date.now()}-${pId}`, platform: platformMap[pId] || pId, status: 'queued' as const,
         scheduledFor: scheduledTime, caption: caption.substring(0, 80) + (caption.length > 80 ? '...' : ''),
         createdAt: new Date().toISOString(),
@@ -736,7 +759,7 @@ const AutoPostTab: React.FC = () => {
 
       setDistributionJobs(prev => [...newJobs, ...prev].slice(0, 20));
       loadRecentPosts();
-      toast.success(`Scheduled across ${selectedPlatforms.length} platform(s)!`);
+      toast.success(`Scheduled across ${schedulePlatforms.length} platform(s)!`);
       setCaption('');
       setUploadedAssets([]);
       localStorage.removeItem('titanleap_autopost_caption');
@@ -850,13 +873,17 @@ const AutoPostTab: React.FC = () => {
                         onChange={(e) => { setLinkedinCompanyId(e.target.value); localStorage.setItem('titanleap_li_company_id', e.target.value); }}
                         placeholder="e.g. 12345678"
                         className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-3 py-2.5 text-sm font-medium focus:outline-none focus:border-primary transition-all" />
-                      <p className="text-[9px] text-on-surface-variant/40 ml-1">Required for LinkedIn company page posts</p>
+                      <p className="text-[9px] text-on-surface-variant/40 ml-1">Optional. Leave blank to post to the first company page the LinkedIn token manages</p>
                     </div>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
+
+          {selectedPlatforms.includes('tt') && (
+            <TikTokComposer assets={uploadedAssets} caption={caption} profileId={profileId} />
+          )}
         </div>
 
         {/* RIGHT: Platforms + Publish + Jobs */}

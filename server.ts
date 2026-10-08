@@ -5,7 +5,8 @@ import path from "path";
 import fs from "fs";
 import AdmZip from "adm-zip";
 import { executePublishingDaemon } from "./src/services/daemon.ts";
-import { authRouter } from "./src/services/auth.ts";
+import { authRouter, setTikTokTokenSaver } from "./src/services/auth.ts";
+import { registerTikTokRoutes } from "./src/services/tiktokPost.ts";
 import { twitterManualRouter } from "./src/services/twitter-manual.ts";
 import { createClient } from '@supabase/supabase-js';
 import { extractJsonObject } from "./src/lib/extractJson.ts";
@@ -91,6 +92,10 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
 
   // Mount Auth Router
   app.use("/api/auth", authRouter);
+
+  // TikTok Direct Post (creator info, publish, status, media proxy). Tokens stay server-side.
+  const tiktok = registerTikTokRoutes(app, { supabase, supabaseUrl: supabaseUrl || '', requireUser });
+  setTikTokTokenSaver(tiktok.saveTokens);
   
   // Mount Twitter Manual Router
   app.use("/api/twitter", twitterManualRouter);
@@ -1698,6 +1703,12 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
         return res.status(400).json({ error: "A valid scheduledTime is required." });
       }
 
+      // TikTok needs per-post choices and consent (its Content Sharing Guidelines), so it posts
+      // from its own panel rather than the scheduler.
+      if (platforms.includes('tiktok')) {
+        return res.status(400).json({ error: "Post to TikTok from the TikTok panel; it needs your privacy and disclosure choices." });
+      }
+
       // Instagram, TikTok and YouTube reject/silently drop text-only posts — require media upfront.
       const MEDIA_REQUIRED_PLATFORMS = ['instagram', 'tiktok', 'youtube'];
       const missingMedia = platforms.filter((p: string) => MEDIA_REQUIRED_PLATFORMS.includes(p));
@@ -1762,7 +1773,8 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
   const connectionsCache = new Map<string, { at: number; data: any }>();
   app.get("/api/posts/connections", requireUser, async (req, res) => {
     const profileId = String(req.query.profile_id || 'default');
-    const cached = connectionsCache.get(profileId);
+    const cacheKey = `${profileId}|${req.query.linkedin_company_id || ''}`;
+    const cached = connectionsCache.get(cacheKey);
     if (cached && Date.now() - cached.at < 5 * 60 * 1000 && req.query.refresh !== '1') return res.json(cached.data);
 
     let creds: any = null;
@@ -1781,8 +1793,6 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     const fbToken = creds?.facebook_token || process.env.META_PAGE_ACCESS_TOKEN;
     const fbPageId = creds?.meta_fb_page_id || process.env.META_FB_PAGE_ID;
     const liToken = creds?.linkedin_token || process.env.LINKEDIN_ACCESS_TOKEN;
-    const liOrg = creds?.linkedin_org_id || process.env.LINKEDIN_DEFAULT_ORG_ID;
-    const liPerson = creds?.linkedin_person_id || process.env.LINKEDIN_PERSON_ID;
     const ttToken = creds?.tiktok_token || process.env.TIKTOK_ACCESS_TOKEN;
 
     const [instagram, facebook, linkedin] = await Promise.all([
@@ -1800,7 +1810,7 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
       }),
       check(async () => {
         if (!liToken) throw new Error('Not connected: set LINKEDIN_ACCESS_TOKEN');
-        if (!liOrg && !liPerson) throw new Error('Token set, but no LINKEDIN_DEFAULT_ORG_ID or LINKEDIN_PERSON_ID. Add a Company ID in Advanced Settings');
+        const who = await resolveLinkedinAuthor(liToken, creds, String(req.query.linkedin_company_id || ''));
         // Token introspection works for any scope set, unlike /me or /userinfo.
         const r = await fetch('https://www.linkedin.com/oauth/v2/introspectToken', {
           method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1809,7 +1819,7 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
         const d: any = await r.json().catch(() => ({}));
         if (r.ok && d.active === false) throw new Error('LinkedIn token has expired. Reconnect LinkedIn');
         const days = r.ok && d.expires_at ? Math.round((d.expires_at * 1000 - Date.now()) / 86400000) : null;
-        return `${liOrg ? `Company ${liOrg}` : 'Personal profile'}${days !== null ? ` · token valid ${days}d` : ''}`;
+        return `${who.label}${days !== null ? ` · token valid ${days}d` : ''}`;
       }),
     ]);
     const data = {
@@ -1818,7 +1828,7 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
       twitter: { connected: false, error: 'Images need the paid X API' },
       youtube: { connected: false, error: 'Video upload not built yet' },
     };
-    connectionsCache.set(profileId, { at: Date.now(), data });
+    connectionsCache.set(cacheKey, { at: Date.now(), data });
     res.json(data);
   });
 
@@ -1915,13 +1925,47 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     return { success: true, id: data.id, photos: Object.keys(attached).length };
   }
 
+  // Who LinkedIn posts are published as: an explicit company ID, then configured IDs, then
+  // whatever the token itself can post as (first company page it administers, else the member).
+  const linkedinAuthorCache = new Map<string, { author: string; label: string }>();
+  async function resolveLinkedinAuthor(token: string, creds: any, explicitOrgId?: string | null) {
+    const orgId = (explicitOrgId || '').trim() || creds?.linkedin_org_id || process.env.LINKEDIN_DEFAULT_ORG_ID;
+    if (orgId) return { author: `urn:li:organization:${orgId}`, label: `Company ${orgId}` };
+    const personId = creds?.linkedin_person_id || process.env.LINKEDIN_PERSON_ID;
+    if (personId) return { author: `urn:li:person:${personId}`, label: 'Personal profile' };
+
+    const cached = linkedinAuthorCache.get(token);
+    if (cached) return cached;
+    const headers = { Authorization: `Bearer ${token}`, 'X-Restli-Protocol-Version': '2.0.0' };
+    const acl = await fetch('https://api.linkedin.com/v2/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED', { headers });
+    if (acl.ok) {
+      const d: any = await acl.json().catch(() => ({}));
+      const orgUrn = d?.elements?.[0]?.organization || d?.elements?.[0]?.organizationTarget;
+      if (orgUrn) {
+        let label = `Company ${orgUrn.split(':').pop()}`;
+        const org = await fetch(`https://api.linkedin.com/v2/organizations/${orgUrn.split(':').pop()}`, { headers }).catch(() => null);
+        if (org?.ok) { const o: any = await org.json().catch(() => ({})); if (o.localizedName) label = o.localizedName; }
+        const found = { author: orgUrn, label };
+        linkedinAuthorCache.set(token, found);
+        return found;
+      }
+    }
+    const me = await fetch('https://api.linkedin.com/v2/userinfo', { headers: { Authorization: `Bearer ${token}` } });
+    if (me.ok) {
+      const u: any = await me.json().catch(() => ({}));
+      if (u.sub) {
+        const found = { author: `urn:li:person:${u.sub}`, label: u.name ? `${u.name} (personal)` : 'Personal profile' };
+        linkedinAuthorCache.set(token, found);
+        return found;
+      }
+    }
+    throw new Error(`LinkedIn token can't see a company page or profile (company lookup ${acl.status}, profile ${me.status}). Add the Company ID in Advanced Settings`);
+  }
+
   async function publishToLinkedin(post: any, creds: any) {
     const token = creds?.linkedin_token || process.env.LINKEDIN_ACCESS_TOKEN;
     if (!token) throw new Error('Missing LinkedIn token for this client');
-    const orgId = post.linkedin_company_id || creds?.linkedin_org_id || process.env.LINKEDIN_DEFAULT_ORG_ID;
-    const personId = creds?.linkedin_person_id || process.env.LINKEDIN_PERSON_ID;
-    if (!orgId && !personId) throw new Error('Set a LinkedIn Company ID (Advanced Settings) or LINKEDIN_PERSON_ID');
-    const author = orgId ? `urn:li:organization:${orgId}` : `urn:li:person:${personId}`;
+    const { author } = await resolveLinkedinAuthor(token, creds, post.linkedin_company_id);
     const headers = { Authorization: `Bearer ${token}`, 'X-Restli-Protocol-Version': '2.0.0', 'Content-Type': 'application/json' };
     const liError = async (res: Response, what: string) => {
       const text = await res.text().catch(() => '');
