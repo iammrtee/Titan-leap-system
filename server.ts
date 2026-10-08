@@ -1729,11 +1729,97 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
 
       if (error) throw error;
 
+      // Due now (or in the past): publish straight away instead of waiting for the next poll.
+      if (new Date(data.scheduled_for).getTime() <= Date.now()) void publishScheduledPosts();
+
       res.status(201).json({ success: true, post: data });
     } catch (err: any) {
       console.error('[Posts] Schedule error:', err);
       res.status(500).json({ error: err.message || 'Failed to schedule post' });
     }
+  });
+
+  // Recent scheduled posts with per-platform results, so the Auto Post screen can show what happened.
+  app.get("/api/posts/recent", requireUser, async (req, res) => {
+    try {
+      const profileId = String(req.query.profile_id || 'default');
+      const { data, error } = await supabase
+        .from('scheduled_posts')
+        .select('id, caption, media_urls, platforms, scheduled_for, status, platform_results, created_at')
+        .eq('profile_id', profileId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      res.json({ posts: (data || []).map((p: any) => ({
+        ...p, caption: String(p.caption || '').slice(0, 120), media_count: (p.media_urls || []).length, media_urls: undefined,
+      })) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Could not load posts' });
+    }
+  });
+
+  // Which platforms have working credentials. Returns account names and errors only, never tokens.
+  const connectionsCache = new Map<string, { at: number; data: any }>();
+  app.get("/api/posts/connections", requireUser, async (req, res) => {
+    const profileId = String(req.query.profile_id || 'default');
+    const cached = connectionsCache.get(profileId);
+    if (cached && Date.now() - cached.at < 5 * 60 * 1000 && req.query.refresh !== '1') return res.json(cached.data);
+
+    let creds: any = null;
+    try {
+      const { data } = await supabase.from('user_settings').select('*').eq('profile_id', profileId).maybeSingle();
+      creds = data;
+    } catch {}
+
+    const check = async (fn: () => Promise<string | null>) => {
+      try { return { connected: true, account: await fn() }; }
+      catch (e: any) { return { connected: false, error: String(e?.message || e).slice(0, 200) }; }
+    };
+
+    const igToken = creds?.facebook_token || process.env.META_ACCESS_TOKEN;
+    const igUserId = creds?.meta_ig_user_id || process.env.META_IG_USER_ID;
+    const fbToken = creds?.facebook_token || process.env.META_PAGE_ACCESS_TOKEN;
+    const fbPageId = creds?.meta_fb_page_id || process.env.META_FB_PAGE_ID;
+    const liToken = creds?.linkedin_token || process.env.LINKEDIN_ACCESS_TOKEN;
+    const liOrg = creds?.linkedin_org_id || process.env.LINKEDIN_DEFAULT_ORG_ID;
+    const liPerson = creds?.linkedin_person_id || process.env.LINKEDIN_PERSON_ID;
+    const ttToken = creds?.tiktok_token || process.env.TIKTOK_ACCESS_TOKEN;
+
+    const [instagram, facebook, linkedin] = await Promise.all([
+      check(async () => {
+        if (!igToken || !igUserId) throw new Error('Not connected: set META_ACCESS_TOKEN and META_IG_USER_ID');
+        const me = await igGraph(igToken, igUserId, { fields: 'username' }, 'GET');
+        return me.username ? `@${me.username}` : null;
+      }),
+      check(async () => {
+        if (!fbToken || !fbPageId) throw new Error('Not connected: set META_PAGE_ACCESS_TOKEN and META_FB_PAGE_ID');
+        const r = await fetch(`https://graph.facebook.com/v21.0/${fbPageId}?` + new URLSearchParams({ fields: 'name', access_token: fbToken }));
+        const d: any = await r.json().catch(() => ({}));
+        if (!r.ok || d.error) throw new Error(d?.error?.message || `Facebook error ${r.status}`);
+        return d.name || null;
+      }),
+      check(async () => {
+        if (!liToken) throw new Error('Not connected: set LINKEDIN_ACCESS_TOKEN');
+        if (!liOrg && !liPerson) throw new Error('Token set, but no LINKEDIN_DEFAULT_ORG_ID or LINKEDIN_PERSON_ID. Add a Company ID in Advanced Settings');
+        // Token introspection works for any scope set, unlike /me or /userinfo.
+        const r = await fetch('https://www.linkedin.com/oauth/v2/introspectToken', {
+          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ token: liToken, client_id: process.env.LINKEDIN_CLIENT_ID || '', client_secret: process.env.LINKEDIN_CLIENT_SECRET || '' }),
+        });
+        const d: any = await r.json().catch(() => ({}));
+        if (r.ok && d.active === false) throw new Error('LinkedIn token has expired. Reconnect LinkedIn');
+        const days = r.ok && d.expires_at ? Math.round((d.expires_at * 1000 - Date.now()) / 86400000) : null;
+        return `${liOrg ? `Company ${liOrg}` : 'Personal profile'}${days !== null ? ` · token valid ${days}d` : ''}`;
+      }),
+    ]);
+    const data = {
+      instagram, facebook, linkedin,
+      tiktok: ttToken ? { connected: true, account: 'Private posts only until TikTok approves the app' } : { connected: false, error: 'Not connected' },
+      twitter: { connected: false, error: 'Images need the paid X API' },
+      youtube: { connected: false, error: 'Video upload not built yet' },
+    };
+    connectionsCache.set(profileId, { at: Date.now(), data });
+    res.json(data);
   });
 
   // ─── Scheduled Post Publisher ───
@@ -1833,19 +1919,58 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     const token = creds?.linkedin_token || process.env.LINKEDIN_ACCESS_TOKEN;
     if (!token) throw new Error('Missing LinkedIn token for this client');
     const orgId = post.linkedin_company_id || creds?.linkedin_org_id || process.env.LINKEDIN_DEFAULT_ORG_ID;
-    const author = orgId ? `urn:li:organization:${orgId}` : `urn:li:person:${creds?.linkedin_person_id || process.env.LINKEDIN_PERSON_ID}`;
+    const personId = creds?.linkedin_person_id || process.env.LINKEDIN_PERSON_ID;
+    if (!orgId && !personId) throw new Error('Set a LinkedIn Company ID (Advanced Settings) or LINKEDIN_PERSON_ID');
+    const author = orgId ? `urn:li:organization:${orgId}` : `urn:li:person:${personId}`;
+    const headers = { Authorization: `Bearer ${token}`, 'X-Restli-Protocol-Version': '2.0.0', 'Content-Type': 'application/json' };
+    const liError = async (res: Response, what: string) => {
+      const text = await res.text().catch(() => '');
+      let msg = text;
+      try { msg = JSON.parse(text)?.message || text; } catch {}
+      return new Error(`${what} (${res.status})${msg ? `: ${msg.slice(0, 300)}` : ''}`);
+    };
+
+    // Images: register an upload per image, PUT the bytes, then reference the asset URNs (max 9).
+    const images: string[] = (post.media_urls || []).filter((u: string) => u && !isVideoUrl(u)).slice(0, 9);
+    const assets: string[] = [];
+    for (const url of images) {
+      const reg = await fetch('https://api.linkedin.com/v2/assets?action=registerUpload', {
+        method: 'POST', headers,
+        body: JSON.stringify({ registerUploadRequest: {
+          recipes: ['urn:li:digitalmediaRecipe:feedshare-image'], owner: author,
+          serviceRelationships: [{ relationshipType: 'OWNER', identifier: 'urn:li:userGeneratedContent' }],
+        } }),
+      });
+      if (!reg.ok) throw await liError(reg, 'LinkedIn image registration failed');
+      const regData: any = await reg.json();
+      const uploadUrl = regData?.value?.uploadMechanism?.['com.linkedin.digitalmedia.uploadMechanism.MediaUploadHttpRequest']?.uploadUrl;
+      if (!uploadUrl) throw new Error('LinkedIn did not return an upload URL');
+      const img = await fetch(url);
+      if (!img.ok) throw new Error(`Could not download media for LinkedIn (${img.status})`);
+      const put = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': img.headers.get('content-type') || 'image/jpeg' },
+        body: Buffer.from(await img.arrayBuffer()),
+      });
+      if (!put.ok) throw await liError(put, 'LinkedIn image upload failed');
+      assets.push(regData.value.asset);
+    }
+
     const res = await fetch('https://api.linkedin.com/v2/ugcPosts', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'X-Restli-Protocol-Version': '2.0.0', 'Content-Type': 'application/json' },
+      method: 'POST', headers,
       body: JSON.stringify({
         author, lifecycleState: 'PUBLISHED',
-        specificContent: { 'com.linkedin.ugc.ShareContent': { shareCommentary: { text: post.caption || '' }, shareMediaCategory: 'NONE' } },
+        specificContent: { 'com.linkedin.ugc.ShareContent': {
+          shareCommentary: { text: post.caption || '' },
+          shareMediaCategory: assets.length ? 'IMAGE' : 'NONE',
+          ...(assets.length ? { media: assets.map(media => ({ status: 'READY', media })) } : {}),
+        } },
         visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
       }),
     });
-    if (!res.ok) throw new Error((await res.text()) || 'LinkedIn publish failed');
-    const data = await res.json();
-    return { success: true, id: data.id };
+    if (!res.ok) throw await liError(res, 'LinkedIn publish failed');
+    const data = await res.json().catch(() => ({}));
+    return { success: true, id: data.id || res.headers.get('x-restli-id'), images: assets.length };
   }
 
   async function publishToTwitter(post: any, creds: any) {
