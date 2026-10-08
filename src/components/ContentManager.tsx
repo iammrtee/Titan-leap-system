@@ -7,6 +7,7 @@ import { cn } from '@/src/lib/utils';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 import { safeStorageName, toPostableJpeg, instagramRatioProblem } from '@/src/lib/postMedia';
 import { TikTokComposer } from './TikTokComposer';
+import { ConnectedAccounts, type Connection } from './ConnectedAccounts';
 
 // ─── Content Manager Tab Types ───
 type ContentManagerTab = 'production' | 'autopost';
@@ -135,8 +136,10 @@ function getProgressPct(card: Task) { return Math.round((getCountChecked(card) /
 // ═══════════════════════════════════════════
 export const ContentManager: React.FC = () => {
   // Land on Auto Post when returning from TikTok's connect screen.
-  const [managerTab, setManagerTab] = useState<ContentManagerTab>(() =>
-    new URLSearchParams(window.location.search).has('tiktok') ? 'autopost' : 'production');
+  const [managerTab, setManagerTab] = useState<ContentManagerTab>(() => {
+    const q = new URLSearchParams(window.location.search);
+    return q.has('connected') || q.has('connect_error') ? 'autopost' : 'production';
+  });
   const [sendToProductionSignal, setSendToProductionSignal] = useState<number>(0);
 
   return (
@@ -673,7 +676,7 @@ const AutoPostTab: React.FC = () => {
   };
 
   // Which platforms are actually connected, and what happened to recent posts.
-  const [connections, setConnections] = useState<Record<string, { connected: boolean; account?: string | null; error?: string }>>({});
+  const [connections, setConnections] = useState<Record<string, Connection>>({});
   const [recentPosts, setRecentPosts] = useState<any[]>([]);
   const loadConnections = async (refresh = false) => {
     try {
@@ -691,16 +694,21 @@ const AutoPostTab: React.FC = () => {
   // Re-check LinkedIn when the Company ID changes (debounced).
   useEffect(() => { const t = setTimeout(() => loadConnections(), 800); return () => clearTimeout(t); }, [linkedinCompanyId]);
 
-  // Returning from TikTok's connect screen: select TikTok so its panel opens.
+  // Returning from a platform's connect screen (?connected=<platform> or ?connect_error=...).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const tt = params.get('tiktok');
-    if (!tt) return;
-    if (tt === 'connected') {
-      toast.success('TikTok connected');
-      setSelectedPlatforms(prev => prev.includes('tt') ? prev : [...prev, 'tt']);
+    const connected = params.get('connected');
+    const failed = params.get('connect_error');
+    if (!connected && !failed) return;
+    const names: Record<string, string> = { meta: 'Instagram + Facebook', linkedin: 'LinkedIn', tiktok: 'TikTok', twitter: 'X' };
+    if (connected) {
+      toast.success(`${names[connected] || connected} connected`);
+      if (connected === 'tiktok') setSelectedPlatforms(prev => prev.includes('tt') ? prev : [...prev, 'tt']);
+    } else {
+      toast.error(`${names[params.get('platform') || ''] || 'Account'} not connected`, { description: failed || undefined });
     }
-    params.delete('tiktok');
+    loadConnections(true);
+    ['connected', 'connect_error', 'platform'].forEach(k => params.delete(k));
     window.history.replaceState({}, '', window.location.pathname + (params.toString() ? `?${params}` : ''));
   }, []);
   // Poll while anything is still waiting to go out.
@@ -886,8 +894,10 @@ const AutoPostTab: React.FC = () => {
           )}
         </div>
 
-        {/* RIGHT: Platforms + Publish + Jobs */}
+        {/* RIGHT: Accounts + Platforms + Publish + Jobs */}
         <div className="space-y-6">
+          <ConnectedAccounts connections={connections} profileId={profileId} onChanged={() => loadConnections(true)} />
+
           <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 p-6">
             <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-4">Platforms</div>
             <div className="space-y-2">

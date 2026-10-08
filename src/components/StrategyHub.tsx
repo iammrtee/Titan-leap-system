@@ -177,42 +177,18 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   
   // Listen for OAuth success messages from popup
   useEffect(() => {
+    // Connect-account popups store tokens server-side and only report success here.
     const handleMessage = (event: MessageEvent) => {
-      // Validate origin is from AI Studio preview or localhost
-      const origin = event.origin;
-      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) {
+      if (event.origin !== window.location.origin || event.data?.type !== 'ACCOUNT_CONNECTED') return;
+      setIsAuthenticating(false);
+      setConnectingPlatform(null);
+      if (!event.data.ok) {
+        toast.error(`Could not connect ${event.data.platform}`, { description: event.data.error || undefined });
         return;
       }
-      
-      if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
-        const { platform, tokens } = event.data;
-        
-        // Save tokens to Supabase user_settings
-        if (isSupabaseConfigured) {
-          supabase.from('user_settings').upsert({
-            profile_id: profileId, // Use the actual selected profileId!
-            [`${platform}_token`]: tokens.access_token,
-            [`${platform}_refresh_token`]: tokens.refresh_token,
-            updated_at: new Date().toISOString()
-          }).then(() => {
-            toast.success(`Successfully connected ${platform} for profile: ${profileId}!`);
-            setShowCredentialsModal(false);
-            setIsAuthenticating(false);
-            // Proceed to publish now that we have tokens
-            executePublish();
-          });
-        } else {
-          // Fallback to local storage - scope by profileId
-          localStorage.setItem(`titanleap_${platform}_token_${profileId}`, tokens.access_token);
-          // Also save to global as fallback
-          localStorage.setItem(`titanleap_${platform}_token`, tokens.access_token);
-          
-          toast.success(`Successfully connected ${platform} for profile: ${profileId}!`);
-          setShowCredentialsModal(false);
-          setIsAuthenticating(false);
-          executePublish();
-        }
-      }
+      toast.success(`Connected ${event.data.platform} for profile: ${profileId}`);
+      setShowCredentialsModal(false);
+      executePublish();
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
@@ -312,7 +288,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     setIsAuthenticating(true); setConnectingPlatform(platform);
     try {
       // 1. Fetch the OAuth URL from your server
-      const response = await fetch(`/api/auth/${platform}/url`);
+      const response = await fetch(`/api/auth/${platform === 'facebook' || platform === 'instagram' ? 'meta' : platform}/url?profile_id=${encodeURIComponent(profileId)}`, { headers: await getAuthHeader() });
       if (!response.ok) {
         throw new Error('Failed to get auth URL');
       }

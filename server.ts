@@ -5,7 +5,8 @@ import path from "path";
 import fs from "fs";
 import AdmZip from "adm-zip";
 import { executePublishingDaemon } from "./src/services/daemon.ts";
-import { authRouter, setTikTokTokenSaver } from "./src/services/auth.ts";
+import { authRouter, setAccountStore } from "./src/services/auth.ts";
+import { openCreds } from "./src/services/tokenVault.ts";
 import { registerTikTokRoutes } from "./src/services/tiktokPost.ts";
 import { twitterManualRouter } from "./src/services/twitter-manual.ts";
 import { createClient } from '@supabase/supabase-js';
@@ -90,12 +91,20 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
 
   app.use(express.json({ limit: '50mb' })); // Increased limit for base64 media
 
-  // Mount Auth Router
-  app.use("/api/auth", authRouter);
+  // Connect-account OAuth. Starting a flow (/url) requires a signed-in user, so nobody else
+  // can attach their own account to one of our profiles; callbacks are checked by state.
+  app.use("/api/auth", (req, res, next) => (req.path.endsWith('/url') ? requireUser(req, res, next) : next()), authRouter);
+  setAccountStore(async (profileId, fields) => {
+    const { error } = await supabase.from('user_settings').upsert({ profile_id: profileId, ...fields }, { onConflict: 'profile_id' });
+    if (error) {
+      throw new Error(/column/i.test(error.message)
+        ? 'The database is missing account columns. Run section 12 of supabase-schema.sql in Supabase.'
+        : error.message);
+    }
+  });
 
   // TikTok Direct Post (creator info, publish, status, media proxy). Tokens stay server-side.
   const tiktok = registerTikTokRoutes(app, { supabase, supabaseUrl: supabaseUrl || '', requireUser });
-  setTikTokTokenSaver(tiktok.saveTokens);
   
   // Mount Twitter Manual Router
   app.use("/api/twitter", twitterManualRouter);
@@ -1780,7 +1789,7 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     let creds: any = null;
     try {
       const { data } = await supabase.from('user_settings').select('*').eq('profile_id', profileId).maybeSingle();
-      creds = data;
+      creds = openCreds(data);
     } catch {}
 
     const check = async (fn: () => Promise<string | null>) => {
@@ -1793,7 +1802,6 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     const fbToken = creds?.facebook_token || process.env.META_PAGE_ACCESS_TOKEN;
     const fbPageId = creds?.meta_fb_page_id || process.env.META_FB_PAGE_ID;
     const liToken = creds?.linkedin_token || process.env.LINKEDIN_ACCESS_TOKEN;
-    const ttToken = creds?.tiktok_token || process.env.TIKTOK_ACCESS_TOKEN;
 
     const [instagram, facebook, linkedin] = await Promise.all([
       check(async () => {
@@ -1829,14 +1837,39 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
         return `${who.label}${days !== null ? ` · token valid ${days}d` : ''}${note}`;
       }),
     ]);
+    const tiktokStatus = await tiktok.status(profileId);
+    // Where each connection comes from: connected in the app (removable) or env vars in Render.
+    const source = (appField: any, envField: any) => (appField ? 'app' : envField ? 'env' : null);
+    const has = (...names: string[]) => names.every(n => !!process.env[n]);
     const data = {
-      instagram, facebook, linkedin,
-      tiktok: ttToken ? { connected: true, account: 'Private posts only until TikTok approves the app' } : { connected: false, error: 'Not connected' },
-      twitter: { connected: false, error: 'Images need the paid X API' },
-      youtube: { connected: false, error: 'Video upload not built yet' },
+      instagram: { ...instagram, source: source(creds?.facebook_token && creds?.meta_ig_user_id, process.env.META_ACCESS_TOKEN), connectVia: 'meta', canConnect: has('META_APP_ID', 'META_APP_SECRET'), setup: 'Add META_APP_ID and META_APP_SECRET in Render to connect from here' },
+      facebook: { ...facebook, source: source(creds?.facebook_token && creds?.meta_fb_page_id, process.env.META_PAGE_ACCESS_TOKEN), connectVia: 'meta', canConnect: has('META_APP_ID', 'META_APP_SECRET'), setup: 'Add META_APP_ID and META_APP_SECRET in Render to connect from here' },
+      linkedin: { ...linkedin, source: source(creds?.linkedin_token, process.env.LINKEDIN_ACCESS_TOKEN), connectVia: 'linkedin', canConnect: has('LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'), setup: 'Add LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET in Render' },
+      tiktok: { ...tiktokStatus, source: source(creds?.tiktok_token, process.env.TIKTOK_ACCESS_TOKEN), connectVia: 'tiktok', canConnect: has('TIKTOK_CLIENT_KEY', 'TIKTOK_CLIENT_SECRET'), setup: 'Add TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET in Render' },
+      twitter: { connected: false, error: 'Images need the paid X API', source: source(creds?.twitter_token, process.env.TWITTER_BEARER_TOKEN), connectVia: null, canConnect: false },
+      youtube: { connected: false, error: 'Video upload not built yet', source: null, connectVia: null, canConnect: false },
     };
     connectionsCache.set(cacheKey, { at: Date.now(), data });
     res.json(data);
+  });
+
+  // Remove an account connected in the app (env-var connections are managed in Render).
+  const DISCONNECT_FIELDS: Record<string, string[]> = {
+    meta: ['facebook_token', 'facebook_refresh_token', 'meta_fb_page_id', 'meta_ig_user_id'],
+    linkedin: ['linkedin_token', 'linkedin_refresh_token', 'linkedin_org_id', 'linkedin_person_id'],
+    tiktok: ['tiktok_token', 'tiktok_refresh_token', 'tiktok_open_id'],
+    twitter: ['twitter_token', 'twitter_refresh_token'],
+  };
+  app.post("/api/accounts/:platform/disconnect", requireUser, async (req, res) => {
+    const fields = DISCONNECT_FIELDS[req.params.platform];
+    if (!fields) return res.status(400).json({ error: 'Unknown platform' });
+    const profileId = String(req.body?.profile_id || 'default');
+    const { error } = await supabase.from('user_settings')
+      .update({ ...Object.fromEntries(fields.map(f => [f, null])), updated_at: new Date().toISOString() })
+      .eq('profile_id', profileId);
+    if (error) return res.status(500).json({ error: error.message });
+    for (const k of connectionsCache.keys()) if (k.startsWith(`${profileId}|`)) connectionsCache.delete(k);
+    res.json({ success: true });
   });
 
   // ─── Scheduled Post Publisher ───
@@ -2122,7 +2155,7 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
             .select('*')
             .eq('profile_id', post.profile_id || 'default')
             .maybeSingle();
-          creds = credsRow;
+          creds = openCreds(credsRow);
         } catch (credsErr: any) {
           console.warn('[Scheduler] Could not load per-client credentials, falling back to env vars:', credsErr?.message || credsErr);
         }

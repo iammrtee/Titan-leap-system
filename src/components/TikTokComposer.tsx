@@ -91,8 +91,9 @@ export const TikTokComposer: React.FC<{ assets: Asset[]; caption: string; profil
 
   const connect = async () => {
     try {
-      const res = await fetch(`/api/auth/tiktok/url?profile_id=${encodeURIComponent(profileId)}`);
+      const res = await fetch(`/api/auth/tiktok/url?profile_id=${encodeURIComponent(profileId)}`, { headers: await getAuthHeader() });
       const { url } = await res.json();
+      if (!url) throw new Error();
       window.location.href = url;
     } catch {
       toast.error('Could not start the TikTok connection.');

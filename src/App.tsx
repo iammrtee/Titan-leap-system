@@ -46,7 +46,8 @@ export default function App() {
     const savedDarkMode = localStorage.getItem('titanleap_dark_mode');
     const savedSidebarState = localStorage.getItem('titanleap_sidebar_collapsed');
 
-    if (new URLSearchParams(window.location.search).has('tiktok')) setActiveView('content');
+    const q = new URLSearchParams(window.location.search);
+    if (q.has('connected') || q.has('connect_error')) setActiveView('content');
     else if (savedView) setActiveView(savedView as ViewType);
     if (savedAuditData) {
       try {
