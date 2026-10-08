@@ -1817,6 +1817,7 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
         return d.name || null;
       }),
       check(async () => {
+        if (process.env.LINKEDIN_COMPANY_WEBHOOK_URL && !creds?.linkedin_org_id) return 'Company page (via Make)';
         if (!liToken) throw new Error('Not connected: set LINKEDIN_ACCESS_TOKEN');
         const who = await resolveLinkedinAuthor(liToken, creds, String(req.query.linkedin_company_id || ''));
         // Token introspection works for any scope set, unlike /me or /userinfo.
@@ -2002,7 +2003,30 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     throw new Error(`LinkedIn token can't see a company page or profile (company lookup ${acl.status}, profile ${me.status}). Add the Company ID in Advanced Settings`);
   }
 
+  // Until LinkedIn approves our Community Management API access, company page posts can go
+  // through a Make.com scenario (Webhook -> LinkedIn "Create a Company Image Post").
+  async function publishToLinkedinViaWebhook(post: any, hook: string) {
+    const images: string[] = (post.media_urls || []).filter((u: string) => u && !isVideoUrl(u)).slice(0, 9);
+    const res = await fetch(hook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: post.caption || '',
+        image_urls: images,
+        image_count: images.length,
+        first_image_url: images[0] || null,
+        company_id: post.linkedin_company_id || process.env.LINKEDIN_DEFAULT_ORG_ID || null,
+        post_id: post.id,
+      }),
+    });
+    const body = await res.text().catch(() => '');
+    if (!res.ok) throw new Error(`LinkedIn via Make failed (${res.status})${body ? `: ${body.slice(0, 200)}` : ''}`);
+    return { success: true, via: 'make', images: images.length };
+  }
+
   async function publishToLinkedin(post: any, creds: any) {
+    const hook = process.env.LINKEDIN_COMPANY_WEBHOOK_URL;
+    if (hook && !creds?.linkedin_org_id) return publishToLinkedinViaWebhook(post, hook);
     const token = creds?.linkedin_token || process.env.LINKEDIN_ACCESS_TOKEN;
     if (!token) throw new Error('Missing LinkedIn token for this client');
     const { author } = await resolveLinkedinAuthor(token, creds, post.linkedin_company_id);
