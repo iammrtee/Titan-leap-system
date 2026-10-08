@@ -1819,7 +1819,14 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
         const d: any = await r.json().catch(() => ({}));
         if (r.ok && d.active === false) throw new Error('LinkedIn token has expired. Reconnect LinkedIn');
         const days = r.ok && d.expires_at ? Math.round((d.expires_at * 1000 - Date.now()) / 86400000) : null;
-        return `${who.label}${days !== null ? ` · token valid ${days}d` : ''}`;
+        // Company posting needs w_organization_social, which only LinkedIn's Community Management API grants.
+        const scopes = r.ok && typeof d.scope === 'string' ? d.scope : '';
+        const canPostAsCompany = scopes ? /w_organization_social/.test(scopes) : null;
+        if (who.author.includes(':organization:') && canPostAsCompany === false) {
+          throw new Error(`This token can't post as a company page yet (needs LinkedIn's Community Management API approval). Clear the Company ID to post to your profile`);
+        }
+        const note = !who.author.includes(':organization:') && canPostAsCompany === false ? ' · company page posting awaits LinkedIn approval' : '';
+        return `${who.label}${days !== null ? ` · token valid ${days}d` : ''}${note}`;
       }),
     ]);
     const data = {
