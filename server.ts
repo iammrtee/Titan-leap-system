@@ -1743,41 +1743,90 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
   // that isn't wired yet, so both just record a clear failure reason.
   const esc = (s: string) => String(s);
 
+  const isVideoUrl = (u: string) => /\.(mp4|mov|webm)(\?|$)/i.test(u);
+
+  // Instagram Login tokens (IG…) use graph.instagram.com; Facebook Login tokens (EA…) use graph.facebook.com.
+  async function igGraph(token: string, path: string, params: Record<string, string>, method: 'GET' | 'POST' = 'POST') {
+    const host = token.startsWith('IG') ? 'https://graph.instagram.com/v21.0' : 'https://graph.facebook.com/v21.0';
+    const res = await fetch(`${host}/${path}?` + new URLSearchParams({ access_token: token, ...params }), { method });
+    const data: any = await res.json().catch(() => ({}));
+    if (!res.ok || data?.error) throw new Error(data?.error?.error_user_msg || data?.error?.message || `Instagram API error ${res.status}`);
+    return data;
+  }
+
+  // Containers must finish processing before they can be published (always true for video, sometimes for images).
+  async function igWaitReady(token: string, containerId: string) {
+    for (let i = 0; i < 30; i++) {
+      const { status_code } = await igGraph(token, containerId, { fields: 'status_code' }, 'GET');
+      if (status_code === 'FINISHED' || status_code === 'PUBLISHED') return;
+      if (status_code === 'ERROR' || status_code === 'EXPIRED') throw new Error(`Instagram could not process the media (${status_code})`);
+      await new Promise(r => setTimeout(r, 4000));
+    }
+    throw new Error('Instagram took too long to process the media');
+  }
+
   async function publishToInstagram(post: any, creds: any) {
     const token = creds?.facebook_token || process.env.META_ACCESS_TOKEN;
     const igUserId = creds?.meta_ig_user_id || process.env.META_IG_USER_ID;
     if (!token || !igUserId) throw new Error('Missing Instagram token / IG user ID for this client');
-    const mediaUrl = (post.media_urls || [])[0];
-    if (!mediaUrl) throw new Error('Instagram requires at least one media URL');
-    const isVideo = /\.(mp4|mov)$/i.test(mediaUrl);
-    const createRes = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media?` + new URLSearchParams({
-      access_token: token, caption: post.caption || '',
-      ...(isVideo ? { video_url: mediaUrl, media_type: 'REELS' } : { image_url: mediaUrl }),
-    }), { method: 'POST' });
-    const created = await createRes.json();
-    if (!createRes.ok) throw new Error(created?.error?.message || 'Instagram media creation failed');
-    const publishRes = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media_publish?` + new URLSearchParams({
-      access_token: token, creation_id: created.id,
-    }), { method: 'POST' });
-    const published = await publishRes.json();
-    if (!publishRes.ok) throw new Error(published?.error?.message || 'Instagram publish failed');
-    return { success: true, id: published.id };
+    const urls: string[] = (post.media_urls || []).filter(Boolean);
+    if (urls.length === 0) throw new Error('Instagram requires at least one media URL');
+    const caption = post.caption || '';
+
+    let creationId: string;
+    if (urls.length === 1) {
+      const url = urls[0];
+      const created = await igGraph(token, `${igUserId}/media`, isVideoUrl(url)
+        ? { caption, video_url: url, media_type: 'REELS' }
+        : { caption, image_url: url });
+      creationId = created.id;
+    } else {
+      // Carousel: one child container per slide (max 10), then a parent container.
+      const children: string[] = [];
+      for (const url of urls.slice(0, 10)) {
+        const child = await igGraph(token, `${igUserId}/media`, isVideoUrl(url)
+          ? { is_carousel_item: 'true', video_url: url, media_type: 'VIDEO' }
+          : { is_carousel_item: 'true', image_url: url });
+        await igWaitReady(token, child.id);
+        children.push(child.id);
+      }
+      const parent = await igGraph(token, `${igUserId}/media`, { media_type: 'CAROUSEL', children: children.join(','), caption });
+      creationId = parent.id;
+    }
+    await igWaitReady(token, creationId);
+    const published = await igGraph(token, `${igUserId}/media_publish`, { creation_id: creationId });
+    return { success: true, id: published.id, slides: Math.min(urls.length, 10) };
   }
 
   async function publishToFacebook(post: any, creds: any) {
     const token = creds?.facebook_token || process.env.META_PAGE_ACCESS_TOKEN;
     const pageId = creds?.meta_fb_page_id || process.env.META_FB_PAGE_ID;
     if (!token || !pageId) throw new Error('Missing Facebook token / Page ID for this client');
-    const mediaUrl = (post.media_urls || [])[0];
-    const url = mediaUrl
-      ? `https://graph.facebook.com/v20.0/${pageId}/photos`
-      : `https://graph.facebook.com/v20.0/${pageId}/feed`;
-    const res = await fetch(url + '?' + new URLSearchParams({
-      access_token: token, message: post.caption || '', ...(mediaUrl ? { url: mediaUrl } : {}),
-    }), { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error?.message || 'Facebook publish failed');
-    return { success: true, id: data.id || data.post_id };
+    const fb = async (path: string, params: Record<string, string>) => {
+      const res = await fetch(`https://graph.facebook.com/v21.0/${path}?` + new URLSearchParams({ access_token: token, ...params }), { method: 'POST' });
+      const data: any = await res.json().catch(() => ({}));
+      if (!res.ok || data?.error) throw new Error(data?.error?.message || 'Facebook publish failed');
+      return data;
+    };
+    const images: string[] = (post.media_urls || []).filter((u: string) => u && !isVideoUrl(u));
+    const message = post.caption || '';
+
+    if (images.length === 0) {
+      const data = await fb(`${pageId}/feed`, { message });
+      return { success: true, id: data.id };
+    }
+    if (images.length === 1) {
+      const data = await fb(`${pageId}/photos`, { message, url: images[0] });
+      return { success: true, id: data.post_id || data.id };
+    }
+    // Multi-photo post: upload each photo unpublished, then attach them all to one feed post.
+    const attached: Record<string, string> = {};
+    for (const [i, url] of images.slice(0, 10).entries()) {
+      const photo = await fb(`${pageId}/photos`, { url, published: 'false' });
+      attached[`attached_media[${i}]`] = JSON.stringify({ media_fbid: photo.id });
+    }
+    const data = await fb(`${pageId}/feed`, { message, ...attached });
+    return { success: true, id: data.id, photos: Object.keys(attached).length };
   }
 
   async function publishToLinkedin(post: any, creds: any) {
@@ -1874,6 +1923,15 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
       console.log(`[Scheduler] Publishing ${duePosts.length} due post(s)`);
 
       for (const post of duePosts) {
+        // Claim the row first so an overlapping poll can never publish the same post twice.
+        const { data: claimed } = await supabase
+          .from('scheduled_posts')
+          .update({ status: 'publishing', updated_at: new Date().toISOString() })
+          .eq('id', post.id)
+          .eq('status', 'pending')
+          .select('id');
+        if (!claimed || claimed.length === 0) continue;
+
         const platforms: string[] = Array.isArray(post.platforms) ? post.platforms : [];
         const platform_results: Record<string, any> = {};
         let anyFailure = false;
