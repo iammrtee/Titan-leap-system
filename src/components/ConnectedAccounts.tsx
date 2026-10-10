@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Instagram, Facebook, Linkedin, Twitter, Youtube, Play, Loader2, Link as LinkIcon, ChevronDown, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/src/lib/utils';
@@ -136,15 +137,23 @@ export const ConnectedAccountsPanel: React.FC<{ profileId?: string; onClose: () 
     } catch {}
   };
   useEffect(() => { load(true); }, [profileId]);
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
-      <div className="w-full max-w-md h-full overflow-y-auto bg-surface p-4" onClick={e => e.stopPropagation()}>
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  // Portal to <body>: the page's animated wrapper has a transform, which would otherwise
+  // make this "fixed" overlay position itself inside that wrapper instead of the viewport.
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex justify-end bg-black/50" onClick={onClose}>
+      <div className="w-full max-w-md h-full overflow-y-auto bg-surface p-4 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex justify-end mb-2">
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-container-low text-on-surface-variant"><X size={16} /></button>
         </div>
         <ConnectedAccounts connections={connections} profileId={profileId}
           onChanged={() => { load(true); window.dispatchEvent(new Event('connections-changed')); }} />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
