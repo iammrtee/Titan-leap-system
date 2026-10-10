@@ -1307,8 +1307,10 @@ The first character of your response must be "{" and the last must be "}".`;
   const captionUsage = new Map<string, { day: string; n: number }>();
   app.post("/api/ai/caption", requireUser, async (req, res) => {
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === 'undefined') return res.status(500).json({ error: "Add GEMINI_API_KEY in Render (free from Google AI Studio) to use the caption writer." });
+      const geminiKey = process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'undefined' ? process.env.GEMINI_API_KEY : '';
+      const claudeKey = process.env.CLAUDE_API_KEY || '';
+      const pref = (process.env.CAPTION_PROVIDER || '').toLowerCase(); // 'gemini' | 'claude' | '' (free first)
+      if (!geminiKey && !claudeKey) return res.status(500).json({ error: "Add GEMINI_API_KEY (free, Google AI Studio) or CLAUDE_API_KEY in Render to use the caption writer." });
       const { draft, mediaUrls, platforms, tone } = req.body || {};
       const day = new Date().toISOString().slice(0, 10);
       const key = String((req as any).user?.email || (req as any).user?.id || 'anon');
@@ -1319,18 +1321,18 @@ The first character of your response must be "{" and the last must be "}".`;
 
       const urls: string[] = (Array.isArray(mediaUrls) ? mediaUrls : []).filter((x: any) => typeof x === 'string' && /^https?:\/\//i.test(x) && !/\.(mp4|mov|webm)(\?|$)/i.test(x)).slice(0, 3);
       const hasVideo = (Array.isArray(mediaUrls) ? mediaUrls : []).some((x: any) => /\.(mp4|mov|webm)(\?|$)/i.test(String(x)));
-      const parts: any[] = [];
+      const images: { mime: string; data: string }[] = [];
       for (const url of urls) {
         const r = await fetch(url);
         if (!r.ok) continue;
         const buf = Buffer.from(await r.arrayBuffer());
         if (buf.length > 4_000_000) continue;
-        parts.push({ inlineData: { mimeType: r.headers.get('content-type')?.split(';')[0] || 'image/jpeg', data: buf.toString('base64') } });
+        images.push({ mime: r.headers.get('content-type')?.split(';')[0] || 'image/jpeg', data: buf.toString('base64') });
       }
       const plats: string[] = Array.isArray(platforms) ? platforms.map(String) : [];
       const short = plats.includes('twitter') || plats.includes('twitter_make');
       const prompt = `You write social media captions that get saved, shared and commented on, for TitanLeap, a growth agency.
-${parts.length ? 'Look closely at the attached picture(s) and write about what is actually in them.' : hasVideo ? 'A video is attached (you cannot see it); write from the draft/topic below.' : 'No media is attached; write from the draft/topic below.'}
+${images.length ? 'Look closely at the attached picture(s) and write about what is actually in them.' : hasVideo ? 'A video is attached (you cannot see it); write from the draft/topic below.' : 'No media is attached; write from the draft/topic below.'}
 Draft or topic from the user: ${String(draft || '').slice(0, 1500) || '(none, base it on the picture)'}
 Platforms: ${plats.join(', ') || 'general'}.${short ? ' X is selected, so the WHOLE caption must be 260 characters or fewer, including hashtags.' : ''}
 Tone: ${String(tone || 'confident, plain, punchy').slice(0, 80)}.
@@ -1338,20 +1340,43 @@ Rules: first line is a scroll-stopping hook (a bold claim, a number, or a questi
 short lines with blank lines between; one clear call to action at the end; 3 to 5 relevant hashtags last;
 no filler, no "In today's world", no made-up statistics or promises.
 Return ONLY the caption text.`;
-      parts.push({ text: prompt });
-      const { GoogleGenAI } = await import("@google/genai");
-      const ai = new GoogleGenAI({ apiKey });
-      const result: any = await ai.models.generateContent({
-        model: process.env.GEMINI_CAPTION_MODEL || "gemini-2.5-flash",
-        contents: [{ role: 'user', parts }],
-        config: { temperature: 0.9 },
-      });
-      let text = String((typeof result?.text === 'function' ? result.text() : result?.text) || '').trim();
+
+      const viaGemini = async () => {
+        const { GoogleGenAI } = await import("@google/genai");
+        const ai = new GoogleGenAI({ apiKey: geminiKey });
+        const result: any = await ai.models.generateContent({
+          model: process.env.GEMINI_CAPTION_MODEL || "gemini-2.5-flash",
+          contents: [{ role: 'user', parts: [...images.map(i => ({ inlineData: { mimeType: i.mime, data: i.data } })), { text: prompt }] }],
+          config: { temperature: 0.9 },
+        });
+        return String((typeof result?.text === 'function' ? result.text() : result?.text) || '');
+      };
+      const viaClaude = async () => {
+        const Anthropic = (await import('@anthropic-ai/sdk')).default;
+        const client = new Anthropic({ apiKey: claudeKey });
+        const r: any = await client.messages.create({
+          model: process.env.CLAUDE_CAPTION_MODEL || 'claude-haiku-5-5',
+          max_tokens: 700,
+          messages: [{ role: 'user', content: [
+            ...images.filter(i => /^image\/(jpeg|png|webp|gif)$/.test(i.mime)).map(i => ({ type: 'image', source: { type: 'base64', media_type: i.mime, data: i.data } })),
+            { type: 'text', text: prompt },
+          ] }],
+        } as any);
+        return r.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
+      };
+      const order: Array<['gemini' | 'claude', () => Promise<string>]> = [];
+      const g: ['gemini', () => Promise<string>] = ['gemini', viaGemini], c: ['claude', () => Promise<string>] = ['claude', viaClaude];
+      if (pref === 'claude') { if (claudeKey) order.push(c); if (geminiKey) order.push(g); }
+      else { if (geminiKey) order.push(g); if (claudeKey) order.push(c); }
+      let text = '', provider = '', lastErr: any = null;
+      for (const [name, run] of order) {
+        try { text = (await run()).trim(); provider = name; if (text) break; } catch (err: any) { lastErr = err; console.error(`[Caption] ${name} failed:`, err?.message || err); }
+      }
+      if (!text) throw lastErr || new Error('Empty response');
       text = text.replace(/^```[a-z]*\n?|```$/g, '').trim();
-      if (!text) throw new Error('Empty response');
       if (short) text = text.slice(0, 280);
       captionUsage.set(key, { day, n: used + 1 });
-      res.json({ caption: text, used: used + 1, limit: cap, sawImages: urls.length > 0 && parts.length > 1 });
+      res.json({ caption: text, used: used + 1, limit: cap, provider, sawImages: images.length > 0 });
     } catch (e: any) {
       console.error("[Caption] failed:", e?.message || e);
       res.status(500).json({ error: /quota|429|RESOURCE_EXHAUSTED/i.test(String(e?.message)) ? "Google's free AI quota is used up for now. Try again in a few minutes." : "Could not write a caption. Try again." });
