@@ -21,7 +21,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('[Server] FATAL: Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY environment variables.');
 }
 
-const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+// The server prefers the service-role key (never sent to the browser) so tables can be locked
+// down with RLS; without it, it falls back to the public anon key as before.
+const supabase = createClient(supabaseUrl || '', process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey || '');
 
 // --- Auth Middleware ---
 // Internal API calls (from the SPA) are validated via the caller's own Supabase session
