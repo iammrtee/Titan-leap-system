@@ -757,7 +757,7 @@ const AutoPostTab: React.FC = () => {
       if (!res.ok) throw new Error(data.error || 'Could not write a caption');
       setCaptionBackup(caption);
       setCaption(data.caption);
-      toast.success(data.sawImages ? 'Caption written from your picture' : 'Caption written', { description: `${data.used}/${data.limit} today` });
+      toast.success(data.sawImages ? 'Caption written from your picture' : 'Caption written', { description: `${data.used}/${data.limit} today · ${data.provider === 'claude' ? 'Claude' : 'Gemini (free)'}` });
     } catch (e: any) {
       toast.error(e.message);
     } finally {
