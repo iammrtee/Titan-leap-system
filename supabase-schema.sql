@@ -192,3 +192,8 @@ CREATE TABLE IF NOT EXISTS production_tasks (
   review_link TEXT
 );
 ALTER TABLE production_tasks DISABLE ROW LEVEL SECURITY;
+
+-- 15. YouTube connection (Connected Accounts)
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS youtube_token TEXT;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS youtube_refresh_token TEXT;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS youtube_channel TEXT;

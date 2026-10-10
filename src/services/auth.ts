@@ -11,7 +11,7 @@ function base64url(input: Buffer) {
 }
 
 // Pending OAuth flows, keyed by a random state (in memory: fine for one small instance).
-type Platform = 'twitter' | 'linkedin' | 'tiktok' | 'meta';
+type Platform = 'twitter' | 'linkedin' | 'tiktok' | 'meta' | 'youtube';
 const pending = new Map<string, { platform: Platform; profileId: string; verifier?: string; expires: number }>();
 function startFlow(platform: Platform, req: express.Request, withPkce = false) {
   for (const [k, v] of pending) if (v.expires < Date.now()) pending.delete(k);
@@ -186,6 +186,45 @@ router.get('/tiktok/callback', async (req, res) => {
     finish(res, 'tiktok');
   } catch (err: any) {
     finish(res, 'tiktok', err?.message || 'TikTok connection failed');
+  }
+});
+
+// ─── YouTube (Google OAuth, offline access so uploads keep working) ───
+router.get('/youtube/url', (req, res) => {
+  const { state } = startFlow('youtube', req);
+  const params = new URLSearchParams({
+    client_id: process.env.YOUTUBE_CLIENT_ID || '',
+    redirect_uri: redirectUri('youtube'),
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
+    access_type: 'offline', prompt: 'consent', include_granted_scopes: 'true', state,
+  });
+  res.json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
+});
+
+router.get('/youtube/callback', async (req, res) => {
+  try {
+    const flow = takeFlow(req, 'youtube');
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: String(req.query.code), client_id: process.env.YOUTUBE_CLIENT_ID || '',
+        client_secret: process.env.YOUTUBE_CLIENT_SECRET || '', redirect_uri: redirectUri('youtube'),
+        grant_type: 'authorization_code',
+      }),
+    });
+    const t: any = await tokenRes.json().catch(() => ({}));
+    if (!tokenRes.ok || !t.access_token) throw new Error(t.error_description || 'Google did not return a token');
+    if (!t.refresh_token) throw new Error('Google did not return a refresh token. Remove TitanLeap at myaccount.google.com/permissions and connect again.');
+    let channel: string | null = null;
+    const ch = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', { headers: { Authorization: `Bearer ${t.access_token}` } });
+    if (ch.ok) channel = ((await ch.json()) as any)?.items?.[0]?.snippet?.title || null;
+    if (!channel) throw new Error('This Google account has no YouTube channel. Create one at youtube.com first.');
+    await store(flow.profileId, { youtube_token: seal(t.access_token), youtube_refresh_token: seal(t.refresh_token), youtube_channel: channel });
+    finish(res, 'youtube');
+  } catch (err: any) {
+    finish(res, 'youtube', err?.message || 'YouTube connection failed');
   }
 });
 

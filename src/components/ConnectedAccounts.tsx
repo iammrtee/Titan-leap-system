@@ -20,8 +20,8 @@ const ACCOUNTS: { id: string; label: string; icon: React.ReactNode; platforms: s
   { id: 'meta', label: 'Instagram + Facebook', icon: <span className="flex -space-x-1"><Instagram size={15} /><Facebook size={15} /></span>, platforms: ['instagram', 'facebook'] },
   { id: 'linkedin', label: 'LinkedIn', icon: <Linkedin size={15} />, platforms: ['linkedin'] },
   { id: 'tiktok', label: 'TikTok', icon: <Play size={15} />, platforms: ['tiktok'] },
-  { id: 'twitter', label: 'X (Twitter)', icon: <Twitter size={15} />, platforms: ['twitter'], note: 'Needs the paid X API' },
-  { id: 'youtube', label: 'YouTube', icon: <Youtube size={15} />, platforms: ['youtube'], note: 'Coming soon' },
+  { id: 'twitter', label: 'X (Twitter)', icon: <Twitter size={15} />, platforms: ['twitter'], note: undefined },
+  { id: 'youtube', label: 'YouTube', icon: <Youtube size={15} />, platforms: ['youtube'] },
 ];
 
 export const ConnectedAccounts: React.FC<{
