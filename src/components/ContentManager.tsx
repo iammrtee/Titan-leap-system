@@ -148,18 +148,16 @@ export const ContentManager: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
         <div>
-          <div className="flex items-center gap-3 md:gap-4 mb-2 md:mb-4">
-            <h1 className="text-3xl md:text-5xl font-black tracking-tighter text-on-surface">Content Production</h1>
+          <h1 className="text-3xl md:text-5xl font-black tracking-tighter text-on-surface mb-2 md:mb-4">Content Production</h1>
+          <p className="text-sm md:text-base text-on-surface-variant font-medium max-w-2xl">Manage your content pipeline and distribute across platforms.</p>
+        </div>
             <button onClick={() => setSendToProductionSignal(Date.now())} disabled={managerTab !== 'production'} title="Send to Production" aria-label="Send to Production"
-              className={cn("shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-2xl flex items-center justify-center transition-all",
+              className={cn("shrink-0 self-start w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center transition-all",
                 managerTab === 'production'
                   ? "bg-primary text-white shadow-lg hover:bg-primary/90 hover:scale-105"
                   : "bg-surface-container-highest text-on-surface-variant/40 cursor-not-allowed")}>
               <Plus size={26} strokeWidth={3} />
             </button>
-          </div>
-          <p className="text-sm md:text-base text-on-surface-variant font-medium max-w-2xl">Manage your content pipeline and distribute across platforms.</p>
-        </div>
       </div>
 
       {/* Top-Level Tabs */}
