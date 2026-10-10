@@ -2128,7 +2128,9 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     });
     const body = await res.text().catch(() => '');
     if (!res.ok) throw new Error(`LinkedIn via Make failed (${res.status})${body ? `: ${body.slice(0, 200)}` : ''}`);
-    return { success: true, via: 'make', images: images.length, video: !!video };
+    // The Make module posts one image per post, so say so instead of claiming all were sent.
+    return { success: true, via: 'make', images: video ? 0 : Math.min(images.length, 1), video: !!video,
+      ...(!video && images.length > 1 ? { note: `Only the first of ${images.length} images posted (Make route is single-image; direct LinkedIn posts all).` } : {}) };
   }
 
   async function publishToLinkedin(post: any, creds: any) {
