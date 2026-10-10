@@ -483,14 +483,21 @@ const ProductionQueue: React.FC<{ externalOpenSignal?: number }> = ({ externalOp
 
   return (
     <div className="space-y-8">
-      <div className="flex gap-1 border-b border-outline-variant/10">
-        {(['all', 'inprogress', 'review', 'done'] as const).map(tab => (
-          <button key={tab} onClick={() => setCurrentTab(tab)}
-            className={cn("px-4 py-2 text-sm font-bold border-b-2 transition-all capitalize",
-              currentTab === tab ? "border-primary text-primary" : "border-transparent text-on-surface-variant/60 hover:text-on-surface")}>
-            {tab === 'all' ? 'All Queue' : tab === 'inprogress' ? 'In Progress' : tab === 'review' ? 'In Review' : 'Done'}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-4 border-b border-outline-variant/15 overflow-x-auto no-scrollbar">
+        {(['all', 'inprogress', 'review', 'done'] as const).map(tab => {
+          const count = tab === 'all' ? tasks.length : tasks.filter(t => t.status === tab).length;
+          const active = currentTab === tab;
+          return (
+            <button key={tab} onClick={() => setCurrentTab(tab)}
+              className={cn("relative flex items-center gap-2 py-3.5 text-sm font-bold tracking-tight whitespace-nowrap transition-colors",
+                active ? "text-primary" : "text-on-surface-variant/60 hover:text-on-surface")}>
+              {tab === 'all' ? 'All Queue' : tab === 'inprogress' ? 'In Progress' : tab === 'review' ? 'In Review' : 'Done'}
+              <span className={cn("min-w-[22px] h-[22px] px-1.5 rounded-full text-[11px] font-black flex items-center justify-center transition-colors",
+                active ? "bg-primary text-white" : "bg-surface-container-highest text-on-surface-variant/70")}>{count}</span>
+              <span className={cn("absolute left-0 right-0 -bottom-px h-0.5 rounded-full transition-all", active ? "bg-primary" : "bg-transparent")} />
+            </button>
+          );
+        })}
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
