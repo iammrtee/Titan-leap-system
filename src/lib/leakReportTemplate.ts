@@ -273,7 +273,7 @@ ${v2 ? plan30Sec : ''}
   <div class="wrap">
     <h2>Want us to make these fixes for you?</h2>
     <p class="lede">Reply to this email and we'll build them with you. The $297 you paid for this audit comes off a Growth System Sprint or any monthly plan. Questions about this report are included for 7 days.</p>
-    <div class="actions"><a href="mailto:hello@titanleap.co?subject=${encodeURIComponent('Fixes for ' + name)}" class="btn btn-gold">Reply to TitanLeap</a></div>
+    <div class="actions"><a href="mailto:info@titanleap.co?subject=${encodeURIComponent('Fixes for ' + name)}" class="btn btn-gold">Reply to TitanLeap</a></div>
     <p class="prepared" style="color:var(--on-deep2)">Prepared by TitanLeap for ${esc(name)} on ${esc(date)}.</p>
   </div>
 </section>

@@ -147,7 +147,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, dark
           
           <div className={cn("pt-4 border-t border-outline-variant/20 space-y-1", isCollapsed ? "px-2" : "px-0")}>
             <button 
-              title={isCollapsed ? "Support" : undefined}
+              onClick={() => { window.location.href = 'mailto:info@titanleap.co?subject=TitanLeap%20Monolith%20support'; }}
+              title={isCollapsed ? "Support" : "Email info@titanleap.co"}
               className={cn(
                 "w-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors text-sm font-medium",
                 isCollapsed ? "justify-center py-3 px-0" : "gap-4 py-2 px-2"
