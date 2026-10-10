@@ -150,8 +150,11 @@ export const ContentManager: React.FC = () => {
         <div>
           <div className="flex items-center gap-3 md:gap-4 mb-2 md:mb-4">
             <h1 className="text-3xl md:text-5xl font-black tracking-tighter text-on-surface">Content Production</h1>
-            <button onClick={() => { setManagerTab('production'); setSendToProductionSignal(Date.now()); }} title="Send to Production" aria-label="Send to Production"
-              className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-primary text-white flex items-center justify-center shadow-lg hover:bg-primary/90 hover:scale-105 transition-all">
+            <button onClick={() => setSendToProductionSignal(Date.now())} disabled={managerTab !== 'production'} title="Send to Production" aria-label="Send to Production"
+              className={cn("shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-2xl flex items-center justify-center transition-all",
+                managerTab === 'production'
+                  ? "bg-primary text-white shadow-lg hover:bg-primary/90 hover:scale-105"
+                  : "bg-surface-container-highest text-on-surface-variant/40 cursor-not-allowed")}>
               <Plus size={26} strokeWidth={3} />
             </button>
           </div>
