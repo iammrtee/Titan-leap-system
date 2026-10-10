@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { cn } from '@/src/lib/utils';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 import { safeStorageName, toPostableJpeg, instagramRatioProblem } from '@/src/lib/postMedia';
-import { TikTokComposer } from './TikTokComposer';
+import { TikTokComposer, type TikTokComposerHandle } from './TikTokComposer';
 import { ConnectedAccountsPanel, type Connection } from './ConnectedAccounts';
 
 // ─── Content Manager Tab Types ───
@@ -601,6 +601,8 @@ const AutoPostTab: React.FC = () => {
   const [postDate, setPostDate] = useState(new Date().toISOString().split('T')[0]);
   const [postTime, setPostTime] = useState('09:00');
   const [isPublishing, setIsPublishing] = useState(false);
+  const tiktokRef = useRef<TikTokComposerHandle>(null);
+  const tiktokPanelRef = useRef<HTMLDivElement>(null);
   const [distributionJobs, setDistributionJobs] = useState<DistributionJob[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [linkedinCompanyId, setLinkedinCompanyId] = useState('');
@@ -708,7 +710,7 @@ const AutoPostTab: React.FC = () => {
     const connected = params.get('connected');
     const failed = params.get('connect_error');
     if (!connected && !failed) return;
-    const names: Record<string, string> = { meta: 'Instagram + Facebook', linkedin: 'LinkedIn', tiktok: 'TikTok', twitter: 'X' };
+    const names: Record<string, string> = { meta: 'Instagram + Facebook', linkedin: 'LinkedIn', tiktok: 'TikTok', twitter: 'X', youtube: 'YouTube' };
     if (connected) {
       toast.success(`${names[connected] || connected} connected`);
       if (connected === 'tiktok') setSelectedPlatforms(prev => prev.includes('tt') ? prev : [...prev, 'tt']);
@@ -728,10 +730,22 @@ const AutoPostTab: React.FC = () => {
 
   const handlePublish = async () => {
     if (!caption.trim() && uploadedAssets.length === 0) { toast.error("Add a caption or media before publishing."); return; }
-    // TikTok posts from its own panel (it needs per-post privacy and disclosure choices).
+    // TikTok has its own per-post choices (privacy, disclosure, consent) in the panel below; it
+    // posts right away, the other platforms go through the scheduler.
+    const ttSelected = selectedPlatforms.includes('tt');
     const schedulePlatforms = selectedPlatforms.filter(p => p !== 'tt');
+    if (selectedPlatforms.length === 0) { toast.error("Select at least one platform."); return; }
+    if (ttSelected) {
+      const missing = tiktokRef.current?.validate() ?? ['TikTok is still loading. Try again in a moment.'];
+      if (missing.length > 0) {
+        toast.error('TikTok needs a bit more', { description: missing[0] });
+        tiktokPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+    }
     if (schedulePlatforms.length === 0) {
-      toast.error(selectedPlatforms.includes('tt') ? "Use the Post to TikTok button in the TikTok panel." : "Select at least one platform.");
+      setIsPublishing(true);
+      try { await tiktokRef.current?.post(); } finally { setIsPublishing(false); }
       return;
     }
     const platformKey: Record<string, string> = { ig: 'instagram', tt: 'tiktok', li: 'linkedin', fb: 'facebook', tw: 'twitter', yt: 'youtube' };
@@ -776,6 +790,7 @@ const AutoPostTab: React.FC = () => {
       setDistributionJobs(prev => [...newJobs, ...prev].slice(0, 20));
       loadRecentPosts();
       toast.success(`Scheduled across ${schedulePlatforms.length} platform(s)!`);
+      if (ttSelected) await tiktokRef.current?.post();
       setCaption('');
       setUploadedAssets([]);
       localStorage.removeItem('titanleap_autopost_caption');
@@ -897,8 +912,12 @@ const AutoPostTab: React.FC = () => {
             </AnimatePresence>
           </div>
 
-          {/* Always shown: TikTok posts from here (privacy and disclosure choices are per post). */}
-          <TikTokComposer assets={uploadedAssets} caption={caption} profileId={profileId} />
+          {/* TikTok's per-post choices appear here when TikTok is ticked in Platforms. */}
+          {selectedPlatforms.includes('tt') && (
+            <div ref={tiktokPanelRef}>
+              <TikTokComposer ref={tiktokRef} embedded assets={uploadedAssets} caption={caption} profileId={profileId} />
+            </div>
+          )}
         </div>
 
         {/* RIGHT: Accounts + Platforms + Publish + Jobs */}

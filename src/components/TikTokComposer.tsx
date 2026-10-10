@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Loader2, Play, Check, AlertCircle, ExternalLink, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/src/lib/utils';
@@ -36,7 +36,15 @@ const STATUS_LABELS: Record<string, string> = {
   FAILED: 'TikTok could not publish this post.',
 };
 
-export const TikTokComposer: React.FC<{ assets: Asset[]; caption: string; profileId: string }> = ({ assets, caption, profileId }) => {
+export interface TikTokComposerHandle {
+  /** Things still missing before this can post; empty when ready. */
+  validate: () => string[];
+  /** Sends the post to TikTok. Resolves true when TikTok accepted it. */
+  post: () => Promise<boolean>;
+}
+
+export const TikTokComposer = forwardRef<TikTokComposerHandle, { assets: Asset[]; caption: string; profileId: string; embedded?: boolean }>(
+({ assets, caption, profileId, embedded }, ref) => {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [creator, setCreator] = useState<CreatorInfo | null>(null);
@@ -49,6 +57,13 @@ export const TikTokComposer: React.FC<{ assets: Asset[]; caption: string; profil
   const firstLine = (caption.split('\n').find(l => l.trim()) || '').trim();
   const [title, setTitle] = useState(isVideo ? caption : firstLine.slice(0, 90));
   const [description, setDescription] = useState(caption);
+  // Follow the main caption until the user edits these fields themselves.
+  const touched = useRef(false);
+  useEffect(() => {
+    if (touched.current) return;
+    setTitle(isVideo ? caption.slice(0, 2200) : firstLine.slice(0, 90));
+    setDescription(caption.slice(0, 4000));
+  }, [caption, isVideo]);
   const [privacy, setPrivacy] = useState('');
   const [allowComment, setAllowComment] = useState(false);
   const [allowDuet, setAllowDuet] = useState(false);
@@ -137,8 +152,8 @@ export const TikTokComposer: React.FC<{ assets: Asset[]; caption: string; profil
     }, 5000);
   };
 
-  const postToTikTok = async () => {
-    if (!canPost) return;
+  const postToTikTok = async (): Promise<boolean> => {
+    if (!canPost) return false;
     setPosting(true);
     try {
       const res = await fetch('/api/tiktok/publish', {
@@ -159,12 +174,24 @@ export const TikTokComposer: React.FC<{ assets: Asset[]; caption: string; profil
       setPublish({ id: data.publish_id, postId: data.post_id, status: 'PROCESSING_DOWNLOAD' });
       toast.success('Sent to TikTok', { description: 'Processing can take a few minutes before it appears on your profile.' });
       pollStatus(data.publish_id, data.post_id);
+      return true;
     } catch (err: any) {
       toast.error('TikTok post failed', { description: err.message });
+      return false;
     } finally {
       setPosting(false);
     }
   };
+
+  useImperativeHandle(ref, () => ({
+    validate: () => {
+      if (loading) return ['TikTok is still loading. Try again in a moment.'];
+      if (!connected) return ['Connect TikTok first.'];
+      if (blockedReason) return [blockedReason];
+      return problems;
+    },
+    post: postToTikTok,
+  }));
 
   const labelNotice = !disclose ? null
     : brandedContent ? `Your ${isVideo ? 'video' : 'photo'} will be labeled as "Paid partnership"`
@@ -238,7 +265,7 @@ export const TikTokComposer: React.FC<{ assets: Asset[]; caption: string; profil
           {isVideo ? (
             <div className="space-y-1.5">
               <div className={sectionLabel}>Caption</div>
-              <textarea value={title} onChange={e => setTitle(e.target.value.slice(0, 2200))} rows={4}
+              <textarea value={title} onChange={e => { touched.current = true; setTitle(e.target.value.slice(0, 2200)); }} rows={4}
                 className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary" />
               <p className="text-[10px] text-on-surface-variant/40 text-right">{title.length}/2200</p>
             </div>
@@ -246,13 +273,13 @@ export const TikTokComposer: React.FC<{ assets: Asset[]; caption: string; profil
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <div className={sectionLabel}>Title</div>
-                <input value={title} onChange={e => setTitle(e.target.value.slice(0, 90))}
+                <input value={title} onChange={e => { touched.current = true; setTitle(e.target.value.slice(0, 90)); }}
                   className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary" />
                 <p className="text-[10px] text-on-surface-variant/40 text-right">{title.length}/90</p>
               </div>
               <div className="space-y-1.5">
                 <div className={sectionLabel}>Description</div>
-                <textarea value={description} onChange={e => setDescription(e.target.value.slice(0, 4000))} rows={4}
+                <textarea value={description} onChange={e => { touched.current = true; setDescription(e.target.value.slice(0, 4000)); }} rows={4}
                   className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary" />
                 <p className="text-[10px] text-on-surface-variant/40 text-right">{description.length}/4000</p>
               </div>
@@ -342,6 +369,8 @@ export const TikTokComposer: React.FC<{ assets: Asset[]; caption: string; profil
                 <a href={`https://www.tiktok.com/@${creator.creator_username}`} target="_blank" rel="noreferrer" className="text-xs underline inline-flex items-center gap-1">View profile <ExternalLink size={10} /></a>
               )}
             </div>
+          ) : embedded ? (
+            <p className="text-xs text-on-surface-variant/60">TikTok posts right away when you press Schedule &amp; Publish. It does not wait for the schedule time.</p>
           ) : (
             <button onClick={postToTikTok} disabled={!canPost}
               title={disclosureIncomplete ? 'You need to indicate if your content promotes yourself, a third party, or both.' : undefined}
@@ -354,4 +383,4 @@ export const TikTokComposer: React.FC<{ assets: Asset[]; caption: string; profil
       )}
     </div>
   );
-};
+});
