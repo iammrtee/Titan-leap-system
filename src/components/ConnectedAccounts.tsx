@@ -20,7 +20,7 @@ const ACCOUNTS: { id: string; label: string; icon: React.ReactNode; platforms: s
   { id: 'meta', label: 'Instagram + Facebook', icon: <span className="flex -space-x-1"><Instagram size={15} /><Facebook size={15} /></span>, platforms: ['instagram', 'facebook'] },
   { id: 'linkedin', label: 'LinkedIn', icon: <Linkedin size={15} />, platforms: ['linkedin'] },
   { id: 'tiktok', label: 'TikTok', icon: <Play size={15} />, platforms: ['tiktok'] },
-  { id: 'twitter', label: 'X (Twitter)', icon: <Twitter size={15} />, platforms: ['twitter'], note: undefined },
+  { id: 'twitter', label: 'X (Twitter)', icon: <Twitter size={15} />, platforms: ['twitter', 'twitter_make'], note: undefined },
   { id: 'youtube', label: 'YouTube', icon: <Youtube size={15} />, platforms: ['youtube'] },
 ];
 
@@ -31,6 +31,8 @@ export const ConnectedAccounts: React.FC<{
 }> = ({ connections, profileId, onChanged }) => {
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [xRoute, setXRoute] = useState<'direct' | 'make'>(() => { try { return localStorage.getItem('titanleap_x_route') === 'direct' ? 'direct' : 'make'; } catch { return 'make'; } });
+  const chooseXRoute = (r: 'direct' | 'make') => { setXRoute(r); try { localStorage.setItem('titanleap_x_route', r); } catch {} window.dispatchEvent(new Event('x-route-changed')); };
 
   const connect = async (id: string) => {
     setBusy(id);
@@ -106,7 +108,7 @@ export const ConnectedAccounts: React.FC<{
                   {conns.map(({ p, c }) => (
                     <p key={p} className={cn("text-[10px] font-medium", open !== acc.id && "truncate", c.connected ? "text-green-500" : "text-on-surface-variant/60")}
                       title={c.connected ? c.account || '' : c.error}>
-                      {acc.platforms.length > 1 && <span className="capitalize font-bold">{p}: </span>}
+                      {acc.platforms.length > 1 && <span className="font-bold">{({ twitter: 'Direct', twitter_make: 'Make → Buffer', instagram: 'Instagram', facebook: 'Facebook' } as Record<string, string>)[p] || p}: </span>}
                       {c.connected ? `● ${c.account || 'Connected'}` : `○ ${c.error || 'Not connected'}`}
                     </p>
                   ))}
@@ -114,6 +116,18 @@ export const ConnectedAccounts: React.FC<{
                     <p className="text-[10px] text-on-surface-variant/60 pt-1">
                       Posts go to the account{acc.platforms.length > 1 ? 's' : ''} above. Connected {fromApp ? 'from this app' : 'through a Render setting'}.
                     </p>
+                  )}
+                  {acc.id === 'twitter' && (
+                    <div className="pt-2">
+                      <p className="text-[9px] font-black uppercase tracking-wider text-on-surface-variant/50 mb-1">Post to X using</p>
+                      <div className="flex gap-1 p-1 rounded-xl bg-surface-container-lowest border border-outline-variant/10">
+                        {([['make', 'Make → Buffer (free)'], ['direct', 'Direct (our app)']] as const).map(([r, label]) => (
+                          <button key={r} onClick={() => chooseXRoute(r)}
+                            className={cn("flex-1 text-[10px] font-black uppercase tracking-wider px-2 py-1.5 rounded-lg transition-all",
+                              xRoute === r ? "bg-sky-500 text-white" : "text-on-surface-variant/60 hover:text-on-surface-variant")}>{label}</button>
+                        ))}
+                      </div>
+                    </div>
                   )}
                   {fromEnv && <p className="text-[10px] text-on-surface-variant/40">Set in Render settings</p>}
                   {!acc.note && !canConnect && setup && <p className="text-[10px] text-amber-500/80">{setup}</p>}

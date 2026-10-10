@@ -148,7 +148,13 @@ export const ContentManager: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
         <div>
-          <h1 className="text-3xl md:text-5xl font-black tracking-tighter text-on-surface mb-2 md:mb-4">Content Production</h1>
+          <div className="flex items-center gap-3 md:gap-4 mb-2 md:mb-4">
+            <h1 className="text-3xl md:text-5xl font-black tracking-tighter text-on-surface">Content Production</h1>
+            <button onClick={() => { setManagerTab('production'); setSendToProductionSignal(Date.now()); }} title="Send to Production" aria-label="Send to Production"
+              className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-primary text-white flex items-center justify-center shadow-lg hover:bg-primary/90 hover:scale-105 transition-all">
+              <Plus size={26} strokeWidth={3} />
+            </button>
+          </div>
           <p className="text-sm md:text-base text-on-surface-variant font-medium max-w-2xl">Manage your content pipeline and distribute across platforms.</p>
         </div>
       </div>
@@ -179,12 +185,6 @@ export const ContentManager: React.FC = () => {
           className="bg-surface-container-low border border-outline-variant/20 text-on-surface px-4 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:bg-surface-container transition-all whitespace-nowrap shrink-0">
           <LinkIcon size={16} /> Connected Accounts
         </button>
-        {managerTab === 'production' && (
-          <button onClick={() => setSendToProductionSignal(Date.now())}
-            className="bg-surface-container-low border border-outline-variant/20 text-on-surface px-4 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:bg-surface-container transition-all whitespace-nowrap shrink-0">
-            <Plus size={16} /> Send to Production
-          </button>
-        )}
       </div>
 
       {showAccounts && <ConnectedAccountsPanel onClose={() => setShowAccounts(false)} />}
@@ -607,7 +607,10 @@ const AutoPostTab: React.FC = () => {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [linkedinCompanyId, setLinkedinCompanyId] = useState('');
   const [xRoute, setXRoute] = useState<'direct' | 'make'>(() => { try { return localStorage.getItem('titanleap_x_route') === 'direct' ? 'direct' : 'make'; } catch { return 'make'; } });
-  const chooseXRoute = (r: 'direct' | 'make') => { setXRoute(r); try { localStorage.setItem('titanleap_x_route', r); } catch {} };
+  useEffect(() => {
+    const f = () => { try { setXRoute(localStorage.getItem('titanleap_x_route') === 'direct' ? 'direct' : 'make'); } catch {} };
+    window.addEventListener('x-route-changed', f); return () => window.removeEventListener('x-route-changed', f);
+  }, []);
   const [profileId, setProfileId] = useState('default');
 
   useEffect(() => {
@@ -950,15 +953,6 @@ const AutoPostTab: React.FC = () => {
                     )}
                     {isSelected && <Check size={14} />}
                   </button>
-                  {platform.id === 'tw' && isSelected && (
-                    <div className="flex gap-1 mt-1 p-1 rounded-xl bg-surface-container-lowest border border-outline-variant/10">
-                      {([['make', 'Make → Buffer (free)'], ['direct', 'Direct (our app)']] as const).map(([r, label]) => (
-                        <button key={r} onClick={() => chooseXRoute(r)}
-                          className={cn("flex-1 text-[10px] font-black uppercase tracking-wider px-2 py-1.5 rounded-lg transition-all",
-                            xRoute === r ? "bg-sky-500 text-white" : "text-on-surface-variant/60 hover:text-on-surface-variant")}>{label}</button>
-                      ))}
-                    </div>
-                  )}
                   </div>
                 );
               })}
