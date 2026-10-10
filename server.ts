@@ -1950,9 +1950,17 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
   }
 
   async function publishToFacebook(post: any, creds: any) {
-    const token = creds?.facebook_token || process.env.META_PAGE_ACCESS_TOKEN;
+    const baseToken = creds?.facebook_token || process.env.META_PAGE_ACCESS_TOKEN;
     const pageId = creds?.meta_fb_page_id || process.env.META_FB_PAGE_ID;
-    if (!token || !pageId) throw new Error('Missing Facebook token / Page ID for this client');
+    if (!baseToken || !pageId) throw new Error('Missing Facebook token / Page ID for this client');
+    // Facebook only accepts unpublished photos (multi-photo posts) from a Page token. If the saved
+    // token is a user token, swap it for the Page's own token; if it already is one, keep it.
+    let token = baseToken;
+    try {
+      const r = await fetch(`https://graph.facebook.com/v21.0/${pageId}?` + new URLSearchParams({ fields: 'access_token', access_token: baseToken }));
+      const d: any = await r.json().catch(() => ({}));
+      if (r.ok && d?.access_token) token = d.access_token;
+    } catch {}
     const fb = async (path: string, params: Record<string, string>) => {
       const res = await fetch(`https://graph.facebook.com/v21.0/${path}?` + new URLSearchParams({ access_token: token, ...params }), { method: 'POST' });
       const data: any = await res.json().catch(() => ({}));

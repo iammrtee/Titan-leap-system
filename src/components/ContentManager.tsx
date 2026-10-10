@@ -775,6 +775,11 @@ const AutoPostTab: React.FC = () => {
       return;
     }
 
+    if (schedulePlatforms.includes('yt') && !uploadedAssets.some(a => a.type === 'video')) {
+      toast.error('YouTube needs a video.', { description: 'Add an MP4 or MOV file, or untick YouTube.' });
+      return;
+    }
+
     setIsPublishing(true);
     try {
       const scheduledTime = new Date(`${postDate}T${postTime}:00`).toISOString();
