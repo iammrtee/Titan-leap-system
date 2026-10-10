@@ -177,3 +177,18 @@ CREATE TABLE IF NOT EXISTS automations (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ALTER TABLE automations DISABLE ROW LEVEL SECURITY;
+
+-- 14. Production Queue tasks (Creatives -> Production Queue)
+CREATE TABLE IF NOT EXISTS production_tasks (
+  id BIGINT PRIMARY KEY,
+  type TEXT,
+  platform TEXT,
+  title TEXT,
+  brief TEXT,
+  assignee TEXT,
+  due TEXT,
+  status TEXT,
+  checks JSONB DEFAULT '{}'::jsonb,
+  review_link TEXT
+);
+ALTER TABLE production_tasks DISABLE ROW LEVEL SECURITY;
