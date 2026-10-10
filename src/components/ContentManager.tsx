@@ -606,6 +606,8 @@ const AutoPostTab: React.FC = () => {
   const [uploadedAssets, setUploadedAssets] = useState<UploadedAsset[]>([]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<PostPlatform[]>(['ig', 'li']);
   const [caption, setCaption] = useState('');
+  const [captionBusy, setCaptionBusy] = useState(false);
+  const [captionBackup, setCaptionBackup] = useState<string | null>(null);
   const [postDate, setPostDate] = useState(new Date().toISOString().split('T')[0]);
   const [postTime, setPostTime] = useState('09:00');
   const [isPublishing, setIsPublishing] = useState(false);
@@ -741,6 +743,28 @@ const AutoPostTab: React.FC = () => {
     return () => clearInterval(t);
   }, [recentPosts]);
 
+  const generateCaption = async () => {
+    if (captionBusy) return;
+    setCaptionBusy(true);
+    try {
+      const platformMap: Record<string, string> = { ig: 'instagram', tt: 'tiktok', li: 'linkedin', fb: 'facebook', tw: xRoute === 'make' ? 'twitter_make' : 'twitter', yt: 'youtube' };
+      const res = await fetch('/api/ai/caption', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeader()) },
+        body: JSON.stringify({ draft: caption, mediaUrls: uploadedAssets.map(a => a.url), platforms: selectedPlatforms.map(p => platformMap[p] || p) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not write a caption');
+      setCaptionBackup(caption);
+      setCaption(data.caption);
+      toast.success(data.sawImages ? 'Caption written from your picture' : 'Caption written', { description: `${data.used}/${data.limit} today` });
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setCaptionBusy(false);
+    }
+  };
+
   const handlePublish = async () => {
     if (!caption.trim() && uploadedAssets.length === 0) { toast.error("Add a caption or media before publishing."); return; }
     // TikTok has its own per-post choices (privacy, disclosure, consent) in the panel below; it
@@ -870,7 +894,18 @@ const AutoPostTab: React.FC = () => {
 
           {/* Caption */}
           <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 p-6">
-            <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-4 flex items-center gap-2"><FileText size={12} /> Caption</div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-4 flex items-center gap-2">
+              <FileText size={12} /> Caption
+              <span className="ml-auto flex items-center gap-2">
+                {captionBackup !== null && !captionBusy && (
+                  <button onClick={() => { setCaption(captionBackup); setCaptionBackup(null); }} className="normal-case tracking-normal text-[11px] font-bold text-on-surface-variant/60 hover:text-on-surface">Undo</button>
+                )}
+                <button onClick={generateCaption} disabled={captionBusy} title="Write a viral caption with AI (free). It looks at your picture and your draft."
+                  className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center shadow hover:bg-primary/90 disabled:opacity-60 transition-all normal-case">
+                  {captionBusy ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} fill="currentColor" />}
+                </button>
+              </span>
+            </div>
             <textarea value={caption} onChange={(e) => setCaption(e.target.value)}
               placeholder="Write your post caption here... Use line breaks for formatting. Add hashtags at the end."
               className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-4 py-3 text-sm font-medium text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all min-h-[140px] resize-y" />
