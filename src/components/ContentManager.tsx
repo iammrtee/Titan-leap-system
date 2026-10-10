@@ -1034,7 +1034,8 @@ const AutoPostTab: React.FC = () => {
                       const r = post.platform_results?.[p];
                       return (
                         <p key={p} className={cn("text-[10px] font-medium", !r ? "text-on-surface-variant/50" : r.success ? "text-green-500" : "text-red-500")}>
-                          <span className="capitalize font-bold">{p}</span>: {!r ? 'waiting…' : r.success ? `posted${r.slides ? ` (${r.slides} slides)` : r.images ? ` (${r.images} images)` : r.photos ? ` (${r.photos} photos)` : ''}` : r.error}
+                          <span className="capitalize font-bold">{p}</span>: {!r ? 'waiting…' : r.success ? `posted${r.slides ? ` (${r.slides} slides)` : r.images ? ` (${r.images} image${r.images > 1 ? 's' : ''})` : r.photos ? ` (${r.photos} photos)` : ''}` : r.error}
+                          {r?.success && r.note && <span className="block text-amber-500 font-normal">{r.note}</span>}
                         </p>
                       );
                     })}
