@@ -889,9 +889,8 @@ const AutoPostTab: React.FC = () => {
             </AnimatePresence>
           </div>
 
-          {selectedPlatforms.includes('tt') && (
-            <TikTokComposer assets={uploadedAssets} caption={caption} profileId={profileId} />
-          )}
+          {/* Always shown: TikTok posts from here (privacy and disclosure choices are per post). */}
+          <TikTokComposer assets={uploadedAssets} caption={caption} profileId={profileId} />
         </div>
 
         {/* RIGHT: Accounts + Platforms + Publish + Jobs */}
