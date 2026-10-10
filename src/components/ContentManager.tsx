@@ -105,7 +105,7 @@ const POST_PLATFORMS: { id: PostPlatform; label: string; icon: React.ReactNode; 
   { id: 'tt', label: 'TikTok', icon: <Play size={16} />, color: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20', badge: 'Pending app review', badgeColor: 'bg-amber-500/15 text-amber-600' },
   { id: 'li', label: 'LinkedIn', icon: <Linkedin size={16} />, color: 'bg-blue-600/10 text-blue-600 border-blue-600/20' },
   { id: 'fb', label: 'Facebook', icon: <Facebook size={16} />, color: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
-  { id: 'tw', label: 'Twitter / X', icon: <Twitter size={16} />, color: 'bg-sky-500/10 text-sky-500 border-sky-500/20', badge: 'Paid API', badgeColor: 'bg-red-500/15 text-red-500' },
+  { id: 'tw', label: 'Twitter / X', icon: <Twitter size={16} />, color: 'bg-sky-500/10 text-sky-500 border-sky-500/20' },
   { id: 'yt', label: 'YouTube', icon: <Youtube size={16} />, color: 'bg-red-500/10 text-red-500 border-red-500/20' },
 ];
 
@@ -606,6 +606,8 @@ const AutoPostTab: React.FC = () => {
   const [distributionJobs, setDistributionJobs] = useState<DistributionJob[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [linkedinCompanyId, setLinkedinCompanyId] = useState('');
+  const [xRoute, setXRoute] = useState<'direct' | 'make'>(() => { try { return localStorage.getItem('titanleap_x_route') === 'direct' ? 'direct' : 'make'; } catch { return 'make'; } });
+  const chooseXRoute = (r: 'direct' | 'make') => { setXRoute(r); try { localStorage.setItem('titanleap_x_route', r); } catch {} };
   const [profileId, setProfileId] = useState('default');
 
   useEffect(() => {
@@ -748,7 +750,7 @@ const AutoPostTab: React.FC = () => {
       try { await tiktokRef.current?.post(); } finally { setIsPublishing(false); }
       return;
     }
-    const platformKey: Record<string, string> = { ig: 'instagram', tt: 'tiktok', li: 'linkedin', fb: 'facebook', tw: 'twitter', yt: 'youtube' };
+    const platformKey: Record<string, string> = { ig: 'instagram', tt: 'tiktok', li: 'linkedin', fb: 'facebook', tw: xRoute === 'make' ? 'twitter_make' : 'twitter', yt: 'youtube' };
     const notConnected = schedulePlatforms.filter(p => connections[platformKey[p]] && !connections[platformKey[p]].connected);
     if (notConnected.length > 0) {
       const p = platformKey[notConnected[0]];
@@ -766,7 +768,7 @@ const AutoPostTab: React.FC = () => {
     try {
       const scheduledTime = new Date(`${postDate}T${postTime}:00`).toISOString();
       const mediaUrls = uploadedAssets.map(a => a.url);
-      const platformMap: Record<string, string> = { ig: 'instagram', tt: 'tiktok', li: 'linkedin', fb: 'facebook', tw: 'twitter', yt: 'youtube' };
+      const platformMap: Record<string, string> = { ig: 'instagram', tt: 'tiktok', li: 'linkedin', fb: 'facebook', tw: xRoute === 'make' ? 'twitter_make' : 'twitter', yt: 'youtube' };
 
       const scheduleAuthHeader = await getAuthHeader();
       const response = await fetch('/api/posts/schedule', {
@@ -927,9 +929,10 @@ const AutoPostTab: React.FC = () => {
             <div className="space-y-2">
               {POST_PLATFORMS.map(platform => {
                 const isSelected = selectedPlatforms.includes(platform.id);
-                const conn = connections[{ ig: 'instagram', tt: 'tiktok', li: 'linkedin', fb: 'facebook', tw: 'twitter', yt: 'youtube' }[platform.id]];
+                const conn = connections[{ ig: 'instagram', tt: 'tiktok', li: 'linkedin', fb: 'facebook', tw: xRoute === 'make' ? 'twitter_make' : 'twitter', yt: 'youtube' }[platform.id]];
                 return (
-                  <button key={platform.id} onClick={() => togglePlatform(platform.id)}
+                  <div key={platform.id}>
+                  <button onClick={() => togglePlatform(platform.id)}
                     className={cn("w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all text-left",
                       isSelected ? cn(platform.color, "border-current/30") : "border-outline-variant/10 text-on-surface-variant/50 hover:border-outline-variant/30 hover:text-on-surface-variant")}>
                     {platform.icon}
@@ -947,6 +950,16 @@ const AutoPostTab: React.FC = () => {
                     )}
                     {isSelected && <Check size={14} />}
                   </button>
+                  {platform.id === 'tw' && isSelected && (
+                    <div className="flex gap-1 mt-1 p-1 rounded-xl bg-surface-container-lowest border border-outline-variant/10">
+                      {([['make', 'Make → Buffer (free)'], ['direct', 'Direct (our app)']] as const).map(([r, label]) => (
+                        <button key={r} onClick={() => chooseXRoute(r)}
+                          className={cn("flex-1 text-[10px] font-black uppercase tracking-wider px-2 py-1.5 rounded-lg transition-all",
+                            xRoute === r ? "bg-sky-500 text-white" : "text-on-surface-variant/60 hover:text-on-surface-variant")}>{label}</button>
+                      ))}
+                    </div>
+                  )}
+                  </div>
                 );
               })}
             </div>
