@@ -1856,10 +1856,11 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
       linkedin: { ...linkedin, source: source(creds?.linkedin_token, process.env.LINKEDIN_ACCESS_TOKEN), connectVia: 'linkedin', canConnect: has('LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'), setup: 'Add LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET in Render' },
       tiktok: { ...tiktokStatus, source: source(creds?.tiktok_token, process.env.TIKTOK_ACCESS_TOKEN), connectVia: 'tiktok', canConnect: has('TIKTOK_CLIENT_KEY', 'TIKTOK_CLIENT_SECRET'), setup: 'Add TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET in Render' },
       twitter: creds?.twitter_token || process.env.TWITTER_BEARER_TOKEN
-        ? { connected: true, account: process.env.X_WEBHOOK_URL ? 'Connected · direct (falls back to Buffer if X blocks the post)' : 'Connected · text posts only until the paid X API', source: source(creds?.twitter_token, process.env.TWITTER_BEARER_TOKEN), connectVia: 'twitter', canConnect: has('TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'), setup: 'Add TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET in Render' }
-        : process.env.X_WEBHOOK_URL
-        ? { connected: true, account: 'Posting via Buffer (free) · connect X directly for no middleman', source: 'env', connectVia: 'twitter', canConnect: has('TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'), setup: 'Add TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET in Render' }
-        : { connected: false, error: 'Not connected · images need the paid X API', source: null, connectVia: 'twitter', canConnect: has('TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'), setup: 'Add TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET in Render' },
+        ? { connected: true, account: 'Direct · text only until the paid X API', source: source(creds?.twitter_token, process.env.TWITTER_BEARER_TOKEN), connectVia: 'twitter', canConnect: has('TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'), setup: 'Add TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET in Render' }
+        : { connected: false, error: 'Direct not connected · press Connect in Connected Accounts', source: null, connectVia: 'twitter', canConnect: has('TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'), setup: 'Add TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET in Render' },
+      twitter_make: process.env.X_WEBHOOK_URL
+        ? { connected: true, account: 'Make → Buffer (free) · text + 1 image', source: 'env', setup: 'Set in Render settings' }
+        : { connected: false, error: 'Make route not set up · add X_WEBHOOK_URL in Render', source: null, setup: 'Add X_WEBHOOK_URL in Render' },
       youtube: { ...youtubeStatus, source: source(creds?.youtube_token, null), connectVia: 'youtube', canConnect: has('YOUTUBE_CLIENT_ID', 'YOUTUBE_CLIENT_SECRET'), setup: 'Add YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET in Render' },
     };
     connectionsCache.set(cacheKey, { at: Date.now(), data });
@@ -2155,24 +2156,14 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     return { success: true, via: 'x-api', id: data.data?.id, ...(skipped ? { note: 'Text posted; images need the paid X API' } : {}) };
   }
 
-  // Direct X API first (what clients will use once it is paid for); if X refuses or nothing is
-  // connected, the Buffer webhook posts instead, so X never blocks a publish.
+  // The user picks the route per post: 'twitter' = our direct X API, 'twitter_make' = Make -> Buffer.
   async function publishToTwitter(post: any, creds: any) {
+    return publishToTwitterDirect(post, creds);
+  }
+  async function publishToTwitterMake(post: any) {
     const hook = process.env.X_WEBHOOK_URL;
-    const direct = !!(creds?.twitter_token || process.env.TWITTER_BEARER_TOKEN);
-    if (!direct) {
-      if (hook) return publishToTwitterViaWebhook(post, hook);
-      throw new Error('X is not connected');
-    }
-    const hasMedia = Array.isArray(post.media_urls) && post.media_urls.length > 0;
-    // Direct posting is text-only, so with media attached the Buffer route (which can carry the image) is better.
-    if (hook && hasMedia) return publishToTwitterViaWebhook(post, hook);
-    try {
-      return await publishToTwitterDirect(post, creds);
-    } catch (e: any) {
-      if (hook && [402, 403, 429].includes(e?.status)) return publishToTwitterViaWebhook(post, hook);
-      throw e;
-    }
+    if (!hook) throw new Error('Make route not set up: add X_WEBHOOK_URL in Render');
+    return publishToTwitterViaWebhook(post, hook);
   }
 
   async function publishToTiktok(post: any, creds: any) {
@@ -2268,6 +2259,7 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     facebook: publishToFacebook,
     linkedin: publishToLinkedin,
     twitter: publishToTwitter,
+    twitter_make: (post: any) => publishToTwitterMake(post),
     tiktok: publishToTiktok,
     youtube: publishToYoutube,
   };
