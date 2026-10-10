@@ -1302,6 +1302,62 @@ The first character of your response must be "{" and the last must be "}".`;
 
   // Marks an uploaded screenshot: Claude looks at the image and returns where the
   // problem is; the browser draws the mark. No headless browser on the server.
+  // One-click caption writer for Auto Post. Uses Gemini's free tier (looks at up to 3 pictures),
+  // so it costs nothing; a small per-day cap keeps it inside the free quota.
+  const captionUsage = new Map<string, { day: string; n: number }>();
+  app.post("/api/ai/caption", requireUser, async (req, res) => {
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey || apiKey === 'undefined') return res.status(500).json({ error: "Add GEMINI_API_KEY in Render (free from Google AI Studio) to use the caption writer." });
+      const { draft, mediaUrls, platforms, tone } = req.body || {};
+      const day = new Date().toISOString().slice(0, 10);
+      const key = String((req as any).user?.email || (req as any).user?.id || 'anon');
+      const u = captionUsage.get(key);
+      const used = u && u.day === day ? u.n : 0;
+      const cap = Number(process.env.CAPTION_DAILY_LIMIT || 40);
+      if (used >= cap) return res.status(429).json({ error: `Daily limit of ${cap} AI captions reached. Try again tomorrow.` });
+
+      const urls: string[] = (Array.isArray(mediaUrls) ? mediaUrls : []).filter((x: any) => typeof x === 'string' && /^https?:\/\//i.test(x) && !/\.(mp4|mov|webm)(\?|$)/i.test(x)).slice(0, 3);
+      const hasVideo = (Array.isArray(mediaUrls) ? mediaUrls : []).some((x: any) => /\.(mp4|mov|webm)(\?|$)/i.test(String(x)));
+      const parts: any[] = [];
+      for (const url of urls) {
+        const r = await fetch(url);
+        if (!r.ok) continue;
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (buf.length > 4_000_000) continue;
+        parts.push({ inlineData: { mimeType: r.headers.get('content-type')?.split(';')[0] || 'image/jpeg', data: buf.toString('base64') } });
+      }
+      const plats: string[] = Array.isArray(platforms) ? platforms.map(String) : [];
+      const short = plats.includes('twitter') || plats.includes('twitter_make');
+      const prompt = `You write social media captions that get saved, shared and commented on, for TitanLeap, a growth agency.
+${parts.length ? 'Look closely at the attached picture(s) and write about what is actually in them.' : hasVideo ? 'A video is attached (you cannot see it); write from the draft/topic below.' : 'No media is attached; write from the draft/topic below.'}
+Draft or topic from the user: ${String(draft || '').slice(0, 1500) || '(none, base it on the picture)'}
+Platforms: ${plats.join(', ') || 'general'}.${short ? ' X is selected, so the WHOLE caption must be 260 characters or fewer, including hashtags.' : ''}
+Tone: ${String(tone || 'confident, plain, punchy').slice(0, 80)}.
+Rules: first line is a scroll-stopping hook (a bold claim, a number, or a question), no emojis in the first line;
+short lines with blank lines between; one clear call to action at the end; 3 to 5 relevant hashtags last;
+no filler, no "In today's world", no made-up statistics or promises.
+Return ONLY the caption text.`;
+      parts.push({ text: prompt });
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ apiKey });
+      const result: any = await ai.models.generateContent({
+        model: process.env.GEMINI_CAPTION_MODEL || "gemini-2.5-flash",
+        contents: [{ role: 'user', parts }],
+        config: { temperature: 0.9 },
+      });
+      let text = String((typeof result?.text === 'function' ? result.text() : result?.text) || '').trim();
+      text = text.replace(/^```[a-z]*\n?|```$/g, '').trim();
+      if (!text) throw new Error('Empty response');
+      if (short) text = text.slice(0, 280);
+      captionUsage.set(key, { day, n: used + 1 });
+      res.json({ caption: text, used: used + 1, limit: cap, sawImages: urls.length > 0 && parts.length > 1 });
+    } catch (e: any) {
+      console.error("[Caption] failed:", e?.message || e);
+      res.status(500).json({ error: /quota|429|RESOURCE_EXHAUSTED/i.test(String(e?.message)) ? "Google's free AI quota is used up for now. Try again in a few minutes." : "Could not write a caption. Try again." });
+    }
+  });
+
   app.post("/api/ai/annotate-shot", requireUser, async (req, res) => {
     try {
       const { image, width, height, title, whatWeSaw, quote, whatsWrong } = req.body || {};
