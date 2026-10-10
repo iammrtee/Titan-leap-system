@@ -7,7 +7,7 @@ import { cn } from '@/src/lib/utils';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 import { safeStorageName, toPostableJpeg, instagramRatioProblem } from '@/src/lib/postMedia';
 import { TikTokComposer } from './TikTokComposer';
-import { ConnectedAccounts, type Connection } from './ConnectedAccounts';
+import { ConnectedAccountsPanel, type Connection } from './ConnectedAccounts';
 
 // ─── Content Manager Tab Types ───
 type ContentManagerTab = 'production' | 'autopost';
@@ -141,6 +141,7 @@ export const ContentManager: React.FC = () => {
     return q.has('connected') || q.has('connect_error') ? 'autopost' : 'production';
   });
   const [sendToProductionSignal, setSendToProductionSignal] = useState<number>(0);
+  const [showAccounts, setShowAccounts] = useState(false);
 
   return (
     <div className="space-y-8">
@@ -174,6 +175,10 @@ export const ContentManager: React.FC = () => {
             </button>
           ))}
         </div>
+        <button onClick={() => setShowAccounts(true)}
+          className="bg-surface-container-low border border-outline-variant/20 text-on-surface px-4 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:bg-surface-container transition-all whitespace-nowrap shrink-0">
+          <LinkIcon size={16} /> Connected Accounts
+        </button>
         {managerTab === 'production' && (
           <button onClick={() => setSendToProductionSignal(Date.now())}
             className="bg-surface-container-low border border-outline-variant/20 text-on-surface px-4 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:bg-surface-container transition-all whitespace-nowrap shrink-0">
@@ -181,6 +186,8 @@ export const ContentManager: React.FC = () => {
           </button>
         )}
       </div>
+
+      {showAccounts && <ConnectedAccountsPanel onClose={() => setShowAccounts(false)} />}
 
       {/* Tab Content */}
       <AnimatePresence mode="wait">
@@ -691,6 +698,7 @@ const AutoPostTab: React.FC = () => {
     } catch {}
   };
   useEffect(() => { loadConnections(); loadRecentPosts(); }, [profileId]);
+  useEffect(() => { const f = () => loadConnections(true); window.addEventListener('connections-changed', f); return () => window.removeEventListener('connections-changed', f); }, [profileId, linkedinCompanyId]);
   // Re-check LinkedIn when the Company ID changes (debounced).
   useEffect(() => { const t = setTimeout(() => loadConnections(), 800); return () => clearTimeout(t); }, [linkedinCompanyId]);
 
@@ -895,8 +903,6 @@ const AutoPostTab: React.FC = () => {
 
         {/* RIGHT: Accounts + Platforms + Publish + Jobs */}
         <div className="space-y-6">
-          <ConnectedAccounts connections={connections} profileId={profileId} onChanged={() => loadConnections(true)} />
-
           <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 p-6">
             <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-4">Platforms</div>
             <div className="space-y-2">
