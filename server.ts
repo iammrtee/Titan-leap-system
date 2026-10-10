@@ -2224,6 +2224,9 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+    // Public legal pages (required by TikTok and other platform reviews).
+    app.get('/privacy', (_req, res) => res.sendFile(path.join(distPath, 'privacy.html')));
+    app.get('/terms', (_req, res) => res.sendFile(path.join(distPath, 'terms.html')));
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
