@@ -31,7 +31,7 @@ Leak Report), and a content/scheduling system.
 
 `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `ALLOWED_EMAILS` (login allowlist),
 `CLAUDE_API_KEY`, `GEMINI_API_KEY`, `APIFY_API_TOKEN`, `APP_URL`, Meta/LinkedIn/TikTok
-tokens. Planned: `TREG_TOKEN` (see Next work). Optional: `CLAUDE_VISION_MODEL`.
+tokens. Planned: `TREG_TOKEN` (see Next work). Optional: `CLAUDE_VISION_MODEL`, `SUPABASE_SERVICE_ROLE_KEY` (server-only; lets the server write when RLS is on).
 
 Connected Accounts (Auto Post → Connected Accounts) use OAuth and store tokens encrypted in
 `user_settings` (`src/services/tokenVault.ts`; key from `TOKEN_VAULT_KEY`, else the first of
