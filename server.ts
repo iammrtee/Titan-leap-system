@@ -106,6 +106,9 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
   // TikTok Direct Post (creator info, publish, status, media proxy). Tokens stay server-side.
   const tiktok = registerTikTokRoutes(app, { supabase, supabaseUrl: supabaseUrl || '', requireUser });
   
+  // AI Automation Hub: real jobs behind play / pause / run.
+  (await import("./src/services/automations.ts")).registerAutomationRoutes(app, { supabase, requireUser });
+
   // Mount Twitter Manual Router
   app.use("/api/twitter", twitterManualRouter);
 
