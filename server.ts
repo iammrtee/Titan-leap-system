@@ -2017,7 +2017,9 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
   // Until LinkedIn approves our Community Management API access, company page posts can go
   // through a Make.com scenario (Webhook -> LinkedIn "Create a Company Image Post").
   async function publishToLinkedinViaWebhook(post: any, hook: string) {
-    const images: string[] = (post.media_urls || []).filter((u: string) => u && !isVideoUrl(u)).slice(0, 9);
+    const all: string[] = (post.media_urls || []).filter((u: string) => !!u);
+    const images: string[] = all.filter(u => !isVideoUrl(u)).slice(0, 9);
+    const video: string | null = all.find(u => isVideoUrl(u)) || null;
     const res = await fetch(hook, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2026,13 +2028,15 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
         image_urls: images,
         image_count: images.length,
         first_image_url: images[0] || null,
+        video_url: video,
+        media_type: video ? 'video' : images.length ? 'image' : 'text',
         company_id: post.linkedin_company_id || process.env.LINKEDIN_DEFAULT_ORG_ID || null,
         post_id: post.id,
       }),
     });
     const body = await res.text().catch(() => '');
     if (!res.ok) throw new Error(`LinkedIn via Make failed (${res.status})${body ? `: ${body.slice(0, 200)}` : ''}`);
-    return { success: true, via: 'make', images: images.length };
+    return { success: true, via: 'make', images: images.length, video: !!video };
   }
 
   async function publishToLinkedin(post: any, creds: any) {
