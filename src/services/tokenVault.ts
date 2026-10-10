@@ -41,6 +41,7 @@ export function unseal(value?: string | null): string | null {
 const TOKEN_FIELDS = [
   'facebook_token', 'facebook_refresh_token', 'linkedin_token', 'linkedin_refresh_token',
   'twitter_token', 'twitter_refresh_token', 'tiktok_token', 'tiktok_refresh_token',
+  'youtube_token', 'youtube_refresh_token',
 ];
 
 // A user_settings row with its token fields decrypted.

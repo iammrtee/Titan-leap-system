@@ -6,7 +6,7 @@ import fs from "fs";
 import AdmZip from "adm-zip";
 import { executePublishingDaemon } from "./src/services/daemon.ts";
 import { authRouter, setAccountStore } from "./src/services/auth.ts";
-import { openCreds } from "./src/services/tokenVault.ts";
+import { openCreds, seal } from "./src/services/tokenVault.ts";
 import { registerTikTokRoutes } from "./src/services/tiktokPost.ts";
 import { twitterManualRouter } from "./src/services/twitter-manual.ts";
 import { createClient } from '@supabase/supabase-js';
@@ -1844,6 +1844,9 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
       }),
     ]);
     const tiktokStatus = await tiktok.status(profileId);
+    const youtubeStatus: any = !creds?.youtube_token
+      ? { connected: false, error: 'Not connected' }
+      : await check(async () => { await youtubeAccessToken(creds); return creds.youtube_channel || 'YouTube channel'; });
     // Where each connection comes from: connected in the app (removable) or env vars in Render.
     const source = (appField: any, envField: any) => (appField ? 'app' : envField ? 'env' : null);
     const has = (...names: string[]) => names.every(n => !!process.env[n]);
@@ -1852,8 +1855,10 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
       facebook: { ...facebook, source: source(creds?.facebook_token && creds?.meta_fb_page_id, process.env.META_PAGE_ACCESS_TOKEN), connectVia: 'meta', canConnect: has('META_APP_ID', 'META_APP_SECRET'), setup: 'Add META_APP_ID and META_APP_SECRET in Render to connect from here' },
       linkedin: { ...linkedin, source: source(creds?.linkedin_token, process.env.LINKEDIN_ACCESS_TOKEN), connectVia: 'linkedin', canConnect: has('LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'), setup: 'Add LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET in Render' },
       tiktok: { ...tiktokStatus, source: source(creds?.tiktok_token, process.env.TIKTOK_ACCESS_TOKEN), connectVia: 'tiktok', canConnect: has('TIKTOK_CLIENT_KEY', 'TIKTOK_CLIENT_SECRET'), setup: 'Add TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET in Render' },
-      twitter: { connected: false, error: 'Images need the paid X API', source: source(creds?.twitter_token, process.env.TWITTER_BEARER_TOKEN), connectVia: null, canConnect: false },
-      youtube: { connected: false, error: 'Video upload not built yet', source: null, connectVia: null, canConnect: false },
+      twitter: creds?.twitter_token || process.env.TWITTER_BEARER_TOKEN
+        ? { connected: true, account: 'Connected · text posts only until the paid X API', source: source(creds?.twitter_token, process.env.TWITTER_BEARER_TOKEN), connectVia: 'twitter', canConnect: has('TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'), setup: 'Add TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET in Render' }
+        : { connected: false, error: 'Not connected · images need the paid X API', source: null, connectVia: 'twitter', canConnect: has('TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'), setup: 'Add TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET in Render' },
+      youtube: { ...youtubeStatus, source: source(creds?.youtube_token, null), connectVia: 'youtube', canConnect: has('YOUTUBE_CLIENT_ID', 'YOUTUBE_CLIENT_SECRET'), setup: 'Add YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET in Render' },
     };
     connectionsCache.set(cacheKey, { at: Date.now(), data });
     res.json(data);
@@ -1865,6 +1870,7 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     linkedin: ['linkedin_token', 'linkedin_refresh_token', 'linkedin_org_id', 'linkedin_person_id'],
     tiktok: ['tiktok_token', 'tiktok_refresh_token', 'tiktok_open_id'],
     twitter: ['twitter_token', 'twitter_refresh_token'],
+    youtube: ['youtube_token', 'youtube_refresh_token', 'youtube_channel'],
   };
   app.post("/api/accounts/:platform/disconnect", requireUser, async (req, res) => {
     const fields = DISCONNECT_FIELDS[req.params.platform];
@@ -2086,17 +2092,41 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     return { success: true, id: data.id || res.headers.get('x-restli-id'), images: assets.length };
   }
 
+  // X user tokens last ~2 hours; the refresh token rotates, so the new pair is saved each time.
+  async function twitterAccessToken(creds: any): Promise<string> {
+    if (!creds?.twitter_refresh_token) {
+      const t = creds?.twitter_token || process.env.TWITTER_BEARER_TOKEN;
+      if (!t) throw new Error('X is not connected');
+      return t;
+    }
+    const r = await fetch('https://api.twitter.com/2/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${Buffer.from(`${process.env.TWITTER_CLIENT_ID}:${process.env.TWITTER_CLIENT_SECRET}`).toString('base64')}`,
+      },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: creds.twitter_refresh_token, client_id: process.env.TWITTER_CLIENT_ID || '' }),
+    });
+    const d: any = await r.json().catch(() => ({}));
+    if (!r.ok || !d.access_token) throw new Error('The X connection expired. Connect X again.');
+    await supabase.from('user_settings').update({
+      twitter_token: seal(d.access_token), twitter_refresh_token: seal(d.refresh_token || creds.twitter_refresh_token),
+      updated_at: new Date().toISOString(),
+    }).eq('profile_id', creds.profile_id || 'default');
+    return d.access_token;
+  }
+
   async function publishToTwitter(post: any, creds: any) {
-    const token = creds?.twitter_token || process.env.TWITTER_BEARER_TOKEN;
-    if (!token) throw new Error('Missing Twitter/X token for this client');
+    const token = await twitterAccessToken(creds);
     const res = await fetch('https://api.twitter.com/2/tweets', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: post.caption || '' }),
+      body: JSON.stringify({ text: String(post.caption || '').slice(0, 280) }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.detail || data?.title || 'Twitter publish failed');
-    return { success: true, id: data.data?.id };
+    const data: any = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.detail || data?.title || 'X publish failed');
+    const skipped = Array.isArray(post.media_urls) && post.media_urls.length > 0;
+    return { success: true, id: data.data?.id, ...(skipped ? { note: 'Text posted; images need the paid X API' } : {}) };
   }
 
   async function publishToTiktok(post: any, creds: any) {
@@ -2132,8 +2162,59 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     return { success: true, id: initData.data?.publish_id, status: 'processing' };
   }
 
-  async function publishToYoutube(): Promise<any> {
-    throw new Error('YouTube publishing needs a resumable video upload step \u2014 not implemented yet.');
+  // Google access tokens last an hour, so exchange the refresh token for a fresh one each time.
+  async function youtubeAccessToken(creds: any): Promise<string> {
+    if (!creds?.youtube_refresh_token) throw new Error('YouTube is not connected');
+    const r = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: process.env.YOUTUBE_CLIENT_ID || '', client_secret: process.env.YOUTUBE_CLIENT_SECRET || '',
+        refresh_token: creds.youtube_refresh_token, grant_type: 'refresh_token',
+      }),
+    });
+    const d: any = await r.json().catch(() => ({}));
+    if (!r.ok || !d.access_token) throw new Error('The YouTube connection expired. Connect YouTube again.');
+    return d.access_token;
+  }
+
+  // Resumable upload, streamed straight from storage so the 512MB server never holds the video.
+  async function publishToYoutube(post: any, creds: any) {
+    const token = await youtubeAccessToken(creds);
+    const videoUrl = (post.media_urls || []).find((u: string) => isVideoUrl(u));
+    if (!videoUrl) throw new Error('YouTube needs a video file (mp4, mov or webm)');
+    const src = await fetch(videoUrl);
+    if (!src.ok || !src.body) throw new Error('Could not read the video from storage');
+    const len = src.headers.get('content-length');
+    const type = src.headers.get('content-type') || 'video/mp4';
+    const lines = String(post.caption || '').split('\n');
+    const title = (lines[0] || 'Untitled').slice(0, 100);
+    const description = lines.slice(1).join('\n').trim().slice(0, 4900);
+    // Videos from API projects that Google has not audited are locked to private, so private is the default.
+    const privacyStatus = process.env.YOUTUBE_PRIVACY || 'private';
+    const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': type, ...(len ? { 'X-Upload-Content-Length': len } : {}),
+      },
+      body: JSON.stringify({ snippet: { title, description, categoryId: '22' }, status: { privacyStatus, selfDeclaredMadeForKids: false } }),
+    });
+    const location = init.headers.get('location');
+    if (!init.ok || !location) {
+      const d: any = await init.json().catch(() => ({}));
+      throw new Error(d?.error?.message || `YouTube refused the upload (${init.status})`);
+    }
+    const up = await fetch(location, {
+      method: 'PUT',
+      headers: { 'Content-Type': type, ...(len ? { 'Content-Length': len } : {}) },
+      body: src.body as any,
+      // @ts-ignore Node needs this to stream a request body
+      duplex: 'half',
+    });
+    const out: any = await up.json().catch(() => ({}));
+    if (!up.ok || !out.id) throw new Error(out?.error?.message || `YouTube upload failed (${up.status})`);
+    return { success: true, id: out.id, url: `https://youtu.be/${out.id}`, privacy: privacyStatus };
   }
 
   const PLATFORM_PUBLISHERS: Record<string, (post: any, creds: any) => Promise<any>> = {
@@ -2142,7 +2223,7 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     linkedin: publishToLinkedin,
     twitter: publishToTwitter,
     tiktok: publishToTiktok,
-    youtube: (post: any) => publishToYoutube(),
+    youtube: publishToYoutube,
   };
 
   async function publishScheduledPosts() {
