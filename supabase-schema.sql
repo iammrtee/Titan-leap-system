@@ -166,3 +166,14 @@ ALTER TABLE social_snapshots DISABLE ROW LEVEL SECURITY;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tiktok_token TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tiktok_refresh_token TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tiktok_open_id TEXT;
+
+-- 13. Automation Hub state (play/pause, settings, last run + result)
+CREATE TABLE IF NOT EXISTS automations (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'Paused',
+  config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_run TIMESTAMP WITH TIME ZONE,
+  last_result JSONB,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+ALTER TABLE automations DISABLE ROW LEVEL SECURITY;
