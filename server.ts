@@ -1137,9 +1137,13 @@ The first character of your response must be "{" and the last must be "}".`;
   const competitorIntelCache = new Map<string, { data: any; expiresAt: number }>();
   // 30 recent posts is enough to see which ones beat the account's median; half the Apify cost of 60.
   const COMPETITOR_POSTS = 30;
+  // Per-platform content audits: the scores are computed in code, the model only writes the
+  // read-out, so a small model is enough. Set CONTENT_AUDIT_MODEL=claude-sonnet-5-5 to go back.
+  const CONTENT_AUDIT_MODEL = process.env.CONTENT_AUDIT_MODEL || 'claude-haiku-5-5';
   // Research text calls: free Gemini (with Google Search) first when GEMINI_API_KEY is set,
   // then Claude. RESEARCH_PROVIDER=claude forces Claude.
-  async function researchText(prompt: string, opts: { search: boolean; maxSearches?: number; claudeModel?: string }) {
+  async function researchText(prompt: string, opts: { search: boolean; maxSearches?: number; claudeModel?: string; budgeted?: boolean }) {
+    const budgeted = opts.budgeted !== false;
     const gemKey = process.env.GEMINI_API_KEY;
     if (gemKey && process.env.RESEARCH_PROVIDER !== 'claude') {
       try {
@@ -1156,11 +1160,11 @@ The first character of your response must be "{" and the last must be "}".`;
         console.warn('[Research] Gemini failed, using Claude:', e?.message || e);
       }
     }
-    const over = await budgetError();
+    const over = budgeted ? await budgetError() : null;
     if (over) throw new Error(over + (gemKey ? '' : ' Adding a free GEMINI_API_KEY in Render makes this step free.'));
     const { generateClaudeContent } = await import("./src/services/claude.ts");
-    const r = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, model: opts.claudeModel, useWebSearch: opts.search, webSearchMaxUses: opts.maxSearches ?? 3, temperature: 0.3 });
-    await addAiSpend(r.costUsd);
+    const r = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, model: opts.claudeModel, useWebSearch: opts.search, webSearchMaxUses: opts.maxSearches ?? 3, temperature: 0.3, prefillAssistant: opts.search ? undefined : "{" });
+    if (budgeted) await addAiSpend(r.costUsd);
     return r.text;
   }
   app.post("/api/ai/competitor-intel", requireUser, async (req, res) => {
@@ -1378,8 +1382,8 @@ LATEST POSTS:
 ${JSON.stringify(trimmedPosts)}
 
 ${CONTENT_ANALYSIS_SCHEMA}`;
-        const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, prefillAssistant: "{", temperature: 0.3 });
-        return res.json({ platform, handle, dataSource, dataQuality: 'sufficient', metrics, scores, grade, benchmark, analysis: parse(result.text) });
+        const text = await researchText(prompt, { search: false, claudeModel: CONTENT_AUDIT_MODEL, budgeted: false });
+        return res.json({ platform, handle, dataSource, dataQuality: 'sufficient', metrics, scores, grade, benchmark, analysis: parse(text) });
       }
 
       // Real posts via Treg for X, LinkedIn, Facebook and YouTube. Falls through to the web-read
@@ -1421,8 +1425,8 @@ LATEST POSTS:
 ${JSON.stringify(trimmed)}
 
 ${CONTENT_ANALYSIS_SCHEMA}`;
-          const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, prefillAssistant: "{", temperature: 0.3 });
-          return res.json({ platform, handle, dataSource: 'platform_posts', dataQuality: 'sufficient', metrics, scores, grade, benchmark, analysis: parse(result.text) });
+          const text = await researchText(prompt, { search: false, claudeModel: CONTENT_AUDIT_MODEL, budgeted: false });
+          return res.json({ platform, handle, dataSource: 'platform_posts', dataQuality: 'sufficient', metrics, scores, grade, benchmark, analysis: parse(text) });
         }
        } catch (e: any) {
         console.error(`[ContentAudit] ${platform} real-posts path failed, using web read:`, e?.message || e);
@@ -1455,8 +1459,7 @@ Then the analysis. Return ONLY this JSON:
 Rules: at most 3 leaks, exactly 3 nextPosts, no invented numbers. If you cannot open the profile, set dataQuality to "insufficient", analysis to null and judgement.score to null.
 JUDGEMENT: score how well this profile works as a channel that brings customers, from 0 to 100, using only what you actually saw: how recently and consistently they post (35 points), how the audience responds relative to their size (30 points), and whether the bio, links and posts give a clear offer and next step (35 points). If you saw too little to judge fairly, use null instead of guessing.
 The first character of your response must be "{" and the last must be "}".`;
-      const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, useWebSearch: true, webSearchMaxUses: 3, temperature: 0.3 });
-      const parsed = parse(result.text);
+      const parsed = parse(await researchText(prompt, { search: true, maxSearches: 3, claudeModel: CONTENT_AUDIT_MODEL, budgeted: false }));
       const rawScore = Number(parsed.judgement?.score);
       const judgedScore = parsed.dataQuality === 'insufficient' || parsed.judgement?.score == null || !Number.isFinite(rawScore)
         ? null : Math.max(0, Math.min(100, Math.round(rawScore)));
