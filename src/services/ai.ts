@@ -363,7 +363,7 @@ Output ONLY valid JSON matching this exact structure:
   }
 };
 
-export type CompetitorIntel = { researchedAt: string; competitors: any[]; playbook: any };
+export type CompetitorIntel = { researchedAt: string; competitors: any[]; playbook: any; discovered?: any[] };
 
 // Scrapes competitors' real top posts (IG/TikTok) or web-searches them, and returns a playbook
 // of proven patterns/hooks the 30-day plan is built on.
@@ -373,6 +373,8 @@ export const researchCompetitors = async (competitors: string[], auditData: any)
     headers: { 'Content-Type': 'application/json', ...(await getAuthHeader()) },
     body: JSON.stringify({
       competitors,
+      websiteUrl: auditData?.websiteUrl,
+      ownHandles: auditData?.socialHandles,
       businessName: auditData?.businessName,
       industry: auditData?.industry,
       offer: auditData?.mainOffer || auditData?.mainProduct,

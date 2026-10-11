@@ -932,20 +932,35 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
 
   const [generationState, setGenerationState] = useState<'idle' | 'crafting' | 'building' | 'completed'>('idle');
 
-  const handleResearchCompetitors = async () => {
+  // Business details for research: the audit report plus the intake form (website, handles).
+  const businessContext = () => {
+    let form: any = {};
+    try { form = JSON.parse(localStorage.getItem('titanleap_audit_form') || '{}') || {}; } catch {}
+    return { ...form, ...(auditData || {}), websiteUrl: auditData?.websiteUrl || form.websiteUrl, socialHandles: auditData?.socialHandles || form.socialHandles };
+  };
+
+  // Empty box = smart fill: the server finds the competitors itself, then scrapes them.
+  const handleResearchCompetitors = async (silent = false): Promise<CompetitorIntel | null> => {
     const list = competitorInput.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-    if (!list.length) { toast.error('Paste at least one competitor profile link'); return; }
-    if (list.length > 5) toast.message('Using the first 5 competitors');
+    if (list.length > 5 && !silent) toast.message('Using the first 5 competitors');
     setIsResearching(true);
     try {
-      try { localStorage.setItem('titanleap_competitors', competitorInput); } catch {}
-      const intel = await researchCompetitors(list.slice(0, 5), auditData);
+      const intel = await researchCompetitors(list.slice(0, 5), businessContext());
       setCompetitorIntel(intel);
       try { localStorage.setItem('titanleap_competitor_intel', JSON.stringify(intel)); } catch {}
+      if (!list.length && intel.competitors?.length) {
+        const filled = intel.competitors.map((c: any) => c.input).join('\n');
+        setCompetitorInput(filled);
+        try { localStorage.setItem('titanleap_competitors', filled); } catch {}
+      } else {
+        try { localStorage.setItem('titanleap_competitors', competitorInput); } catch {}
+      }
       const posts = intel.competitors.reduce((n: number, c: any) => n + (c.postsAnalyzed || 0), 0);
-      toast.success('Competitor research done', { description: `${posts} real posts analysed. Generate the plan to build on it.` });
+      if (!silent) toast.success('Competitor research done', { description: `${intel.competitors.length} competitors, ${posts} real posts analysed.` });
+      return intel;
     } catch (err: any) {
       toast.error(err.message || 'Competitor research failed');
+      return null;
     } finally {
       setIsResearching(false);
     }
@@ -956,15 +971,16 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     setIsGeneratingPlan(true);
     setGenerationState('crafting');
     try {
-      // Simulate the "crafting strategy" phase
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // No evidence yet: find and study competitors first so the plan is built on what works.
+      let intel = competitorIntel;
+      if (!intel) intel = await handleResearchCompetitors(true);
       setGenerationState('building');
-      
-      const plan = await generate30DayPlan(auditData, competitorIntel);
+
+      const plan = await generate30DayPlan(auditData, intel);
       
       if (plan && plan.strategicSyncSummary) {
         setGenerationState('completed');
-        setThirtyDayPlan({ ...plan, builtOnEvidence: !!competitorIntel, evidenceDate: competitorIntel?.researchedAt || null });
+        setThirtyDayPlan({ ...plan, builtOnEvidence: !!intel, evidenceDate: intel?.researchedAt || null });
         // Keep the completed state visible for a moment before resetting
         setTimeout(() => {
           setGenerationState('idle');
@@ -1233,18 +1249,18 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
               {posts} real posts · {competitorIntel.competitors.length} competitors · {new Date(competitorIntel.researchedAt).toLocaleDateString()}
             </span>
           ) : (
-            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg bg-amber-500/10 text-amber-600">Not researched — plan will be guesswork</span>
+            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg bg-amber-500/10 text-amber-600">Not researched yet — runs automatically with the plan</span>
           )}
         </div>
-        <p className="text-xs text-on-surface-variant/70 font-medium">Paste 2–5 competitors or accounts winning in your niche (one per line). Instagram and TikTok links get their real top posts scraped; YouTube, LinkedIn, X or brand names are researched on the web. The plan then copies the structure of what is proven to work.</p>
+        <p className="text-xs text-on-surface-variant/70 font-medium">We find your competitors from your audit and read their real top posts, then build the plan on what is proven to work. Leave the box empty to let us pick, or paste your own (one per line) to override.</p>
         <div className="flex flex-col md:flex-row gap-3">
           <textarea value={competitorInput} onChange={e => setCompetitorInput(e.target.value)} rows={3}
-            placeholder={"https://www.instagram.com/competitor\nhttps://www.tiktok.com/@competitor\nhttps://www.youtube.com/@competitor"}
+            placeholder={"Leave empty — we'll find them from your audit.\nOr paste: https://www.instagram.com/competitor"}
             className="flex-1 bg-surface-container-lowest border border-outline-variant/20 rounded-xl p-3 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
-          <button onClick={handleResearchCompetitors} disabled={isResearching}
+          <button onClick={() => handleResearchCompetitors()} disabled={isResearching}
             className="md:w-48 bg-primary text-white px-5 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60">
             {isResearching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-            {isResearching ? 'Researching (1–2 min)…' : competitorIntel ? 'Re-research' : 'Research competitors'}
+            {isResearching ? 'Researching (1–2 min)…' : competitorIntel ? 'Re-research' : competitorInput.trim() ? 'Research these' : 'Find competitors'}
           </button>
         </div>
         {pb && (
@@ -1546,7 +1562,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                 </div>
                 <div className="text-center space-y-2">
                   <h3 className="text-xl md:text-2xl font-black text-on-surface tracking-tight">Engineering Your 30-Day Strategy</h3>
-                  <p className="text-sm md:text-base text-on-surface-variant/60 font-medium max-w-md mx-auto">Analyzing your audit data to build a high-conversion content roadmap...</p>
+                  <p className="text-sm md:text-base text-on-surface-variant/60 font-medium max-w-md mx-auto">{isResearching ? 'Finding your competitors and reading their best-performing posts (1–2 min)...' : 'Building your 30 days on what is proven to work...'}</p>
                 </div>
               </div>
             ) : thirtyDayPlan ? (
@@ -1583,7 +1599,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                               exit={{ opacity: 0, y: -5 }}
                               className="w-32 text-left"
                             >
-                              {generationState === 'crafting' && 'Crafting Strategy...'}
+                              {generationState === 'crafting' && (isResearching ? 'Studying competitors...' : 'Crafting Strategy...')}
                               {generationState === 'building' && 'Building Content Plan...'}
                               {generationState === 'completed' && 'Completed Boss 🫡'}
                             </motion.span>
