@@ -121,11 +121,11 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
 
   // Claude AI Proxy (protected)
   // Monthly Claude budget for the content-plan features (competitor research, 30-day plan,
-  // refine, ⚡ captions). AI_MONTHLY_BUDGET_USD in Render, default $1. Stored in the
+  // refine, ⚡ captions). AI_MONTHLY_BUDGET_USD in Render, default $3. The audit is never capped. Stored in the
   // ai_spend table (supabase-schema.sql section 16); falls back to memory if it's missing.
   const aiSpendMem = new Map<string, number>();
   const spendMonth = () => new Date().toISOString().slice(0, 7);
-  const aiBudget = () => Number(process.env.AI_MONTHLY_BUDGET_USD) || 1;
+  const aiBudget = () => Number(process.env.AI_MONTHLY_BUDGET_USD) || 3;
   const getAiSpend = async (): Promise<number> => {
     const m = spendMonth();
     try {
