@@ -43,6 +43,7 @@ const unifiedGenerateContent = async (options: {
   systemPrompt?: string;
   responseMimeType?: string;
   temperature?: number;
+  useWebSearch?: boolean;
 }) => {
   if (currentEngine === 'claude') {
     const result = await generateClaudeContent(options);
@@ -162,7 +163,7 @@ export const generateContentScripts = async (handle: string, mode: string) => {
     Your task is to perform a DEEP AUDIT of the specific link provided: "${handle}".
     
     CRITICAL DIRECTIVE:
-    1. Use 'urlContext' first. If it fails (login wall/bot protection), you MUST use 'googleSearch' to find transcripts, captions, or detailed descriptions of this specific post/video.
+    1. Use web search to open it. If that fails (login wall/bot protection), search for transcripts, captions, or detailed descriptions of this specific post/video.
     2. Do NOT give generic advice. Reconstruct the actual elements used in this specific content.
     3. VISUAL HOOK: If the content is a video, describe the visual hook (e.g., "A person holding a phone with a green screen background").
     
@@ -179,7 +180,7 @@ export const generateContentScripts = async (handle: string, mode: string) => {
     Your task is to perform a COMPREHENSIVE AUDIT of the social media handle or brand: "${handle}".
     
     CRITICAL DIRECTIVE:
-    1. Use 'googleSearch' and 'urlContext' to find their most recent and highest-performing content across all platforms.
+    1. Use web search to find their most recent and highest-performing content across all platforms.
     2. Analyze their "Content DNA": Identify their unique hook style, pacing, visual language (e.g., "Aesthetic vlogs", "Talking head with captions"), and recurring themes.
     3. STRICT SPECIFICITY RULE: Reference actual topics they talk about, specific hooks they've used, and performance data you find. NO GENERIC ADVICE.
     
@@ -200,6 +201,7 @@ export const generateContentScripts = async (handle: string, mode: string) => {
     const response = await unifiedGenerateContent({
       prompt,
       responseMimeType: "application/json",
+      useWebSearch: true,
     });
 
     const data = parseJSON(response.text, {});
@@ -361,7 +363,56 @@ Output ONLY valid JSON matching this exact structure:
   }
 };
 
-export const generate30DayPlan = async (auditData: any) => {
+export type CompetitorIntel = { researchedAt: string; competitors: any[]; playbook: any };
+
+// Scrapes competitors' real top posts (IG/TikTok) or web-searches them, and returns a playbook
+// of proven patterns/hooks the 30-day plan is built on.
+export const researchCompetitors = async (competitors: string[], auditData: any): Promise<CompetitorIntel> => {
+  const res = await fetch('/api/ai/competitor-intel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await getAuthHeader()) },
+    body: JSON.stringify({
+      competitors,
+      businessName: auditData?.businessName,
+      industry: auditData?.industry,
+      offer: auditData?.mainOffer || auditData?.mainProduct,
+      audience: auditData?.targetAudience || auditData?.audience,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Competitor research failed');
+  return data;
+};
+
+const intelBlock = (intel?: CompetitorIntel | null) => {
+  if (!intel?.playbook) return `
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    COMPETITOR EVIDENCE
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    None supplied. Base hooks and formats on patterns that are well established in this niche, and set "modeledOn" to "niche pattern".`;
+  const p = intel.playbook;
+  const posts = (intel.competitors || []).flatMap((c: any) => (c.topPosts || []).slice(0, 4).map((t: any) =>
+    `- @${c.handle} (${c.platform}, ${t.format}): "${String(t.caption || '').slice(0, 140)}" — ${t.views ? t.views + ' views' : (t.likes ?? '?') + ' likes'}${t.timesMedian ? `, ${t.timesMedian}x their median` : ''}`));
+  return `
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    PROVEN COMPETITOR EVIDENCE — BUILD THE CALENDAR ON THIS
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    This is real research on what is working for competitors right now. At least 22 of the 30 posts must be modeled on a specific pattern, hook or top post below (adapted to our brand, never copied). The rest may test gaps.
+    Summary: ${p.summary || ''}
+    Winning patterns: ${JSON.stringify(p.winningPatterns || [])}
+    Proven hooks (use "ourVersion" as a starting point): ${JSON.stringify(p.provenHooks || [])}
+    Topics that win: ${JSON.stringify(p.topicsThatWin || [])}
+    Formats that win: ${JSON.stringify(p.formatsThatWin || [])}
+    Gaps we can own: ${JSON.stringify(p.gaps || [])}
+    Avoid: ${JSON.stringify(p.avoid || [])}
+    Cadence: ${p.cadence || ''}
+    Trends now: ${JSON.stringify(p.trendsNow || [])}
+    Top competitor posts:
+    ${posts.join('\n    ')}
+    For every post set "modeledOn" to the exact evidence it copies the structure of (e.g. "@handle carousel '5 mistakes…' 4.1x median"), or "gap test: <gap>".`;
+};
+
+export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel | null) => {
   const prompt = `
     You are a world-class viral social media strategist and content architect with deep expertise in platform algorithms, audience psychology, and growth hacking.
 
@@ -401,6 +452,7 @@ export const generate30DayPlan = async (auditData: any) => {
     3. Viral Hooks & Engagement (Drive reach)
 
     Rotate evenly. No pillar should cluster more than 2 days in a row.
+${intelBlock(intel)}
 
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     VIRAL MECHANICS — ENGINEER INTO EVERY WEEK
@@ -444,8 +496,11 @@ export const generate30DayPlan = async (auditData: any) => {
           "pillar": "string (2-4 words)",
           "format": "string (2-4 words)",
           "viralMechanic": "string (2-4 words)",
-          "hook": "string (max 15 words)",
-          "message": "string (1-2 short sentences max, no slide-by-slide breakdowns)",
+          "hook": "string (max 15 words) — the exact first line / first 3 seconds",
+          "message": "string (1 sentence: what the post is about)",
+          "body": "string (max 45 words): the talking points or slide flow, in order",
+          "caption": "string (max 40 words): ready-to-post caption, ends with the CTA",
+          "modeledOn": "string (max 15 words): the proven competitor post/pattern this copies the structure of",
           "cta": "string (max 10 words)",
           "hashtags": "string (3-5 tags max)",
           "postTime": "string",
@@ -803,6 +858,7 @@ export const refinePlan = async (currentPlan: any, feedback: string) => {
     Refine the following 30-day growth plan: ${JSON.stringify(currentPlan)}.
     User feedback: "${feedback}".
     Adjust the plan to better align with the feedback while maintaining high-impact growth strategies.
+    Keep every "modeledOn" link to competitor evidence unless the feedback asks to change that post; keep exactly 30 calendar items.
     
     The output MUST follow the same JSON structure as the original plan:
     {
@@ -815,6 +871,9 @@ export const refinePlan = async (currentPlan: any, feedback: string) => {
           "viralMechanic": "string",
           "hook": "string",
           "message": "string",
+          "body": "string",
+          "caption": "string",
+          "modeledOn": "string",
           "cta": "string",
           "hashtags": "string",
           "postTime": "string",
