@@ -1094,10 +1094,40 @@ The first character of your response must be "{" and the last must be "}".`;
   const competitorIntelCache = new Map<string, { data: any; expiresAt: number }>();
   app.post("/api/ai/competitor-intel", requireUser, async (req, res) => {
     try {
-      const { competitors, businessName, industry, offer, audience } = req.body || {};
-      const list: string[] = (Array.isArray(competitors) ? competitors : [])
+      const { competitors, businessName, industry, offer, audience, websiteUrl, ownHandles } = req.body || {};
+      let list: string[] = (Array.isArray(competitors) ? competitors : [])
         .map((c: any) => String(c || '').trim()).filter(Boolean).slice(0, 5);
-      if (!list.length) return res.status(400).json({ error: "Add at least one competitor profile link or name" });
+      const { generateClaudeContent } = await import("./src/services/claude.ts");
+      let discovered: any[] = [];
+      // Smart fill: nothing pasted → find the competitors ourselves from the business details.
+      if (!list.length) {
+        if (!businessName && !websiteUrl && !offer) return res.status(400).json({ error: "Run the audit first (or paste competitors) so we know who to look for" });
+        const dKey = JSON.stringify(['discover', websiteUrl, businessName, industry, offer]);
+        const dHit = competitorIntelCache.get(dKey);
+        if (dHit && dHit.expiresAt > Date.now()) discovered = dHit.data;
+        else {
+          const found = await generateClaudeContent({
+            apiKey: process.env.CLAUDE_API_KEY, useWebSearch: true, webSearchMaxUses: 5, temperature: 0.2,
+            prompt: `Find the 4 best accounts to learn content from for this business: 2-3 direct competitors (same offer, same kind of buyer) and 1-2 accounts in the same niche whose social content is clearly winning right now (high views/engagement).
+
+BUSINESS: ${businessName || 'unknown'}
+WEBSITE: ${websiteUrl || 'unknown'}
+INDUSTRY: ${industry || 'unknown'}
+WHAT THEY SELL: ${offer || 'unknown'}
+WHO THEY SELL TO: ${audience || 'unknown'}
+THEIR OWN HANDLES (exclude these): ${(Array.isArray(ownHandles) ? ownHandles : [ownHandles]).filter(Boolean).join(', ') || 'none'}
+
+Use web search to confirm each account exists and is active. Prefer accounts that post on Instagram or TikTok (we can read their real posts). Give the exact profile URL you verified; use null if you could not verify one.
+Return ONLY JSON: {"competitors":[{"name":"string","why":"one line: direct competitor / winning niche account and why","instagram":"https://www.instagram.com/<handle> or null","tiktok":"https://www.tiktok.com/@<handle> or null","other":"YouTube/LinkedIn/X URL or null"}]}
+The first character of your response must be "{".`,
+          });
+          discovered = (extractJsonObject(found.text)?.competitors || []).slice(0, 4);
+          competitorIntelCache.set(dKey, { data: discovered, expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 });
+        }
+        // One link per competitor (Instagram first: cheapest real data) to keep scrape spend down.
+        list = discovered.map((c: any) => c.instagram || c.tiktok || c.other || c.name).filter(Boolean).slice(0, 4);
+        if (!list.length) return res.status(404).json({ error: "Couldn't find competitors automatically — paste a few profile links" });
+      }
       const cacheKey = JSON.stringify([list.map(s => s.toLowerCase()).sort(), industry, offer]);
       const hit = competitorIntelCache.get(cacheKey);
       if (hit && hit.expiresAt > Date.now()) return res.json(hit.data);
@@ -1157,7 +1187,6 @@ The first character of your response must be "{" and the last must be "}".`;
       const scraped = results.filter(r => r.source === 'scraped');
       const webOnly = results.filter(r => r.source === 'web').map(r => r.input);
 
-      const { generateClaudeContent } = await import("./src/services/claude.ts");
       const prompt = `You are TitanLeap's content strategist. Work out what is PROVEN to work for this business's competitors so we can build a 30-day content calendar on evidence, not guesses.
 
 OUR BUSINESS: ${businessName || 'unknown'}
@@ -1193,6 +1222,7 @@ Limits: 5-8 winningPatterns, 8-12 provenHooks, 4-6 topicsThatWin, 3-5 formatsTha
         researchedAt: new Date().toISOString(),
         competitors: results.map(r => ({ input: r.input, platform: r.platform, handle: r.handle, source: r.source, postsAnalyzed: r.postsAnalyzed, postsPerWeek: (r as any).postsPerWeek ?? null, followers: (r as any).followers ?? null, topPosts: r.topPosts.slice(0, 5) })),
         playbook,
+        discovered,
         apifyUsed: !!process.env.APIFY_API_TOKEN,
       };
       competitorIntelCache.set(cacheKey, { data, expiresAt: Date.now() + INSTAGRAM_CACHE_TTL_MS });
