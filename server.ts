@@ -1163,7 +1163,15 @@ The first character of your response must be "{" and the last must be "}".`;
     const over = budgeted ? await budgetError() : null;
     if (over) throw new Error(over + (gemKey ? '' : ' Adding a free GEMINI_API_KEY in Render makes this step free.'));
     const { generateClaudeContent } = await import("./src/services/claude.ts");
-    const r = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, model: opts.claudeModel, useWebSearch: opts.search, webSearchMaxUses: opts.maxSearches ?? 3, temperature: 0.3, prefillAssistant: opts.search ? undefined : "{" });
+    const call = (model?: string) => generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, model, useWebSearch: opts.search, webSearchMaxUses: opts.maxSearches ?? 3, temperature: 0.3, prefillAssistant: opts.search ? undefined : "{" });
+    let r;
+    try { r = await call(opts.claudeModel); }
+    catch (e: any) {
+      // A cheap model id that isn't available on this key shouldn't break the audit.
+      if (!opts.claudeModel || !/model|not.?found|404/i.test(String(e?.message))) throw e;
+      console.warn(`[Research] ${opts.claudeModel} unavailable, using the default model:`, e?.message);
+      r = await call(undefined);
+    }
     if (budgeted) await addAiSpend(r.costUsd);
     return r.text;
   }
