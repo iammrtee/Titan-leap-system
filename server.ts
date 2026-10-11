@@ -1086,6 +1086,123 @@ Rules: at most 3 leaks, ranked by impact. Exactly 3 nextPosts. Never invent a nu
 If the data is too thin to judge something, say so instead of guessing.
 The first character of your response must be "{" and the last must be "}".`;
 
+  // Competitor intel for the 30-day plan: what is actually working for competitors.
+  // Instagram/TikTok = real posts via Apify, ranked by how far each beat that account's own
+  // median (an "outlier" is the signal that a topic/hook/format works, not raw size).
+  // Anything else (YouTube, LinkedIn, X, brand names) = Claude web search.
+  // Cost ≈ $0.15–0.25 per scraped competitor + ~$0.10 for the synthesis. Cached 12h.
+  const competitorIntelCache = new Map<string, { data: any; expiresAt: number }>();
+  app.post("/api/ai/competitor-intel", requireUser, async (req, res) => {
+    try {
+      const { competitors, businessName, industry, offer, audience } = req.body || {};
+      const list: string[] = (Array.isArray(competitors) ? competitors : [])
+        .map((c: any) => String(c || '').trim()).filter(Boolean).slice(0, 5);
+      if (!list.length) return res.status(400).json({ error: "Add at least one competitor profile link or name" });
+      const cacheKey = JSON.stringify([list.map(s => s.toLowerCase()).sort(), industry, offer]);
+      const hit = competitorIntelCache.get(cacheKey);
+      if (hit && hit.expiresAt > Date.now()) return res.json(hit.data);
+
+      const median = (xs: number[]) => { const s = xs.filter(n => n > 0).sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : 0; };
+      const clip = (s: any, n: number) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
+
+      const scrapeOne = async (input: string) => {
+        const ig = input.match(/instagram\.com\/([A-Za-z0-9._]+)/i);
+        const tt = input.match(/tiktok\.com\/@([A-Za-z0-9._]+)/i);
+        if (ig && process.env.APIFY_API_TOKEN) {
+          const posts = await scrapeInstagramPosts(ig[1]);
+          if (posts.length) {
+            const score = (p: any) => Number(p.videoPlayCount || p.videoViewCount) || ((Number(p.likesCount) || 0) + (Number(p.commentsCount) || 0) * 3);
+            const med = median(posts.map(score));
+            const top = [...posts].sort((a, b) => score(b) - score(a)).slice(0, 8).map((p: any) => ({
+              format: p.type === 'Video' ? 'Reel' : p.type === 'Sidecar' ? 'Carousel' : 'Image',
+              caption: clip(p.caption, 280),
+              views: Number(p.videoPlayCount || p.videoViewCount) || null,
+              likes: Number(p.likesCount) >= 0 ? Number(p.likesCount) : null,
+              comments: Number(p.commentsCount) || 0,
+              timesMedian: med ? +(score(p) / med).toFixed(1) : null,
+              date: String(p.timestamp || '').slice(0, 10),
+              url: p.url || null,
+            }));
+            const days = Math.max(1, (Date.now() - Math.min(...posts.map((p: any) => +new Date(p.timestamp)))) / 86_400_000);
+            return { input, platform: 'Instagram', handle: ig[1], source: 'scraped', postsAnalyzed: posts.length, postsPerWeek: +(posts.length / (days / 7)).toFixed(1), topPosts: top };
+          }
+        }
+        if (tt && process.env.APIFY_API_TOKEN) {
+          const prof = await scrapeTikTokProfile(tt[1]);
+          const vids = (prof?.videos || []).filter((v: any) => v && (v.playCount != null));
+          if (vids.length) {
+            const med = median(vids.map((v: any) => Number(v.playCount) || 0));
+            const top = [...vids].sort((a: any, b: any) => (Number(b.playCount) || 0) - (Number(a.playCount) || 0)).slice(0, 8).map((v: any) => ({
+              format: v.isSlideshow ? 'Photo carousel' : 'Video',
+              caption: clip(v.text, 280),
+              views: Number(v.playCount) || 0,
+              likes: Number(v.diggCount) || 0,
+              comments: Number(v.commentCount) || 0,
+              shares: Number(v.shareCount) || 0,
+              saves: Number(v.collectCount) || 0,
+              seconds: Number(v.videoMeta?.duration) || null,
+              timesMedian: med ? +((Number(v.playCount) || 0) / med).toFixed(1) : null,
+              date: String(v.createTimeISO || '').slice(0, 10),
+              url: v.webVideoUrl || null,
+            }));
+            const tsOf = (v: any) => v.createTimeISO ? +new Date(v.createTimeISO) : v.createTime * 1000;
+            const days = Math.max(1, (Date.now() - Math.min(...vids.map(tsOf))) / 86_400_000);
+            return { input, platform: 'TikTok', handle: tt[1], followers: Number(prof.authorMeta?.fans) || null, source: 'scraped', postsAnalyzed: vids.length, postsPerWeek: +(vids.length / (days / 7)).toFixed(1), topPosts: top };
+          }
+        }
+        return { input, platform: ig ? 'Instagram' : tt ? 'TikTok' : 'web', handle: input, source: 'web', postsAnalyzed: 0, topPosts: [] as any[] };
+      };
+
+      const results = await Promise.all(list.map(c => scrapeOne(c).catch(() => ({ input: c, platform: 'web', handle: c, source: 'web', postsAnalyzed: 0, topPosts: [] as any[] }))));
+      const scraped = results.filter(r => r.source === 'scraped');
+      const webOnly = results.filter(r => r.source === 'web').map(r => r.input);
+
+      const { generateClaudeContent } = await import("./src/services/claude.ts");
+      const prompt = `You are TitanLeap's content strategist. Work out what is PROVEN to work for this business's competitors so we can build a 30-day content calendar on evidence, not guesses.
+
+OUR BUSINESS: ${businessName || 'unknown'}
+INDUSTRY: ${industry || 'unknown'}
+WHAT WE SELL: ${offer || 'unknown'}
+WHO WE SELL TO: ${audience || 'unknown'}
+
+REAL COMPETITOR POSTS (scraped; "timesMedian" = how many times better than that account's typical post — above 2 is a real outlier and the strongest signal):
+${scraped.length ? JSON.stringify(scraped.map(r => ({ platform: r.platform, handle: r.handle, followers: (r as any).followers ?? null, postsPerWeek: (r as any).postsPerWeek, topPosts: r.topPosts }))) : 'none'}
+
+${webOnly.length ? `ALSO RESEARCH WITH WEB SEARCH (no scrape available): ${webOnly.join(' | ')}. Find their best-performing recent posts/videos and what they are about. Only report what you actually see.` : ''}
+Also use web search once to check what content is working in this niche right now (formats, topics, trends from the last 90 days).
+
+Rules: every pattern needs evidence — a real post (handle + what it was + its numbers) from the data above or something you saw in search. Never invent numbers. Hooks in "provenHooks" must be the competitor's actual opening line (from the caption) plus a version rewritten for OUR business.
+
+Return ONLY this JSON:
+{
+  "summary": "2-3 sentences: what wins in this niche and the single biggest opportunity for us",
+  "winningPatterns": [{ "pattern": "short name", "whyItWorks": "1 sentence", "format": "Reel / Carousel / Talking head / etc", "evidence": "@handle — what the post was — numbers" }],
+  "provenHooks": [{ "original": "competitor's real opening line", "source": "@handle, views/likes, xN median", "ourVersion": "same structure, rewritten for us" }],
+  "topicsThatWin": [{ "topic": "string", "evidence": "string" }],
+  "formatsThatWin": [{ "format": "string", "platform": "string", "evidence": "string" }],
+  "gaps": ["what competitors do NOT cover that our audience wants — our opening"],
+  "avoid": ["what flopped or is overdone, with evidence"],
+  "cadence": "how often the competitors post and what that means for us",
+  "trendsNow": [{ "trend": "string", "evidence": "string" }]
+}
+Limits: 5-8 winningPatterns, 8-12 provenHooks, 4-6 topicsThatWin, 3-5 formatsThatWin, 3-5 gaps, 2-4 avoid, 2-4 trendsNow. The first character of your response must be "{".`;
+      const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, useWebSearch: true, webSearchMaxUses: Math.min(6, 2 + webOnly.length), temperature: 0.3 });
+      const playbook = extractJsonObject(result.text);
+      if (!playbook) throw new Error("Could not read the competitor analysis. Try again.");
+      const data = {
+        researchedAt: new Date().toISOString(),
+        competitors: results.map(r => ({ input: r.input, platform: r.platform, handle: r.handle, source: r.source, postsAnalyzed: r.postsAnalyzed, postsPerWeek: (r as any).postsPerWeek ?? null, followers: (r as any).followers ?? null, topPosts: r.topPosts.slice(0, 5) })),
+        playbook,
+        apifyUsed: !!process.env.APIFY_API_TOKEN,
+      };
+      competitorIntelCache.set(cacheKey, { data, expiresAt: Date.now() + INSTAGRAM_CACHE_TTL_MS });
+      res.json(data);
+    } catch (e: any) {
+      console.error("[CompetitorIntel] failed:", e?.message || e);
+      res.status(500).json({ error: e?.message || "Competitor research failed" });
+    }
+  });
+
   app.post("/api/ai/content-audit", requireUser, async (req, res) => {
     try {
       const { platform, handle, businessName, offer, audience } = req.body || {};

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anchor, Network, LineChart, Download, Clapperboard, Info, Bolt, Search, Users, TrendingUp, Calendar, Upload, Clock, CheckCircle2, List, LayoutGrid, Filter, Plus, ChevronRight, Share2, MoreHorizontal, Instagram, Twitter, Linkedin, Youtube, Facebook, Play, Zap, Rocket, Loader2, Sparkles, AlertCircle, FileText, ExternalLink, MoreVertical, Target, RefreshCw, X, Terminal, Trash2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent, generateCalendarFromBlueprint } from '@/src/services/ai';
+import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent, generateCalendarFromBlueprint, researchCompetitors, type CompetitorIntel } from '@/src/services/ai';
 import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 import { safeStorageName, toPostableJpeg } from '@/src/lib/postMedia';
@@ -142,6 +142,11 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   const [refinementFeedback, setRefinementFeedback] = useState('');
   const [showRefineInput, setShowRefineInput] = useState(false);
   const [thirtyDayPlan, setThirtyDayPlan] = useState<any>(null);
+  // Competitor evidence the 30-day plan is built on (real top posts → proven patterns/hooks).
+  const [competitorInput, setCompetitorInput] = useState<string>(() => { try { return localStorage.getItem('titanleap_competitors') || ''; } catch { return ''; } });
+  const [competitorIntel, setCompetitorIntel] = useState<CompetitorIntel | null>(() => { try { return JSON.parse(localStorage.getItem('titanleap_competitor_intel') || 'null'); } catch { return null; } });
+  const [isResearching, setIsResearching] = useState(false);
+  const [openDay, setOpenDay] = useState<number | null>(0);
   
   // File Input Ref to prevent bubbling issues
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -927,6 +932,25 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
 
   const [generationState, setGenerationState] = useState<'idle' | 'crafting' | 'building' | 'completed'>('idle');
 
+  const handleResearchCompetitors = async () => {
+    const list = competitorInput.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    if (!list.length) { toast.error('Paste at least one competitor profile link'); return; }
+    if (list.length > 5) toast.message('Using the first 5 competitors');
+    setIsResearching(true);
+    try {
+      try { localStorage.setItem('titanleap_competitors', competitorInput); } catch {}
+      const intel = await researchCompetitors(list.slice(0, 5), auditData);
+      setCompetitorIntel(intel);
+      try { localStorage.setItem('titanleap_competitor_intel', JSON.stringify(intel)); } catch {}
+      const posts = intel.competitors.reduce((n: number, c: any) => n + (c.postsAnalyzed || 0), 0);
+      toast.success('Competitor research done', { description: `${posts} real posts analysed. Generate the plan to build on it.` });
+    } catch (err: any) {
+      toast.error(err.message || 'Competitor research failed');
+    } finally {
+      setIsResearching(false);
+    }
+  };
+
   const handleGeneratePlan = async () => {
     if (!auditData || isGeneratingPlan) return;
     setIsGeneratingPlan(true);
@@ -936,11 +960,11 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       await new Promise(resolve => setTimeout(resolve, 2000));
       setGenerationState('building');
       
-      const plan = await generate30DayPlan(auditData);
+      const plan = await generate30DayPlan(auditData, competitorIntel);
       
       if (plan && plan.strategicSyncSummary) {
         setGenerationState('completed');
-        setThirtyDayPlan(plan);
+        setThirtyDayPlan({ ...plan, builtOnEvidence: !!competitorIntel, evidenceDate: competitorIntel?.researchedAt || null });
         // Keep the completed state visible for a moment before resetting
         setTimeout(() => {
           setGenerationState('idle');
@@ -1024,7 +1048,14 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
         year: date.getFullYear(),
         platform: platform as any,
         title: content.hook || content.message?.substring(0, 50) || 'AI Generated Post',
-        description: content.message || 'Content strategy post',
+        description: [
+          content.hook && `HOOK: ${content.hook}`,
+          content.body && `BODY: ${content.body}`,
+          content.caption && `CAPTION: ${content.caption}`,
+          content.cta && `CTA: ${content.cta}`,
+          content.hashtags && content.hashtags,
+          content.modeledOn && `Modeled on: ${content.modeledOn}`,
+        ].filter(Boolean).join('\n') || content.message || 'Content strategy post',
         status: 'draft',
         type: content.format?.toLowerCase().includes('video') ? 'video' : 
               content.format?.toLowerCase().includes('article') ? 'article' : 'post',
@@ -1038,7 +1069,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       const nonAiItems = prev.filter(item => !item.id.startsWith('ai-'));
       return [...nonAiItems, ...newItems];
     });
-    setSelectedDate({ day: 23, month: 2, year: 2026 });
+    setSelectedDate({ day: new Date().getDate(), month: new Date().getMonth(), year: new Date().getFullYear() });
     setActiveTab('calendar');
     toast.success("Calendar Synced!", {
       description: "30-day strategy has been mapped to your content calendar."
@@ -1189,6 +1220,75 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       handleGeneratePlan();
     }
   }, [forceRegenerateTimestamp]);
+
+  const renderCompetitorEvidence = () => {
+    const pb = competitorIntel?.playbook;
+    const posts = competitorIntel?.competitors?.reduce((n: number, c: any) => n + (c.postsAnalyzed || 0), 0) || 0;
+    return (
+      <div className="bg-surface-container-low p-5 md:p-6 rounded-3xl border border-outline-variant/10 shadow-sm space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-primary"><Network size={18} /><h4 className="font-black text-base md:text-lg tracking-tight">Competitor Evidence</h4></div>
+          {competitorIntel ? (
+            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-600">
+              {posts} real posts · {competitorIntel.competitors.length} competitors · {new Date(competitorIntel.researchedAt).toLocaleDateString()}
+            </span>
+          ) : (
+            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg bg-amber-500/10 text-amber-600">Not researched — plan will be guesswork</span>
+          )}
+        </div>
+        <p className="text-xs text-on-surface-variant/70 font-medium">Paste 2–5 competitors or accounts winning in your niche (one per line). Instagram and TikTok links get their real top posts scraped; YouTube, LinkedIn, X or brand names are researched on the web. The plan then copies the structure of what is proven to work.</p>
+        <div className="flex flex-col md:flex-row gap-3">
+          <textarea value={competitorInput} onChange={e => setCompetitorInput(e.target.value)} rows={3}
+            placeholder={"https://www.instagram.com/competitor\nhttps://www.tiktok.com/@competitor\nhttps://www.youtube.com/@competitor"}
+            className="flex-1 bg-surface-container-lowest border border-outline-variant/20 rounded-xl p-3 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
+          <button onClick={handleResearchCompetitors} disabled={isResearching}
+            className="md:w-48 bg-primary text-white px-5 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60">
+            {isResearching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+            {isResearching ? 'Researching (1–2 min)…' : competitorIntel ? 'Re-research' : 'Research competitors'}
+          </button>
+        </div>
+        {pb && (
+          <div className="space-y-4 pt-2">
+            {pb.summary && <p className="text-sm text-on-surface-variant/80 font-medium leading-relaxed">{pb.summary}</p>}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50">What's working</p>
+                {(pb.winningPatterns || []).slice(0, 6).map((w: any, i: number) => (
+                  <div key={i} className="p-3 bg-surface-container-lowest rounded-xl border border-outline-variant/5">
+                    <p className="text-xs font-black text-on-surface">{w.pattern} <span className="font-bold text-primary/70">· {w.format}</span></p>
+                    <p className="text-[11px] text-on-surface-variant/70 mt-0.5">{w.whyItWorks}</p>
+                    <p className="text-[10px] text-emerald-600 font-bold mt-1">{w.evidence}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50">Proven hooks → ours</p>
+                {(pb.provenHooks || []).slice(0, 6).map((h: any, i: number) => (
+                  <div key={i} className="p-3 bg-surface-container-lowest rounded-xl border border-outline-variant/5">
+                    <p className="text-[11px] text-on-surface-variant/60 italic">"{h.original}" <span className="not-italic text-[10px]">— {h.source}</span></p>
+                    <p className="text-xs font-bold text-on-surface mt-1">→ {h.ourVersion}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {(pb.gaps?.length > 0 || pb.avoid?.length > 0) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] font-medium">
+                {pb.gaps?.length > 0 && <div><p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50 mb-1">Gaps we can own</p>{pb.gaps.map((g: string, i: number) => <p key={i} className="text-on-surface-variant/80">• {g}</p>)}</div>}
+                {pb.avoid?.length > 0 && <div><p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50 mb-1">Avoid</p>{pb.avoid.map((g: string, i: number) => <p key={i} className="text-on-surface-variant/80">• {g}</p>)}</div>}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {competitorIntel!.competitors.map((c: any, i: number) => (
+                <span key={i} className="text-[10px] font-bold px-2 py-1 rounded-lg bg-surface-container-highest/40 text-on-surface-variant">
+                  {c.platform === 'web' ? c.handle : `@${c.handle}`} · {c.source === 'scraped' ? `${c.postsAnalyzed} posts${c.postsPerWeek ? `, ${c.postsPerWeek}/wk` : ''}` : 'web research'}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -1435,6 +1535,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       case 'plan':
         return (
           <div className="space-y-6 md:space-y-8">
+            {renderCompetitorEvidence()}
             {!thirtyDayPlan && isGeneratingPlan ? (
               <div className="flex flex-col items-center justify-center py-16 md:py-24 space-y-4 md:space-y-6 px-4">
                 <div className="relative">
@@ -1631,7 +1732,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
                     <div className="space-y-1">
                       <h3 className="text-xl md:text-2xl font-black tracking-tight text-on-surface">Daily Content Execution</h3>
-                      <p className="text-xs md:text-sm font-medium text-on-surface-variant/60">The first 7 days of your high-velocity content sprint.</p>
+                      <p className="text-xs md:text-sm font-medium text-on-surface-variant/60">All 30 days. Tap a day for the hook, body and caption.{thirtyDayPlan.builtOnEvidence ? ' Built on competitor evidence.' : ' Not built on competitor evidence — research competitors above and regenerate.'}</p>
                     </div>
                     <button 
                       onClick={handleSyncToCalendar}
@@ -1641,19 +1742,32 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 md:gap-4">
-                    {thirtyDayPlan.calendar?.slice(0, 7).map((day: any, idx: number) => (
-                      <div key={idx} className="bg-surface-container-lowest p-4 md:p-5 rounded-2xl md:rounded-3xl border border-outline-variant/5 space-y-3 md:space-y-4 hover:border-primary/20 transition-all group cursor-pointer flex flex-col justify-between">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] md:text-xs font-black text-on-surface-variant/40 group-hover:text-primary transition-colors">Day 0{idx + 1}</span>
-                          <div className="w-5 h-5 md:w-6 md:h-6 rounded-md md:rounded-lg bg-primary/5 text-primary flex items-center justify-center shrink-0">
-                            <Zap size={10} className="md:w-3 md:h-3" fill="currentColor" />
+                  <div className="space-y-2">
+                    {thirtyDayPlan.calendar?.map((day: any, idx: number) => (
+                      <div key={idx} className={cn("bg-surface-container-lowest rounded-2xl border transition-all", openDay === idx ? "border-primary/30" : "border-outline-variant/5 hover:border-primary/20")}>
+                        <button onClick={() => setOpenDay(openDay === idx ? null : idx)} className="w-full flex items-center gap-3 p-3 md:p-4 text-left">
+                          <span className="text-[10px] font-black text-on-surface-variant/40 w-12 shrink-0">Day {String(idx + 1).padStart(2, '0')}</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-primary/70 w-20 shrink-0 truncate">{day.platform}</span>
+                          <span className="text-xs font-bold text-on-surface flex-1 min-w-0 truncate">{day.hook || day.message}</span>
+                          <span className="hidden md:inline text-[9px] font-black uppercase tracking-wider text-on-surface-variant/40 shrink-0">{day.format}</span>
+                          <ChevronRight size={14} className={cn("shrink-0 text-on-surface-variant/40 transition-transform", openDay === idx && "rotate-90")} />
+                        </button>
+                        {openDay === idx && (
+                          <div className="px-4 pb-4 md:pl-[4.5rem] space-y-2 text-xs">
+                            {[['Hook', day.hook], ['Body', day.body || day.message], ['Caption', day.caption], ['CTA', day.cta], ['Hashtags', day.hashtags]].filter(([, v]) => v).map(([k, v]) => (
+                              <div key={k as string}>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/50">{k}</span>
+                                <p className="font-medium text-on-surface whitespace-pre-line">{v}</p>
+                              </div>
+                            ))}
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              {day.pillar && <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-primary/5 text-primary">{day.pillar}</span>}
+                              {day.viralMechanic && <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-secondary/5 text-secondary">{day.viralMechanic}</span>}
+                              {day.postTime && <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-surface-container-highest/40 text-on-surface-variant">{day.postTime}</span>}
+                            </div>
+                            {day.modeledOn && <p className="text-[10px] font-bold text-emerald-600">Modeled on: {day.modeledOn}</p>}
                           </div>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-primary/60 truncate">{day.platform}</p>
-                          <p className="text-[11px] md:text-xs font-bold text-on-surface line-clamp-2 md:line-clamp-3 leading-tight">{day.hook || day.message?.substring(0, 50)}</p>
-                        </div>
+                        )}
                       </div>
                     ))}
                   </div>
