@@ -52,7 +52,7 @@ export const estimateCostUsd = (model: string, usage: any) => {
 };
 
 // Newer models reject assistant prefill and non-default sampling (HTTP 400); older Haiku accepts temperature.
-const acceptsTemperature = (model: string) => /^claude-haiku/.test(model);
+const acceptsTemperature = (model: string) => /^claude-(haiku-4|3)/.test(model);
 
 export const generateClaudeContent = async (params: {
   prompt: string;
