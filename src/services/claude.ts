@@ -37,6 +37,7 @@ const PRICE_PER_MTOK: Array<[RegExp, [number, number]]> = [
   [/^claude-opus-5|^claude-opus-4/, [5, 25]],
   [/^claude-fable|^claude-mythos/, [10, 50]],
   [/^claude-sonnet-4/, [3, 15]],
+  [/^claude-haiku-5/, [1, 5]],
   [/^claude-haiku-4/, [1, 5]],
 ];
 
@@ -45,7 +46,9 @@ export const estimateCostUsd = (model: string, usage: any) => {
   if (!row || !usage) return null;
   const [inP, outP] = row[1];
   const input = (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0) * 1.25 + (usage.cache_read_input_tokens || 0) * 0.1;
-  return (input * inP + (usage.output_tokens || 0) * outP) / 1_000_000;
+  // Web search is billed on top: $10 per 1,000 searches.
+  const searches = Number(usage.server_tool_use?.web_search_requests) || 0;
+  return (input * inP + (usage.output_tokens || 0) * outP) / 1_000_000 + searches * 0.01;
 };
 
 // Newer models reject assistant prefill and non-default sampling (HTTP 400); older Haiku accepts temperature.
@@ -62,6 +65,7 @@ export const generateClaudeContent = async (params: {
   webSearchMaxUses?: number;
   prefillAssistant?: string;
   effort?: 'low' | 'medium' | 'high';
+  budgeted?: boolean; // counts toward AI_MONTHLY_BUDGET_USD (plan / refine)
 }) => {
   // If in browser, call the server proxy
   if (typeof window !== 'undefined') {

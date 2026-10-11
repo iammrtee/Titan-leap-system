@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anchor, Network, LineChart, Download, Clapperboard, Info, Bolt, Search, Users, TrendingUp, Calendar, Upload, Clock, CheckCircle2, List, LayoutGrid, Filter, Plus, ChevronRight, Share2, MoreHorizontal, Instagram, Twitter, Linkedin, Youtube, Facebook, Play, Zap, Rocket, Loader2, Sparkles, AlertCircle, FileText, ExternalLink, MoreVertical, Target, RefreshCw, X, Terminal, Trash2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent, generateCalendarFromBlueprint, researchCompetitors, type CompetitorIntel } from '@/src/services/ai';
+import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent, generateCalendarFromBlueprint, researchCompetitors, getAIBudget, type CompetitorIntel } from '@/src/services/ai';
 import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 import { safeStorageName, toPostableJpeg } from '@/src/lib/postMedia';
@@ -147,6 +147,9 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   const [competitorIntel, setCompetitorIntel] = useState<CompetitorIntel | null>(() => { try { return JSON.parse(localStorage.getItem('titanleap_competitor_intel') || 'null'); } catch { return null; } });
   const [isResearching, setIsResearching] = useState(false);
   const [openDay, setOpenDay] = useState<number | null>(0);
+  const [aiBudget, setAiBudget] = useState<{ spent: number; budget: number } | null>(null);
+  const refreshBudget = () => { getAIBudget().then(b => b && setAiBudget(b)); };
+  useEffect(() => { refreshBudget(); }, []);
   
   // File Input Ref to prevent bubbling issues
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -963,6 +966,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       return null;
     } finally {
       setIsResearching(false);
+      refreshBudget();
     }
   };
 
@@ -977,6 +981,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       setGenerationState('building');
 
       const plan = await generate30DayPlan(auditData, intel);
+      refreshBudget();
       
       if (plan && plan.strategicSyncSummary) {
         setGenerationState('completed');
@@ -1250,6 +1255,12 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
             </span>
           ) : (
             <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg bg-amber-500/10 text-amber-600">Not researched yet — runs automatically with the plan</span>
+          )}
+          {aiBudget && (
+            <span title="Claude spend this month on research, plans, refines and ⚡ captions" className={cn("ml-auto text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg",
+              aiBudget.spent >= aiBudget.budget ? "bg-red-500/10 text-red-600" : "bg-surface-container-highest/40 text-on-surface-variant")}>
+              AI budget ${aiBudget.spent.toFixed(2)} / ${aiBudget.budget.toFixed(2)}
+            </span>
           )}
         </div>
         <p className="text-xs text-on-surface-variant/70 font-medium">We find your competitors from your audit and read their real top posts, then build the plan on what is proven to work. Leave the box empty to let us pick, or paste your own (one per line) to override.</p>

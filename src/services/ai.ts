@@ -44,6 +44,7 @@ const unifiedGenerateContent = async (options: {
   responseMimeType?: string;
   temperature?: number;
   useWebSearch?: boolean;
+  budgeted?: boolean;
 }) => {
   if (currentEngine === 'claude') {
     const result = await generateClaudeContent(options);
@@ -532,6 +533,7 @@ ${intelBlock(intel)}
     const response = await unifiedGenerateContent({
       prompt,
       responseMimeType: "application/json",
+      budgeted: true,
     });
 
     return parseJSON(response.text, {});
@@ -901,6 +903,7 @@ export const refinePlan = async (currentPlan: any, feedback: string) => {
     const response = await unifiedGenerateContent({
       prompt,
       responseMimeType: "application/json",
+      budgeted: true,
     });
 
     return parseJSON(response.text, {});
@@ -1198,4 +1201,11 @@ export const fetchMarketCheck = async (opts: { keyword: string; location: string
   } catch {
     return null;
   }
+};
+
+export const getAIBudget = async (): Promise<{ spent: number; budget: number; month: string } | null> => {
+  try {
+    const r = await fetch('/api/ai/budget', { headers: await getAuthHeader() });
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
 };
