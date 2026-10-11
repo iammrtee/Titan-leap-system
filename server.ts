@@ -120,10 +120,45 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
   });
 
   // Claude AI Proxy (protected)
+  // Monthly Claude budget for the content-plan features (competitor research, 30-day plan,
+  // refine, ⚡ captions). AI_MONTHLY_BUDGET_USD in Render, default $1. Stored in the
+  // ai_spend table (supabase-schema.sql section 16); falls back to memory if it's missing.
+  const aiSpendMem = new Map<string, number>();
+  const spendMonth = () => new Date().toISOString().slice(0, 7);
+  const aiBudget = () => Number(process.env.AI_MONTHLY_BUDGET_USD) || 1;
+  const getAiSpend = async (): Promise<number> => {
+    const m = spendMonth();
+    try {
+      const { data, error } = await supabase.from('ai_spend').select('usd').eq('month', m).maybeSingle();
+      if (!error) return Math.max(Number(data?.usd) || 0, aiSpendMem.get(m) || 0);
+    } catch {}
+    return aiSpendMem.get(m) || 0;
+  };
+  const addAiSpend = async (usd: number | null | undefined) => {
+    if (!usd || usd <= 0) return;
+    const m = spendMonth();
+    const next = (await getAiSpend()) + usd;
+    aiSpendMem.set(m, next);
+    try { await supabase.from('ai_spend').upsert({ month: m, usd: +next.toFixed(4), updated_at: new Date().toISOString() }, { onConflict: 'month' }); } catch {}
+  };
+  const budgetError = async () => {
+    const spent = await getAiSpend();
+    return spent >= aiBudget()
+      ? `Monthly AI budget reached ($${spent.toFixed(2)} of $${aiBudget().toFixed(2)}). It resets on the 1st, or raise AI_MONTHLY_BUDGET_USD in Render.`
+      : null;
+  };
+  app.get("/api/ai/budget", requireUser, async (_req, res) => {
+    res.json({ spent: +(await getAiSpend()).toFixed(4), budget: aiBudget(), month: spendMonth() });
+  });
+
   app.post("/api/ai/claude", requireUser, async (req, res) => {
     try {
-      const { prompt, systemPrompt, temperature, useWebSearch } = req.body;
+      const { prompt, systemPrompt, temperature, useWebSearch, budgeted } = req.body;
       const { generateClaudeContent } = await import("./src/services/claude.ts");
+      if (budgeted) {
+        const over = await budgetError();
+        if (over) return res.status(402).json({ error: over });
+      }
       
       // Explicitly pass the API key from server environment
       const apiKey = process.env.CLAUDE_API_KEY;
@@ -135,7 +170,8 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
         apiKey,
         useWebSearch
       });
-      res.json(result);
+      if (budgeted) await addAiSpend(result.costUsd);
+      res.json({ text: result.text, costUsd: result.costUsd });
     } catch (error: any) {
       console.error("[Claude Proxy] Critical Error:", error);
       
@@ -1120,8 +1156,11 @@ The first character of your response must be "{" and the last must be "}".`;
         console.warn('[Research] Gemini failed, using Claude:', e?.message || e);
       }
     }
+    const over = await budgetError();
+    if (over) throw new Error(over + (gemKey ? '' : ' Adding a free GEMINI_API_KEY in Render makes this step free.'));
     const { generateClaudeContent } = await import("./src/services/claude.ts");
     const r = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, model: opts.claudeModel, useWebSearch: opts.search, webSearchMaxUses: opts.maxSearches ?? 3, temperature: 0.3 });
+    await addAiSpend(r.costUsd);
     return r.text;
   }
   app.post("/api/ai/competitor-intel", requireUser, async (req, res) => {
@@ -1525,16 +1564,21 @@ Return ONLY the caption text.`;
         return String((typeof result?.text === 'function' ? result.text() : result?.text) || '');
       };
       const viaClaude = async () => {
+        const over = await budgetError();
+        if (over) throw new Error(over);
         const Anthropic = (await import('@anthropic-ai/sdk')).default;
+        const { estimateCostUsd } = await import('./src/services/claude.ts');
         const client = new Anthropic({ apiKey: claudeKey });
+        const captionModel = process.env.CLAUDE_CAPTION_MODEL || 'claude-haiku-5-5';
         const r: any = await client.messages.create({
-          model: process.env.CLAUDE_CAPTION_MODEL || 'claude-haiku-5-5',
+          model: captionModel,
           max_tokens: 700,
           messages: [{ role: 'user', content: [
             ...images.filter(i => /^image\/(jpeg|png|webp|gif)$/.test(i.mime)).map(i => ({ type: 'image', source: { type: 'base64', media_type: i.mime, data: i.data } })),
             { type: 'text', text: prompt },
           ] }],
         } as any);
+        await addAiSpend(estimateCostUsd(captionModel, r.usage));
         return r.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
       };
       const order: Array<['gemini' | 'claude', () => Promise<string>]> = [];

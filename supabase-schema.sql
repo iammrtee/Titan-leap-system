@@ -197,3 +197,10 @@ ALTER TABLE production_tasks DISABLE ROW LEVEL SECURITY;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS youtube_token TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS youtube_refresh_token TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS youtube_channel TEXT;
+
+-- 16. Monthly AI spend for the content-plan features (server checks AI_MONTHLY_BUDGET_USD).
+CREATE TABLE IF NOT EXISTS ai_spend (
+  month TEXT PRIMARY KEY,           -- e.g. '2026-10'
+  usd NUMERIC NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
