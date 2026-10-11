@@ -454,10 +454,13 @@ Return ONLY the JSON. No markdown. No explanation.`;
   const HISTORY_DAYS = 183;
   const instagramPostsCache = new Map<string, { data: any[]; expiresAt: number }>();
 
-  async function scrapeInstagramPosts(username: string): Promise<any[]> {
+  async function scrapeInstagramPosts(username: string, limit = POST_HISTORY_LIMIT): Promise<any[]> {
     const token = process.env.APIFY_API_TOKEN;
     if (!token || !username) return [];
-    const key = username.toLowerCase();
+    const base = username.toLowerCase();
+    const full = instagramPostsCache.get(base);
+    if (full && full.expiresAt > Date.now()) return full.data.slice(0, limit);
+    const key = limit === POST_HISTORY_LIMIT ? base : `${base}:${limit}`;
     const cached = instagramPostsCache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.data;
     try {
@@ -466,13 +469,13 @@ Return ONLY the JSON. No markdown. No explanation.`;
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: [key], resultsLimit: POST_HISTORY_LIMIT, onlyPostsNewerThan: "6 months" }),
+          body: JSON.stringify({ username: [base], resultsLimit: limit, onlyPostsNewerThan: "6 months" }),
           signal: AbortSignal.timeout(120000),
         }
       );
       if (!r.ok) { console.error("[ApifyInstagramPosts] non-OK response:", r.status); return []; }
       const items = await r.json();
-      const posts = (Array.isArray(items) ? items : []).filter((p: any) => p && p.timestamp && !p.error).slice(0, POST_HISTORY_LIMIT);
+      const posts = (Array.isArray(items) ? items : []).filter((p: any) => p && p.timestamp && !p.error).slice(0, limit);
       instagramPostsCache.set(key, { data: posts, expiresAt: Date.now() + INSTAGRAM_CACHE_TTL_MS });
       return posts;
     } catch (err: any) {
@@ -610,7 +613,7 @@ Return ONLY the JSON. No markdown. No explanation.`;
   // Returns null (never throws) on any failure so the route falls back to the web-search path.
   const tiktokScrapeCache = new Map<string, { data: any; expiresAt: number }>();
 
-  async function scrapeTikTokProfile(handle: string): Promise<any | null> {
+  async function scrapeTikTokProfile(handle: string, limit = POST_HISTORY_LIMIT): Promise<any | null> {
     const token = process.env.APIFY_API_TOKEN;
     if (!token) return null;
     try {
@@ -618,7 +621,10 @@ Return ONLY the JSON. No markdown. No explanation.`;
       const username = (usernameMatch ? usernameMatch[1] : handle).replace(/^@/, '').replace(/\/$/, '').trim().toLowerCase();
       if (!username) return null;
 
-      const cached = tiktokScrapeCache.get(username);
+      const full = tiktokScrapeCache.get(username);
+      if (full && full.expiresAt > Date.now()) return limit === POST_HISTORY_LIMIT ? full.data : { ...full.data, videos: full.data.videos.slice(0, limit) };
+      const cacheKey = limit === POST_HISTORY_LIMIT ? username : `${username}:${limit}`;
+      const cached = tiktokScrapeCache.get(cacheKey);
       if (cached && cached.expiresAt > Date.now()) return cached.data;
 
       const apifyRes = await fetch(
@@ -626,7 +632,7 @@ Return ONLY the JSON. No markdown. No explanation.`;
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ profiles: [username], resultsPerPage: POST_HISTORY_LIMIT, shouldDownloadCovers: false, shouldDownloadSlideshowImages: false, shouldDownloadVideos: false }),
+          body: JSON.stringify({ profiles: [username], resultsPerPage: limit, shouldDownloadCovers: false, shouldDownloadSlideshowImages: false, shouldDownloadVideos: false }),
         }
       );
       if (!apifyRes.ok) {
@@ -639,7 +645,7 @@ Return ONLY the JSON. No markdown. No explanation.`;
       const authorMeta = items[0]?.authorMeta;
       if (!authorMeta) return null;
       const data = { authorMeta, videos: items };
-      tiktokScrapeCache.set(username, { data, expiresAt: Date.now() + INSTAGRAM_CACHE_TTL_MS });
+      tiktokScrapeCache.set(cacheKey, { data, expiresAt: Date.now() + INSTAGRAM_CACHE_TTL_MS });
       return data;
     } catch (err: any) {
       console.error("[ApifyTikTok] scrape failed:", err?.message || err);
@@ -1090,14 +1096,39 @@ The first character of your response must be "{" and the last must be "}".`;
   // Instagram/TikTok = real posts via Apify, ranked by how far each beat that account's own
   // median (an "outlier" is the signal that a topic/hook/format works, not raw size).
   // Anything else (YouTube, LinkedIn, X, brand names) = Claude web search.
-  // Cost ≈ $0.15–0.25 per scraped competitor + ~$0.10 for the synthesis. Cached 12h.
+  // Cost ≈ $0.07–0.12 per scraped competitor (30 posts); the text steps are free on Gemini's
+  // free tier when GEMINI_API_KEY is set, else a few cents on Claude. Cached 12h.
   const competitorIntelCache = new Map<string, { data: any; expiresAt: number }>();
+  // 30 recent posts is enough to see which ones beat the account's median; half the Apify cost of 60.
+  const COMPETITOR_POSTS = 30;
+  // Research text calls: free Gemini (with Google Search) first when GEMINI_API_KEY is set,
+  // then Claude. RESEARCH_PROVIDER=claude forces Claude.
+  async function researchText(prompt: string, opts: { search: boolean; maxSearches?: number; claudeModel?: string }) {
+    const gemKey = process.env.GEMINI_API_KEY;
+    if (gemKey && process.env.RESEARCH_PROVIDER !== 'claude') {
+      try {
+        const { GoogleGenAI } = await import("@google/genai");
+        const ai = new GoogleGenAI({ apiKey: gemKey });
+        const r: any = await ai.models.generateContent({
+          model: process.env.GEMINI_RESEARCH_MODEL || "gemini-2.5-flash",
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          config: { temperature: 0.3, ...(opts.search ? { tools: [{ googleSearch: {} }] } : {}) },
+        });
+        const text = String((typeof r?.text === 'function' ? r.text() : r?.text) || '');
+        if (extractJsonObject(text)) { console.log('[Research] via Gemini (free tier)'); return text; }
+      } catch (e: any) {
+        console.warn('[Research] Gemini failed, using Claude:', e?.message || e);
+      }
+    }
+    const { generateClaudeContent } = await import("./src/services/claude.ts");
+    const r = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, model: opts.claudeModel, useWebSearch: opts.search, webSearchMaxUses: opts.maxSearches ?? 3, temperature: 0.3 });
+    return r.text;
+  }
   app.post("/api/ai/competitor-intel", requireUser, async (req, res) => {
     try {
       const { competitors, businessName, industry, offer, audience, websiteUrl, ownHandles } = req.body || {};
       let list: string[] = (Array.isArray(competitors) ? competitors : [])
         .map((c: any) => String(c || '').trim()).filter(Boolean).slice(0, 5);
-      const { generateClaudeContent } = await import("./src/services/claude.ts");
       let discovered: any[] = [];
       // Smart fill: nothing pasted → find the competitors ourselves from the business details.
       if (!list.length) {
@@ -1106,9 +1137,7 @@ The first character of your response must be "{" and the last must be "}".`;
         const dHit = competitorIntelCache.get(dKey);
         if (dHit && dHit.expiresAt > Date.now()) discovered = dHit.data;
         else {
-          const found = await generateClaudeContent({
-            apiKey: process.env.CLAUDE_API_KEY, useWebSearch: true, webSearchMaxUses: 5, temperature: 0.2,
-            prompt: `Find the 4 best accounts to learn content from for this business: 2-3 direct competitors (same offer, same kind of buyer) and 1-2 accounts in the same niche whose social content is clearly winning right now (high views/engagement).
+          const foundText = await researchText(`Find the 4 best accounts to learn content from for this business: 2-3 direct competitors (same offer, same kind of buyer) and 1-2 accounts in the same niche whose social content is clearly winning right now (high views/engagement).
 
 BUSINESS: ${businessName || 'unknown'}
 WEBSITE: ${websiteUrl || 'unknown'}
@@ -1119,13 +1148,12 @@ THEIR OWN HANDLES (exclude these): ${(Array.isArray(ownHandles) ? ownHandles : [
 
 Use web search to confirm each account exists and is active. Prefer accounts that post on Instagram or TikTok (we can read their real posts). Give the exact profile URL you verified; use null if you could not verify one.
 Return ONLY JSON: {"competitors":[{"name":"string","why":"one line: direct competitor / winning niche account and why","instagram":"https://www.instagram.com/<handle> or null","tiktok":"https://www.tiktok.com/@<handle> or null","other":"YouTube/LinkedIn/X URL or null"}]}
-The first character of your response must be "{".`,
-          });
-          discovered = (extractJsonObject(found.text)?.competitors || []).slice(0, 4);
+The first character of your response must be "{".`, { search: true, maxSearches: 3, claudeModel: process.env.CLAUDE_CAPTION_MODEL || 'claude-haiku-5-5' });
+          discovered = (extractJsonObject(foundText)?.competitors || []).slice(0, 4);
           competitorIntelCache.set(dKey, { data: discovered, expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 });
         }
         // One link per competitor (Instagram first: cheapest real data) to keep scrape spend down.
-        list = discovered.map((c: any) => c.instagram || c.tiktok || c.other || c.name).filter(Boolean).slice(0, 4);
+        list = discovered.map((c: any) => c.instagram || c.tiktok || c.other || c.name).filter(Boolean).slice(0, 3);
         if (!list.length) return res.status(404).json({ error: "Couldn't find competitors automatically — paste a few profile links" });
       }
       const cacheKey = JSON.stringify([list.map(s => s.toLowerCase()).sort(), industry, offer]);
@@ -1139,7 +1167,7 @@ The first character of your response must be "{".`,
         const ig = input.match(/instagram\.com\/([A-Za-z0-9._]+)/i);
         const tt = input.match(/tiktok\.com\/@([A-Za-z0-9._]+)/i);
         if (ig && process.env.APIFY_API_TOKEN) {
-          const posts = await scrapeInstagramPosts(ig[1]);
+          const posts = await scrapeInstagramPosts(ig[1], COMPETITOR_POSTS);
           if (posts.length) {
             const score = (p: any) => Number(p.videoPlayCount || p.videoViewCount) || ((Number(p.likesCount) || 0) + (Number(p.commentsCount) || 0) * 3);
             const med = median(posts.map(score));
@@ -1158,7 +1186,7 @@ The first character of your response must be "{".`,
           }
         }
         if (tt && process.env.APIFY_API_TOKEN) {
-          const prof = await scrapeTikTokProfile(tt[1]);
+          const prof = await scrapeTikTokProfile(tt[1], COMPETITOR_POSTS);
           const vids = (prof?.videos || []).filter((v: any) => v && (v.playCount != null));
           if (vids.length) {
             const med = median(vids.map((v: any) => Number(v.playCount) || 0));
@@ -1197,8 +1225,7 @@ WHO WE SELL TO: ${audience || 'unknown'}
 REAL COMPETITOR POSTS (scraped; "timesMedian" = how many times better than that account's typical post — above 2 is a real outlier and the strongest signal):
 ${scraped.length ? JSON.stringify(scraped.map(r => ({ platform: r.platform, handle: r.handle, followers: (r as any).followers ?? null, postsPerWeek: (r as any).postsPerWeek, topPosts: r.topPosts }))) : 'none'}
 
-${webOnly.length ? `ALSO RESEARCH WITH WEB SEARCH (no scrape available): ${webOnly.join(' | ')}. Find their best-performing recent posts/videos and what they are about. Only report what you actually see.` : ''}
-Also use web search once to check what content is working in this niche right now (formats, topics, trends from the last 90 days).
+${webOnly.length ? `ALSO RESEARCH WITH WEB SEARCH (no scrape available): ${webOnly.join(' | ')}. Find their best-performing recent posts/videos and what they are about. Only report what you actually see.` : 'For "trendsNow", use only what the scraped posts show (recent dates, rising formats).'}
 
 Rules: every pattern needs evidence — a real post (handle + what it was + its numbers) from the data above or something you saw in search. Never invent numbers. Hooks in "provenHooks" must be the competitor's actual opening line (from the caption) plus a version rewritten for OUR business.
 
@@ -1215,8 +1242,7 @@ Return ONLY this JSON:
   "trendsNow": [{ "trend": "string", "evidence": "string" }]
 }
 Limits: 5-8 winningPatterns, 8-12 provenHooks, 4-6 topicsThatWin, 3-5 formatsThatWin, 3-5 gaps, 2-4 avoid, 2-4 trendsNow. The first character of your response must be "{".`;
-      const result = await generateClaudeContent({ prompt, apiKey: process.env.CLAUDE_API_KEY, useWebSearch: true, webSearchMaxUses: Math.min(6, 2 + webOnly.length), temperature: 0.3 });
-      const playbook = extractJsonObject(result.text);
+      const playbook = extractJsonObject(await researchText(prompt, { search: webOnly.length > 0, maxSearches: Math.min(4, 1 + webOnly.length) }));
       if (!playbook) throw new Error("Could not read the competitor analysis. Try again.");
       const data = {
         researchedAt: new Date().toISOString(),
