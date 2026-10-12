@@ -415,21 +415,22 @@ const intelBlock = (intel?: CompetitorIntel | null) => {
     For every post set "modeledOn" to the exact evidence it copies the structure of (e.g. "@handle carousel '5 mistakes…' 4.1x median"), or "gap test: <gap>".`;
 };
 
-export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel | null) => {
+export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel | null, platforms?: string[]) => {
+  const postOn = (platforms && platforms.length ? platforms : [auditData?.primaryPlatform || 'Instagram']).join(', ');
   const prompt = `
-    You are a world-class viral social media strategist and content architect with deep expertise in platform algorithms, audience psychology, and growth hacking.
+    You are a world-class content strategist who builds content systems that bring in CLIENTS, not just views.
 
-    I have completed a full social media audit for ${auditData?.businessName || 'the brand'}. Your job is to use every insight from this audit to build a fully SYNCED, viral-engineered 30 days content calendar that is ready to execute immediately.
+    I have completed a full audit for ${auditData?.businessName || 'the brand'}. Build their 30-day CLIENT ENGINE: one clear low-friction offer every post points to, a funnel from post to paying client, content pillars, a weekly rhythm, a 30-day story arc, lead scripts, a scoreboard, and a 30-day calendar ready to execute.
 
-    This is not a generic content plan. Every post must be informed by real audit data, engineered for virality, and synced intelligently across all platforms.
+    This is not a generic content plan. Every post must be informed by the audit and the competitor evidence, and every post must move a viewer one step toward the offer.
 
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     BRAND PROFILE
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     Brand: ${auditData?.businessName || 'The Brand'}
     Industry: ${auditData?.industry || 'B2B SaaS'}
-    Primary Platform: ${auditData?.primaryPlatform || 'Instagram, TikTok, LinkedIn'}
-    Main Offer: ${auditData?.mainOffer || 'Premium Service'}
+    POST ONLY ON THESE PLATFORMS: ${postOn}
+    Main Offer: ${auditData?.mainOffer || auditData?.mainProduct || 'Premium Service'}
     Price Point: ${auditData?.pricePoint || 'Unknown'}
     Differentiator: ${auditData?.differentiator || 'Unique Approach'}
     Current Revenue: ${auditData?.currentRevenue || 'Unknown'}
@@ -448,13 +449,12 @@ export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel 
     ${auditData?.challenges?.map((c: string) => `- ${c}`).join('\n    ') || 'No specific challenges listed.'}
 
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    CONTENT PILLARS & DISTRIBUTION
+    THE CLIENT ENGINE
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    1. Offer Awareness & Education (Address the leakage points)
-    2. Social Proof & Authority (Overcome challenges)
-    3. Viral Hooks & Engagement (Drive reach)
-
-    Rotate evenly. No pillar should cluster more than 2 days in a row.
+    1. Pick ONE low-friction entry offer that leads to the main offer (e.g. a free audit, free teardown, free consult, a lead magnet) and ONE call to action used on every post (e.g. "Comment or DM AUDIT"). Make it specific to this business.
+    2. Design 3-4 content pillars with a share of posts each (adding to 100%). At least one pillar must demonstrate the result publicly (teardowns, before/after, case studies) because that is what makes viewers ask for the offer. Base pillars on what the competitor evidence proves works plus the gaps.
+    3. One idea, made once, posted natively on every selected platform (say how in "repurpose").
+    4. Rotate pillars; no pillar more than 2 days in a row.
 ${intelBlock(intel)}
 
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -495,7 +495,8 @@ ${intelBlock(intel)}
       "calendar": [
         {
           "date": "Day 1",
-          "platform": "Instagram | TikTok | LinkedIn | Twitter | YouTube",
+          "platform": "one of the selected platforms: Instagram | TikTok | LinkedIn | Twitter | YouTube | Facebook",
+          "crossPost": "string (max 35 words): the native version for the other selected platform(s), or omit if only one platform",
           "pillar": "string (2-4 words)",
           "format": "string (2-4 words)",
           "viralMechanic": "string (2-4 words)",
@@ -510,6 +511,21 @@ ${intelBlock(intel)}
           "notes": "string (max 8 words, or omit)"
         }
       ],
+      "engine": {
+        "bigIdea": "1-2 sentences: the one idea behind all the content and why it makes viewers ask for the offer",
+        "offer": "the entry offer",
+        "cta": "the exact call to action used on every post",
+        "bio": "profile bio line that sells the offer (max 20 words)",
+        "funnel": [{ "step": "2-4 words", "detail": "max 8 words" }],
+        "pillars": [{ "name": "2-4 words", "share": "e.g. 40% · 2 per week", "what": "1 sentence", "example": "one example post line" }],
+        "repurpose": "1 sentence: how one idea becomes a native post on each selected platform",
+        "rhythmColumns": ["one column per selected platform, e.g. Instagram, X"],
+        "weeklyRhythm": [{ "day": "Mon", "posts": ["what goes out on each platform, same order as rhythmColumns, max 8 words each"], "pillar": "pillar name" }],
+        "arc": [{ "days": "Days 1-7", "title": "2-4 words", "focus": "1 sentence" }],
+        "scripts": [{ "label": "e.g. Reply to AUDIT", "text": "word-for-word message, max 45 words" }],
+        "scoreboard": [{ "metric": "e.g. AUDIT DMs", "target": "30-day target" }],
+        "scoreboardNote": "1 sentence: which number matters most and what to change if it is low"
+      },
       "strategicSyncSummary": [
         "Paragraph 1 (2-3 sentences): The narrative arc and thematic flow across the 30 days",
         "Paragraph 2 (2-3 sentences): How the platform sync strategy drives cross-platform amplification",
@@ -526,6 +542,8 @@ ${intelBlock(intel)}
       ]
     }
     
+    Engine sizes: 5-7 funnel steps ending in the paid offers, 3-4 pillars, 7 weeklyRhythm rows (Mon-Sun; rest days allowed), 4 arc items, 3 scripts (reply to the CTA, delivering the free offer, the sales call), 6 scoreboard rows (posts, reach-to-DM numbers, leads, calls, sales).
+    Every caption ends with the engine's exact CTA.
     Ensure exactly 30 items in the "calendar" array, exactly 4 items in "weeklyKPIs" (one per week), exactly 3 items in "abTestPlan", and exactly 10 items in "hookLibrary". Stay within every length limit above — brevity is required, not optional.
   `;
 
@@ -862,7 +880,7 @@ export const refinePlan = async (currentPlan: any, feedback: string) => {
     Refine the following 30-day growth plan: ${JSON.stringify(currentPlan)}.
     User feedback: "${feedback}".
     Adjust the plan to better align with the feedback while maintaining high-impact growth strategies.
-    Keep every "modeledOn" link to competitor evidence unless the feedback asks to change that post; keep exactly 30 calendar items.
+    Keep every "modeledOn" link to competitor evidence unless the feedback asks to change that post; keep exactly 30 calendar items. Keep the "engine" object (bigIdea, offer, cta, bio, funnel, pillars, repurpose, rhythmColumns, weeklyRhythm, arc, scripts, scoreboard, scoreboardNote) and update it only where the feedback requires.
     
     The output MUST follow the same JSON structure as the original plan:
     {
