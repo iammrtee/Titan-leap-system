@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 import { safeStorageName, toPostableJpeg } from '@/src/lib/postMedia';
 import localforage from 'localforage';
-import { PlanStart, PlanCompetitors, EngineTop, WinningPosts, EngineMiddle, EngineBottom, type PlanBrief } from '@/src/components/ClientEngine';
+import { PlanStart, PlanCompetitors, EngineTop, WinningPosts, EngineMiddle, EngineBottom, EMPTY_BRIEF, type PlanBrief } from '@/src/components/ClientEngine';
 
 type StrategyTab = 'competitor' | 'calendar' | 'plan';
 
@@ -945,8 +945,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   // A plan can come from the audit or from a quick brief (no audit needed).
   const [planSource, setPlanSource] = useState<'audit' | 'brief'>(() => (auditData ? 'audit' : 'brief'));
   const [brief, setBriefState] = useState<PlanBrief>(() => {
-    try { return { websiteUrl: '', businessName: '', mainOffer: '', audience: '', industry: '', ...JSON.parse(localStorage.getItem('titanleap_plan_brief') || '{}') }; }
-    catch { return { websiteUrl: '', businessName: '', mainOffer: '', audience: '', industry: '' }; }
+    try { return { ...EMPTY_BRIEF, ...JSON.parse(localStorage.getItem('titanleap_plan_brief') || '{}') }; }
+    catch { return { ...EMPTY_BRIEF }; }
   });
   const setBrief = (b: PlanBrief) => { setBriefState(b); try { localStorage.setItem('titanleap_plan_brief', JSON.stringify(b)); } catch {} };
   const [smartFilling, setSmartFilling] = useState(false);
@@ -963,6 +963,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
         businessName: d?.businessName || brief.businessName,
         industry: d?.industry || brief.industry,
         mainOffer: d?.mainOffer || brief.mainOffer,
+        pricePoint: brief.pricePoint || (d?.pricePoint && d.pricePoint !== '0' ? `$${d.pricePoint}` : ''),
+        result: brief.result || d?.differentiator || '',
         audience: d?.targetAudience || d?.audience || brief.audience,
         socialHandles: Array.isArray(d?.socialHandles) ? d.socialHandles.join(', ') : (d?.socialHandles || brief.socialHandles),
       });
@@ -986,7 +988,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
 
   // Empty box = smart fill: the server finds the competitors itself, then scrapes them.
   const handleResearchCompetitors = async (silent = false, autoPick = false): Promise<CompetitorIntel | null> => {
-    const list = autoPick ? [] : competitorInput.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    const typed = competitorInput.trim() || (planSource === 'brief' ? (brief.competitors || '') : '');
+    const list = autoPick ? [] : typed.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
     if (list.length > 5 && !silent) toast.message('Using the first 5 competitors');
     setIsResearching(true);
     try {

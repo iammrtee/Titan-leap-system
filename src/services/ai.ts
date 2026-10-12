@@ -415,6 +415,29 @@ const intelBlock = (intel?: CompetitorIntel | null) => {
     For every post set "modeledOn" to the exact evidence it copies the structure of (e.g. "@handle carousel '5 mistakes…' 4.1x median"), or "gap test: <gap>".`;
 };
 
+// Extra answers from the Quick brief (no audit). Only lines with an answer are sent.
+const briefBlock = (b: any) => {
+  const lines = [
+    b?.brandType && `Account type: ${b.brandType === 'business' ? 'company account' : 'personal brand (the person is the face of it)'}`,
+    b?.result && `Result clients get: ${b.result}`,
+    b?.freeOffer && `Free entry offer to use as the CTA: ${b.freeOffer}`,
+    b?.proof && `Proof they can show (use it, never invent more): ${b.proof}`,
+    b?.followers && `Followers now: ${b.followers}`,
+    b?.postingNow && `Posting now: ${b.postingNow}`,
+    b?.goal && `30-day goal: ${b.goal} — set scoreboard targets that add up to this`,
+    b?.contentStyle?.length && `Formats they will make: ${b.contentStyle.join(', ')} — use ONLY these formats`,
+    b?.timePerDay && `Time for content: ${b.timePerDay} — the weekly rhythm must fit this`,
+    b?.tone && `Tone of voice: ${b.tone}`,
+    b?.avoid && `Avoid: ${b.avoid}`,
+  ].filter(Boolean);
+  if (!lines.length) return '';
+  return `
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    THEIR ANSWERS — RESPECT EVERY ONE
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    ${lines.join('\n    ')}`;
+};
+
 export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel | null, platforms?: string[]) => {
   const postOn = (platforms && platforms.length ? platforms : [auditData?.primaryPlatform || 'Instagram']).join(', ');
   const prompt = `
@@ -456,6 +479,7 @@ export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel 
     2. Design 3-4 content pillars with a share of posts each (adding to 100%). At least one pillar must demonstrate the result publicly (teardowns, before/after, case studies) because that is what makes viewers ask for the offer. Base pillars on what the competitor evidence proves works plus the gaps.
     3. One idea, made once, posted natively on every selected platform (say how in "repurpose").
     4. Rotate pillars; no pillar more than 2 days in a row.
+${briefBlock(auditData)}
 ${intelBlock(intel)}
 
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

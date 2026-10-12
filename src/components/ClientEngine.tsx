@@ -19,7 +19,21 @@ const Label: React.FC<{ children: React.ReactNode; className?: string }> = ({ ch
 const fmt = (n: number | null | undefined) =>
   n == null ? null : n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}K` : String(n);
 
-export type PlanBrief = { websiteUrl: string; businessName: string; mainOffer: string; audience: string; industry: string; socialHandles?: string };
+export type PlanBrief = {
+  websiteUrl: string; businessName: string; mainOffer: string; audience: string; industry: string; socialHandles?: string;
+  brandType?: 'personal' | 'business'; pricePoint?: string; result?: string; proof?: string; freeOffer?: string;
+  followers?: string; postingNow?: string; goal?: string; contentStyle?: string[]; timePerDay?: string;
+  tone?: string; avoid?: string; competitors?: string;
+};
+
+export const EMPTY_BRIEF: PlanBrief = {
+  websiteUrl: '', businessName: '', mainOffer: '', audience: '', industry: '', socialHandles: '',
+  brandType: 'personal', pricePoint: '', result: '', proof: '', freeOffer: '', followers: '', postingNow: '',
+  goal: '', contentStyle: [], timePerDay: '', tone: '', avoid: '', competitors: '',
+};
+
+const STYLES = ['Talking to camera', 'Voiceover / B-roll', 'Carousels', 'Text posts / threads', 'Faceless'];
+const TIMES = ['15 min/day', '30 min/day', '1 hr/day', '2+ hrs/day'];
 
 const field = "w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-3 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20";
 
@@ -41,7 +55,34 @@ export const PlatformPicker: React.FC<{ platforms: string[]; onPlatforms: (p: st
   );
 };
 
-// Start card for the 30-day plan: build it from the audit, or from a 30-second brief.
+const Q: React.FC<{ label: string; hint?: string; required?: boolean; children: React.ReactNode; className?: string }> = ({ label, hint, required, children, className }) => (
+  <label className={cn("flex flex-col gap-1.5 min-w-0", className)}>
+    <span className="text-xs font-bold text-on-surface">{label}{required && <span className="text-primary"> *</span>}</span>
+    {children}
+    {hint && <span className="text-[10px] text-on-surface-variant/50">{hint}</span>}
+  </label>
+);
+const Step: React.FC<{ n: number; title: string; children: React.ReactNode }> = ({ n, title, children }) => (
+  <div className="space-y-3 pt-5 border-t border-outline-variant/10 first:border-0 first:pt-0">
+    <p className="text-[10px] font-black uppercase tracking-widest text-primary/70">{n} · {title}</p>
+    {children}
+  </div>
+);
+const Chips: React.FC<{ options: string[]; value: string[]; onChange: (v: string[]) => void; single?: boolean }> = ({ options, value, onChange, single }) => (
+  <div className="flex flex-wrap gap-2">
+    {options.map(o => {
+      const on = value.includes(o);
+      return (
+        <button key={o} type="button" onClick={() => onChange(single ? [o] : on ? value.filter(v => v !== o) : [...value, o])}
+          className={cn("text-[11px] font-bold px-2.5 py-1.5 rounded-lg border transition-all",
+            on ? "bg-primary text-white border-primary" : "border-outline-variant/20 text-on-surface-variant/70 hover:text-on-surface")}>{o}</button>
+      );
+    })}
+  </div>
+);
+
+// Start card for the 30-day plan: build it from the audit, or from a short brief that asks
+// for everything the plan needs (offer, buyer, proof, goal, how you like to create).
 export const PlanStart: React.FC<{
   auditName: string | null;
   source: 'audit' | 'brief';
@@ -57,8 +98,10 @@ export const PlanStart: React.FC<{
   budget: { spent: number; budget: number } | null;
   onCancel?: () => void;
 }> = ({ auditName, source, onSource, brief, onBrief, onSmartFill, smartFilling, platforms, onPlatforms, onGenerate, busy, budget, onCancel }) => {
-  const set = (k: keyof PlanBrief) => (e: React.ChangeEvent<HTMLInputElement>) => onBrief({ ...brief, [k]: e.target.value });
-  const ready = source === 'audit' ? !!auditName : !!(brief.businessName.trim() && brief.mainOffer.trim());
+  const b = { ...EMPTY_BRIEF, ...brief };
+  const set = (k: keyof PlanBrief) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onBrief({ ...b, [k]: e.target.value });
+  const missing = source === 'brief' ? [!b.businessName.trim() && 'your name or brand', !b.mainOffer.trim() && 'what you sell', !b.audience.trim() && 'who you sell to'].filter(Boolean) as string[] : [];
+  const ready = source === 'audit' ? !!auditName : missing.length === 0;
   const tab = (id: 'audit' | 'brief', title: string, sub: string, disabled = false) => (
     <button type="button" disabled={disabled} onClick={() => onSource(id)}
       className={cn("flex-1 text-left rounded-2xl border p-4 transition-all disabled:opacity-40 disabled:cursor-not-allowed",
@@ -75,25 +118,74 @@ export const PlanStart: React.FC<{
       </div>
       <div className="flex flex-col sm:flex-row gap-3">
         {tab('audit', 'From my audit', auditName ? `Uses the audit for ${auditName}` : 'Run an audit first to use this', !auditName)}
-        {tab('brief', 'Quick brief', 'No audit needed. Paste a website and go.')}
+        {tab('brief', 'Quick brief', 'No audit needed. Answer a few questions, about 3 minutes.')}
       </div>
+
       {source === 'brief' && (
-        <div className="space-y-3">
-          <div className="flex gap-2">
-            <input id="plan-brief-website" value={brief.websiteUrl} onChange={set('websiteUrl')} placeholder="Website or Instagram link" className={field} />
-            <button type="button" onClick={onSmartFill} disabled={smartFilling || !brief.websiteUrl.trim()}
-              className="shrink-0 flex items-center gap-1.5 px-4 rounded-xl bg-surface-container-highest text-on-surface text-[10px] font-black uppercase tracking-widest disabled:opacity-40">
-              {smartFilling ? <Loader2 size={13} className="animate-spin" /> : null} Smart Fill
-            </button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input id="plan-brief-name" value={brief.businessName} onChange={set('businessName')} placeholder="Brand or your name" className={field} />
-            <input id="plan-brief-industry" value={brief.industry} onChange={set('industry')} placeholder="Industry / niche" className={field} />
-            <input id="plan-brief-offer" value={brief.mainOffer} onChange={set('mainOffer')} placeholder="What you sell" className={field} />
-            <input id="plan-brief-audience" value={brief.audience} onChange={set('audience')} placeholder="Who you sell to" className={field} />
-          </div>
+        <div className="space-y-5">
+          <Step n={1} title="You">
+            <div className="flex gap-2">
+              <input id="plan-brief-website" value={b.websiteUrl} onChange={set('websiteUrl')} placeholder="Your website or Instagram link" className={field} />
+              <button type="button" onClick={onSmartFill} disabled={smartFilling || !b.websiteUrl.trim()}
+                className="shrink-0 flex items-center gap-1.5 px-4 rounded-xl bg-surface-container-highest text-on-surface text-[10px] font-black uppercase tracking-widest disabled:opacity-40">
+                {smartFilling ? <Loader2 size={13} className="animate-spin" /> : null} Smart Fill
+              </button>
+            </div>
+            <p className="text-[10px] text-on-surface-variant/50 -mt-1">Smart Fill reads your site and fills what it can. Check every answer after.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Q label="Your name or brand" required><input id="plan-brief-name" value={b.businessName} onChange={set('businessName')} placeholder="e.g. Tee from TitanLeap" className={field} /></Q>
+              <Q label="Niche"><input id="plan-brief-industry" value={b.industry} onChange={set('industry')} placeholder="e.g. growth agency for local businesses" className={field} /></Q>
+            </div>
+            <Q label="Is this a personal brand or a company account?">
+              <Chips single options={['Personal brand', 'Company']} value={[b.brandType === 'business' ? 'Company' : 'Personal brand']}
+                onChange={v => onBrief({ ...b, brandType: v[0] === 'Company' ? 'business' : 'personal' })} />
+            </Q>
+          </Step>
+
+          <Step n={2} title="Your offer">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Q label="What you sell" required><input id="plan-brief-offer" value={b.mainOffer} onChange={set('mainOffer')} placeholder="e.g. done-for-you growth systems" className={field} /></Q>
+              <Q label="Price"><input id="plan-brief-price" value={b.pricePoint} onChange={set('pricePoint')} placeholder="e.g. $297 report, $1,500/month" className={field} /></Q>
+            </div>
+            <Q label="The result clients get" hint="The outcome in plain words. This becomes the promise in your content.">
+              <input id="plan-brief-result" value={b.result} onChange={set('result')} placeholder="e.g. more booked calls from the traffic they already have" className={field} />
+            </Q>
+            <Q label="Free thing people can ask for" hint="Leave empty and we'll suggest one. It becomes the call to action on every post.">
+              <input id="plan-brief-free" value={b.freeOffer} onChange={set('freeOffer')} placeholder="e.g. a free audit of their funnel" className={field} />
+            </Q>
+            <Q label="Proof you can show" hint="Results, client wins, testimonials, numbers. Real ones only.">
+              <textarea id="plan-brief-proof" value={b.proof} onChange={set('proof')} rows={2} placeholder="e.g. helped a gym go from 12 to 41 leads a month" className={cn(field, "resize-none")} />
+            </Q>
+          </Step>
+
+          <Step n={3} title="Who you sell to">
+            <Q label="Your ideal client" required hint="Who they are, and the problem that makes them buy.">
+              <textarea id="plan-brief-audience" value={b.audience} onChange={set('audience')} rows={2} placeholder="e.g. local service business owners getting traffic but few enquiries" className={cn(field, "resize-none")} />
+            </Q>
+            <Q label="Competitors or accounts you admire" hint="Optional. One per line, Instagram or TikTok links work best. Empty = we find them.">
+              <textarea id="plan-brief-competitors" value={b.competitors} onChange={set('competitors')} rows={2} placeholder="https://www.instagram.com/..." className={cn(field, "resize-none")} />
+            </Q>
+          </Step>
+
+          <Step n={4} title="Where you are now">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Q label="Followers now"><input id="plan-brief-followers" value={b.followers} onChange={set('followers')} placeholder="e.g. IG 800, X 150" className={field} /></Q>
+              <Q label="How often you post now"><input id="plan-brief-posting" value={b.postingNow} onChange={set('postingNow')} placeholder="e.g. once a week" className={field} /></Q>
+              <Q label="30-day goal"><input id="plan-brief-goal" value={b.goal} onChange={set('goal')} placeholder="e.g. 3 new clients" className={field} /></Q>
+            </div>
+          </Step>
+
+          <Step n={5} title="How you like to create">
+            <Q label="Formats you're happy to make"><Chips options={STYLES} value={b.contentStyle || []} onChange={v => onBrief({ ...b, contentStyle: v })} /></Q>
+            <Q label="Time you can give content each day"><Chips single options={TIMES} value={b.timePerDay ? [b.timePerDay] : []} onChange={v => onBrief({ ...b, timePerDay: v[0] })} /></Q>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Q label="Your tone"><input id="plan-brief-tone" value={b.tone} onChange={set('tone')} placeholder="e.g. direct, confident, a bit funny" className={field} /></Q>
+              <Q label="Anything to avoid"><input id="plan-brief-avoid" value={b.avoid} onChange={set('avoid')} placeholder="e.g. no dancing trends, no politics" className={field} /></Q>
+            </div>
+          </Step>
         </div>
       )}
+
       <div className="space-y-2">
         <Label>Posting on</Label>
         <PlatformPicker platforms={platforms} onPlatforms={onPlatforms} />
@@ -103,6 +195,7 @@ export const PlanStart: React.FC<{
           className="bg-primary text-white px-8 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest disabled:opacity-40 flex items-center justify-center gap-2">
           {busy ? <Loader2 size={14} className="animate-spin" /> : null} Generate 30-day plan
         </button>
+        {missing.length > 0 && <span className="text-[11px] text-on-surface-variant/60">Still needed: {missing.join(', ')}</span>}
         {onCancel && <button type="button" onClick={onCancel} className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 hover:text-on-surface">Cancel</button>}
         {budget && <span className="sm:ml-auto text-[10px] text-on-surface-variant/40">AI spend this month: ${budget.spent.toFixed(2)} of ${budget.budget.toFixed(2)}</span>}
       </div>
