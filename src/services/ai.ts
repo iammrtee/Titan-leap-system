@@ -420,7 +420,7 @@ export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel 
   const prompt = `
     You are a world-class content strategist who builds content systems that bring in CLIENTS, not just views.
 
-    I have completed a full audit for ${auditData?.businessName || 'the brand'}. Build their 30-day CLIENT ENGINE: one clear low-friction offer every post points to, a funnel from post to paying client, content pillars, a weekly rhythm, a 30-day story arc, lead scripts, a scoreboard, and a 30-day calendar ready to execute.
+    ${auditData?.issues?.length ? 'I have completed a full audit for' : 'Here is a short brief for'} ${auditData?.businessName || 'the brand'}${auditData?.websiteUrl ? ` (${auditData.websiteUrl})` : ''}. Build their 30-day CLIENT ENGINE: one clear low-friction offer every post points to, a funnel from post to paying client, content pillars, a weekly rhythm, a 30-day story arc, lead scripts, a scoreboard, and a 30-day calendar ready to execute.
 
     This is not a generic content plan. Every post must be informed by the audit and the competitor evidence, and every post must move a viewer one step toward the offer.
 
@@ -431,6 +431,7 @@ export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel 
     Industry: ${auditData?.industry || 'B2B SaaS'}
     POST ONLY ON THESE PLATFORMS: ${postOn}
     Main Offer: ${auditData?.mainOffer || auditData?.mainProduct || 'Premium Service'}
+    Who They Sell To: ${auditData?.targetAudience || auditData?.audience || 'Infer from the offer and industry'}
     Price Point: ${auditData?.pricePoint || 'Unknown'}
     Differentiator: ${auditData?.differentiator || 'Unique Approach'}
     Current Revenue: ${auditData?.currentRevenue || 'Unknown'}

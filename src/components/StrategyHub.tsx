@@ -3,12 +3,12 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anchor, Network, LineChart, Download, Clapperboard, Info, Bolt, Search, Users, TrendingUp, Calendar, Upload, Clock, CheckCircle2, List, LayoutGrid, Filter, Plus, ChevronRight, Share2, MoreHorizontal, Instagram, Twitter, Linkedin, Youtube, Facebook, Play, Zap, Rocket, Loader2, Sparkles, AlertCircle, FileText, ExternalLink, MoreVertical, Target, RefreshCw, X, Terminal, Trash2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent, generateCalendarFromBlueprint, researchCompetitors, getAIBudget, type CompetitorIntel } from '@/src/services/ai';
+import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent, generateCalendarFromBlueprint, researchCompetitors, getAIBudget, smartFillForm, type CompetitorIntel } from '@/src/services/ai';
 import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 import { safeStorageName, toPostableJpeg } from '@/src/lib/postMedia';
 import localforage from 'localforage';
-import { PlanSetup, EngineTop, WinningPosts, EngineMiddle, EngineBottom } from '@/src/components/ClientEngine';
+import { PlanStart, PlanCompetitors, EngineTop, WinningPosts, EngineMiddle, EngineBottom, type PlanBrief } from '@/src/components/ClientEngine';
 
 type StrategyTab = 'competitor' | 'calendar' | 'plan';
 
@@ -942,20 +942,56 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
 
   const [generationState, setGenerationState] = useState<'idle' | 'crafting' | 'building' | 'completed'>('idle');
 
-  // Business details for research: the audit report plus the intake form (website, handles).
+  // A plan can come from the audit or from a quick brief (no audit needed).
+  const [planSource, setPlanSource] = useState<'audit' | 'brief'>(() => (auditData ? 'audit' : 'brief'));
+  const [brief, setBriefState] = useState<PlanBrief>(() => {
+    try { return { websiteUrl: '', businessName: '', mainOffer: '', audience: '', industry: '', ...JSON.parse(localStorage.getItem('titanleap_plan_brief') || '{}') }; }
+    catch { return { websiteUrl: '', businessName: '', mainOffer: '', audience: '', industry: '' }; }
+  });
+  const setBrief = (b: PlanBrief) => { setBriefState(b); try { localStorage.setItem('titanleap_plan_brief', JSON.stringify(b)); } catch {} };
+  const [smartFilling, setSmartFilling] = useState(false);
+  const [showPlanStart, setShowPlanStart] = useState(false);
+  useEffect(() => { if (!auditData && planSource === 'audit') setPlanSource('brief'); }, [auditData]);
+
+  const handleBriefSmartFill = async () => {
+    if (!brief.websiteUrl.trim()) return;
+    setSmartFilling(true);
+    try {
+      const d: any = await smartFillForm(brief.websiteUrl.trim());
+      setBrief({
+        ...brief,
+        businessName: d?.businessName || brief.businessName,
+        industry: d?.industry || brief.industry,
+        mainOffer: d?.mainOffer || brief.mainOffer,
+        audience: d?.targetAudience || d?.audience || brief.audience,
+        socialHandles: Array.isArray(d?.socialHandles) ? d.socialHandles.join(', ') : (d?.socialHandles || brief.socialHandles),
+      });
+      toast.success('Filled from the website. Check it, then generate.');
+    } catch (err: any) {
+      toast.error(err.message || 'Smart Fill failed. Fill the fields in yourself.');
+    } finally {
+      setSmartFilling(false);
+    }
+  };
+
+  // Business details for research and the plan: the audit (report + intake form) or the brief.
   const businessContext = () => {
+    if (planSource === 'brief' || !auditData) {
+      return { ...brief, targetAudience: brief.audience, socialHandles: brief.socialHandles || (/instagram|tiktok|x\.com|twitter/i.test(brief.websiteUrl) ? brief.websiteUrl : '') };
+    }
     let form: any = {};
     try { form = JSON.parse(localStorage.getItem('titanleap_audit_form') || '{}') || {}; } catch {}
     return { ...form, ...(auditData || {}), websiteUrl: auditData?.websiteUrl || form.websiteUrl, socialHandles: auditData?.socialHandles || form.socialHandles };
   };
 
   // Empty box = smart fill: the server finds the competitors itself, then scrapes them.
-  const handleResearchCompetitors = async (silent = false): Promise<CompetitorIntel | null> => {
-    const list = competitorInput.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  const handleResearchCompetitors = async (silent = false, autoPick = false): Promise<CompetitorIntel | null> => {
+    const list = autoPick ? [] : competitorInput.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
     if (list.length > 5 && !silent) toast.message('Using the first 5 competitors');
     setIsResearching(true);
     try {
-      const intel = await researchCompetitors(list.slice(0, 5), businessContext());
+      const ctx = businessContext();
+      const intel = { ...(await researchCompetitors(list.slice(0, 5), ctx)), forBusiness: ctx.businessName || '' };
       setCompetitorIntel(intel);
       try { localStorage.setItem('titanleap_competitor_intel', JSON.stringify(intel)); } catch {}
       if (!list.length && intel.competitors?.length) {
@@ -978,21 +1014,27 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   };
 
   const handleGeneratePlan = async () => {
-    if (!auditData || isGeneratingPlan) return;
+    const ctx = businessContext();
+    if (isGeneratingPlan || !(ctx.businessName || ctx.mainOffer || ctx.mainProduct)) {
+      if (!isGeneratingPlan) toast.error('Add your brand name and what you sell first');
+      return;
+    }
     setIsGeneratingPlan(true);
+    setShowPlanStart(false);
     setGenerationState('crafting');
     try {
-      // No evidence yet: find and study competitors first so the plan is built on what works.
+      // No evidence yet (or it was for another business): find and study competitors first.
       let intel = competitorIntel;
-      if (!intel) intel = await handleResearchCompetitors(true);
+      const sameBusiness = !!intel && ((intel as any).forBusiness ?? ctx.businessName ?? '') === (ctx.businessName || '');
+      if (!intel || !sameBusiness) intel = await handleResearchCompetitors(true, !sameBusiness && !!intel);
       setGenerationState('building');
 
-      const plan = await generate30DayPlan(auditData, intel, planPlatforms);
+      const plan = await generate30DayPlan(ctx, intel, planPlatforms);
       refreshBudget();
       
       if (plan && plan.strategicSyncSummary) {
         setGenerationState('completed');
-        setThirtyDayPlan({ ...plan, builtOnEvidence: !!intel, evidenceDate: intel?.researchedAt || null });
+        setThirtyDayPlan({ ...plan, builtOnEvidence: !!intel, evidenceDate: intel?.researchedAt || null, builtFor: ctx.businessName || '', source: planSource, platforms: planPlatforms });
         // Keep the completed state visible for a moment before resetting
         setTimeout(() => {
           setGenerationState('idle');
@@ -1249,10 +1291,12 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     }
   }, [forceRegenerateTimestamp]);
 
-  const renderCompetitorEvidence = () => (
-    <PlanSetup platforms={planPlatforms} onPlatforms={choosePlatforms} intel={competitorIntel}
-      input={competitorInput} onInput={setCompetitorInput} onResearch={() => handleResearchCompetitors()}
-      busy={isResearching} budget={aiBudget} />
+  const renderPlanStart = (onCancel?: () => void) => (
+    <PlanStart auditName={auditData ? (auditData.businessName || 'your business') : null}
+      source={planSource} onSource={setPlanSource} brief={brief} onBrief={setBrief}
+      onSmartFill={handleBriefSmartFill} smartFilling={smartFilling}
+      platforms={planPlatforms} onPlatforms={choosePlatforms}
+      onGenerate={handleGeneratePlan} busy={isGeneratingPlan} budget={aiBudget} onCancel={onCancel} />
   );
 
   const renderTabContent = () => {
@@ -1260,6 +1304,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       case 'competitor':
         return (
           <div className="space-y-6 md:space-y-8">
+            <PlanCompetitors intel={competitorIntel} input={competitorInput} onInput={setCompetitorInput}
+              onResearch={() => handleResearchCompetitors()} busy={isResearching} />
             {/* Input Section */}
             <div className="bg-surface-container-low rounded-2xl md:rounded-3xl p-5 md:p-8 border border-outline-variant/10 shadow-sm">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-6 mb-6 md:mb-8">
@@ -1500,7 +1546,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       case 'plan':
         return (
           <div className="space-y-6 md:space-y-8">
-            {renderCompetitorEvidence()}
+            {thirtyDayPlan && showPlanStart && !isGeneratingPlan && renderPlanStart(() => setShowPlanStart(false))}
             {!thirtyDayPlan && isGeneratingPlan ? (
               <div className="flex flex-col items-center justify-center py-16 md:py-24 space-y-4 md:space-y-6 px-4">
                 <div className="relative">
@@ -1518,7 +1564,15 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
               <div className="space-y-12">
                 {/* Strategy Header & Refinement */}
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
-                  <h3 className="text-2xl md:text-3xl font-black tracking-tight text-on-surface">{thirtyDayPlan.engine ? 'Your Client Engine' : '30-Day Viral Strategy'}</h3>
+                  <div className="space-y-1">
+                    <h3 className="text-2xl md:text-3xl font-black tracking-tight text-on-surface">{thirtyDayPlan.engine ? 'Your Client Engine' : '30-Day Viral Strategy'}</h3>
+                    {(thirtyDayPlan.builtFor || thirtyDayPlan.platforms) && (
+                      <p className="text-xs font-medium text-on-surface-variant/60">
+                        {thirtyDayPlan.builtFor && <>For {thirtyDayPlan.builtFor} · {thirtyDayPlan.source === 'brief' ? 'from a quick brief' : 'from the audit'}</>}
+                        {thirtyDayPlan.platforms?.length ? <> · {thirtyDayPlan.platforms.map((p: string) => p === 'Twitter' ? 'X' : p).join(', ')}</> : null}
+                      </p>
+                    )}
+                  </div>
                   <div className="flex flex-wrap items-center gap-3 md:gap-4">
                     <button 
                       onClick={handleGeneratePlan}
@@ -1586,6 +1640,13 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                     >
                       {isDraftingCalendar ? <Loader2 size={16} className="animate-spin" /> : <Calendar size={16} />}
                       Draft 30-Day Calendar
+                    </button>
+                    <button
+                      onClick={() => setShowPlanStart(true)}
+                      className="flex items-center gap-2 text-on-surface-variant font-black text-[10px] md:text-xs uppercase tracking-widest hover:underline"
+                    >
+                      <Plus size={16} />
+                      New plan
                     </button>
                   </div>
                 </div>
@@ -1746,30 +1807,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
 
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-16 md:py-24 space-y-6 md:space-y-8 text-center px-4">
-                <div className="w-20 h-20 md:w-24 md:h-24 rounded-3xl md:rounded-[32px] bg-surface-container-low flex items-center justify-center text-on-surface-variant/20">
-                  <Rocket size={40} className="md:w-12 md:h-12" />
-                </div>
-                <div className="space-y-3 md:space-y-4">
-                  <h3 className="text-xl md:text-2xl font-black text-on-surface tracking-tight">No Strategy Data Found</h3>
-                  <p className="text-sm md:text-base text-on-surface-variant/60 font-medium max-w-md mx-auto">Complete a business audit first to generate your custom 30-day high-performance roadmap.</p>
-                  {auditData && (
-                    <button 
-                      onClick={handleGeneratePlan}
-                      className="w-full sm:w-auto bg-primary text-white px-6 md:px-8 py-3 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest hover:scale-105 transition-all mt-4 flex items-center justify-center gap-2 mx-auto"
-                    >
-                      Generate Roadmap
-                      <span className="px-1.5 py-0.5 bg-white/20 text-white rounded-md text-[8px] font-black uppercase tracking-widest shrink-0">Ultra</span>
-                    </button>
-                  )}
-                </div>
-                <button 
-                  onClick={() => window.location.reload()} // Simple way to go back to audit if we don't have a view switcher here
-                  className="w-full sm:w-auto bg-surface-container-highest text-on-surface px-8 md:px-10 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-xs md:text-sm border border-outline-variant/10 hover:bg-surface-container transition-all"
-                >
-                  Return to Audit
-                </button>
-              </div>
+              renderPlanStart()
             )}
           </div>
         );

@@ -19,79 +19,153 @@ const Label: React.FC<{ children: React.ReactNode; className?: string }> = ({ ch
 const fmt = (n: number | null | undefined) =>
   n == null ? null : n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}K` : String(n);
 
-// Slim settings row above the plan: where we post + who we learn from. Research runs by itself
-// with the plan, so this stays out of the way until someone wants to change it.
-export const PlanSetup: React.FC<{
-  platforms: string[];
-  onPlatforms: (p: string[]) => void;
-  intel: CompetitorIntel | null;
-  input: string;
-  onInput: (v: string) => void;
-  onResearch: () => void;
-  busy: boolean;
-  budget: { spent: number; budget: number } | null;
-}> = ({ platforms, onPlatforms, intel, input, onInput, onResearch, busy, budget }) => {
-  const [editing, setEditing] = useState(false);
+export type PlanBrief = { websiteUrl: string; businessName: string; mainOffer: string; audience: string; industry: string; socialHandles?: string };
+
+const field = "w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-3 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20";
+
+export const PlatformPicker: React.FC<{ platforms: string[]; onPlatforms: (p: string[]) => void }> = ({ platforms, onPlatforms }) => {
   const toggle = (id: string) => {
     const next = platforms.includes(id) ? platforms.filter(p => p !== id) : [...platforms, id];
     if (next.length) onPlatforms(next);
   };
   return (
-    <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 px-4 py-3 md:px-5 space-y-3">
-      <div className="flex flex-col gap-2.5">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Label className="w-24 shrink-0">Posting on</Label>
-          {PLAN_PLATFORMS.map(p => (
-            <button key={p.id} onClick={() => toggle(p.id)}
-              className={cn("flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all",
-                platforms.includes(p.id) ? "bg-primary text-white border-primary" : "border-outline-variant/20 text-on-surface-variant/60 hover:text-on-surface")}>
-              {p.icon}{p.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 flex-wrap min-w-0">
-          <Label className="w-24 shrink-0">Learning from</Label>
-          {busy ? (
-            <span className="flex items-center gap-1.5 text-[11px] font-bold text-primary"><Loader2 size={12} className="animate-spin" /> Finding competitors and reading their best posts…</span>
-          ) : intel?.competitors?.length ? (
-            intel.competitors.map((c: any, i: number) => (
-              <span key={i} className="text-[11px] font-bold px-2 py-1 rounded-lg bg-surface-container-highest/40 text-on-surface" title={c.source === 'scraped' ? `${c.postsAnalyzed} real posts read` : 'Researched on the web'}>
-                {c.platform === 'web' ? c.handle : `@${c.handle}`}
-              </span>
-            ))
-          ) : (
-            <span className="text-[11px] font-medium text-on-surface-variant/60">Competitors are picked from your audit when you generate the plan</span>
-          )}
-          {!busy && (
-            <span className="flex items-center gap-1 ml-auto">
-              <button onClick={() => setEditing(!editing)} className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg text-on-surface-variant/70 hover:text-primary">
-                <Pencil size={11} /> Choose
-              </button>
-              {intel && (
-                <button onClick={onResearch} className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg text-on-surface-variant/70 hover:text-primary">
-                  <RefreshCw size={11} /> Refresh
-                </button>
-              )}
-            </span>
-          )}
-        </div>
+    <div className="flex items-center gap-2 flex-wrap">
+      {PLAN_PLATFORMS.map(p => (
+        <button key={p.id} type="button" onClick={() => toggle(p.id)}
+          className={cn("flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded-lg border transition-all",
+            platforms.includes(p.id) ? "bg-primary text-white border-primary" : "border-outline-variant/20 text-on-surface-variant/60 hover:text-on-surface")}>
+          {p.icon}{p.label}
+        </button>
+      ))}
+    </div>
+  );
+};
+
+// Start card for the 30-day plan: build it from the audit, or from a 30-second brief.
+export const PlanStart: React.FC<{
+  auditName: string | null;
+  source: 'audit' | 'brief';
+  onSource: (s: 'audit' | 'brief') => void;
+  brief: PlanBrief;
+  onBrief: (b: PlanBrief) => void;
+  onSmartFill: () => void;
+  smartFilling: boolean;
+  platforms: string[];
+  onPlatforms: (p: string[]) => void;
+  onGenerate: () => void;
+  busy: boolean;
+  budget: { spent: number; budget: number } | null;
+  onCancel?: () => void;
+}> = ({ auditName, source, onSource, brief, onBrief, onSmartFill, smartFilling, platforms, onPlatforms, onGenerate, busy, budget, onCancel }) => {
+  const set = (k: keyof PlanBrief) => (e: React.ChangeEvent<HTMLInputElement>) => onBrief({ ...brief, [k]: e.target.value });
+  const ready = source === 'audit' ? !!auditName : !!(brief.businessName.trim() && brief.mainOffer.trim());
+  const tab = (id: 'audit' | 'brief', title: string, sub: string, disabled = false) => (
+    <button type="button" disabled={disabled} onClick={() => onSource(id)}
+      className={cn("flex-1 text-left rounded-2xl border p-4 transition-all disabled:opacity-40 disabled:cursor-not-allowed",
+        source === id ? "border-primary bg-primary/5" : "border-outline-variant/15 hover:border-primary/30")}>
+      <p className={cn("text-sm font-black", source === id ? "text-primary" : "text-on-surface")}>{title}</p>
+      <p className="text-xs text-on-surface-variant/70 mt-0.5">{sub}</p>
+    </button>
+  );
+  return (
+    <div className="bg-surface-container-low rounded-3xl border border-outline-variant/10 p-5 md:p-8 space-y-6 max-w-3xl mx-auto w-full">
+      <div className="space-y-1">
+        <h3 className="text-xl md:text-2xl font-black tracking-tight text-on-surface">Build your 30-day Client Engine</h3>
+        <p className="text-sm text-on-surface-variant/70">We find your competitors, read what is winning for them, and build 30 days of posts that bring in clients.</p>
       </div>
-      {editing && (
-        <div className="flex flex-col md:flex-row gap-2">
-          <textarea value={input} onChange={e => onInput(e.target.value)} rows={3}
-            placeholder={"One per line. Instagram or TikTok links give the best data.\nhttps://www.instagram.com/competitor\nLeave empty to let us pick."}
-            className="flex-1 bg-surface-container-lowest border border-outline-variant/20 rounded-xl p-3 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
-          <button onClick={() => { setEditing(false); onResearch(); }}
-            className="md:w-40 bg-primary text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest">
-            {input.trim() ? 'Use these' : 'Pick for me'}
-          </button>
+      <div className="flex flex-col sm:flex-row gap-3">
+        {tab('audit', 'From my audit', auditName ? `Uses the audit for ${auditName}` : 'Run an audit first to use this', !auditName)}
+        {tab('brief', 'Quick brief', 'No audit needed. Paste a website and go.')}
+      </div>
+      {source === 'brief' && (
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <input id="plan-brief-website" value={brief.websiteUrl} onChange={set('websiteUrl')} placeholder="Website or Instagram link" className={field} />
+            <button type="button" onClick={onSmartFill} disabled={smartFilling || !brief.websiteUrl.trim()}
+              className="shrink-0 flex items-center gap-1.5 px-4 rounded-xl bg-surface-container-highest text-on-surface text-[10px] font-black uppercase tracking-widest disabled:opacity-40">
+              {smartFilling ? <Loader2 size={13} className="animate-spin" /> : null} Smart Fill
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input id="plan-brief-name" value={brief.businessName} onChange={set('businessName')} placeholder="Brand or your name" className={field} />
+            <input id="plan-brief-industry" value={brief.industry} onChange={set('industry')} placeholder="Industry / niche" className={field} />
+            <input id="plan-brief-offer" value={brief.mainOffer} onChange={set('mainOffer')} placeholder="What you sell" className={field} />
+            <input id="plan-brief-audience" value={brief.audience} onChange={set('audience')} placeholder="Who you sell to" className={field} />
+          </div>
         </div>
       )}
-      {budget && (
-        <p className={cn("text-[10px] font-medium", budget.spent >= budget.budget ? "text-red-500" : "text-on-surface-variant/40")}>
-          AI spend this month: ${budget.spent.toFixed(2)} of ${budget.budget.toFixed(2)}
-        </p>
-      )}
+      <div className="space-y-2">
+        <Label>Posting on</Label>
+        <PlatformPicker platforms={platforms} onPlatforms={onPlatforms} />
+      </div>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <button type="button" onClick={onGenerate} disabled={!ready || busy}
+          className="bg-primary text-white px-8 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest disabled:opacity-40 flex items-center justify-center gap-2">
+          {busy ? <Loader2 size={14} className="animate-spin" /> : null} Generate 30-day plan
+        </button>
+        {onCancel && <button type="button" onClick={onCancel} className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 hover:text-on-surface">Cancel</button>}
+        {budget && <span className="sm:ml-auto text-[10px] text-on-surface-variant/40">AI spend this month: ${budget.spent.toFixed(2)} of ${budget.budget.toFixed(2)}</span>}
+      </div>
+    </div>
+  );
+};
+
+// Competitor Analysis tab: who the plan learns from, and what is winning for them.
+export const PlanCompetitors: React.FC<{
+  intel: CompetitorIntel | null;
+  input: string;
+  onInput: (v: string) => void;
+  onResearch: () => void;
+  busy: boolean;
+}> = ({ intel, input, onInput, onResearch, busy }) => {
+  const [editing, setEditing] = useState(false);
+  return (
+    <div className="space-y-6">
+      <div className="bg-surface-container-low rounded-3xl border border-outline-variant/10 p-5 md:p-7 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h3 className="text-lg md:text-xl font-black tracking-tight text-on-surface">Competitors for your 30-day plan</h3>
+            <p className="text-xs md:text-sm text-on-surface-variant/70">Picked automatically when you generate a plan. Change them here any time.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setEditing(!editing)} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border border-outline-variant/20 text-on-surface-variant hover:text-primary">
+              <Pencil size={12} /> Choose my own
+            </button>
+            {intel && (
+              <button onClick={onResearch} disabled={busy} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border border-outline-variant/20 text-on-surface-variant hover:text-primary disabled:opacity-40">
+                {busy ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Refresh
+              </button>
+            )}
+          </div>
+        </div>
+        {busy ? (
+          <p className="flex items-center gap-2 text-sm font-bold text-primary"><Loader2 size={14} className="animate-spin" /> Finding competitors and reading their best posts (1–2 min)…</p>
+        ) : intel?.competitors?.length ? (
+          <div className="flex flex-wrap gap-2">
+            {intel.competitors.map((c: any, i: number) => (
+              <span key={i} className="text-xs font-bold px-3 py-1.5 rounded-xl bg-surface-container-lowest border border-outline-variant/10 text-on-surface">
+                {c.platform === 'web' ? c.handle : `@${c.handle}`}
+                <span className="font-medium text-on-surface-variant/60"> · {c.source === 'scraped' ? `${c.postsAnalyzed} posts read` : 'web research'}</span>
+              </span>
+            ))}
+            <span className="text-[10px] text-on-surface-variant/50 self-center">Researched {new Date(intel.researchedAt).toLocaleDateString()}</span>
+          </div>
+        ) : (
+          <p className="text-sm text-on-surface-variant/60">None yet. Generate a plan and we will pick them from your business details, or choose your own.</p>
+        )}
+        {editing && (
+          <div className="flex flex-col md:flex-row gap-2">
+            <textarea value={input} onChange={e => onInput(e.target.value)} rows={3}
+              placeholder={"One per line. Instagram or TikTok links give the best data.\nhttps://www.instagram.com/competitor"}
+              className="flex-1 bg-surface-container-lowest border border-outline-variant/20 rounded-xl p-3 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
+            <button onClick={() => { setEditing(false); onResearch(); }} disabled={!input.trim()}
+              className="md:w-40 bg-primary text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest disabled:opacity-40">
+              Research these
+            </button>
+          </div>
+        )}
+      </div>
+      <WinningPosts intel={intel} />
     </div>
   );
 };
