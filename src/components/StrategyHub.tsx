@@ -2269,14 +2269,19 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                                   <p className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant/60">{item.platform} / {item.type}</p>
                                   <h5 className="text-xl md:text-2xl font-black text-on-surface leading-tight tracking-tight">{item.title}</h5>
                                 </div>
-                                <p className="text-sm font-medium text-on-surface-variant/60 leading-relaxed">
-                                  {item.description}
-                                </p>
+                                {item.description && (
+                                  <button type="button" onClick={() => handleEditClick(item)} className="block w-full text-left group/desc">
+                                    <p className="text-sm font-medium text-on-surface-variant/60 leading-relaxed line-clamp-4 whitespace-pre-line break-words">
+                                      {item.description}
+                                    </p>
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-primary/70 group-hover/desc:text-primary">Open full post →</span>
+                                  </button>
+                                )}
                               </div>
 
                               {item.tags && (
                                 <div className="flex flex-wrap gap-2">
-                                  {item.tags.map(tag => (
+                                  {item.tags.filter(tag => tag && !['ai-generated', 'strategy'].includes(tag)).map(tag => (
                                     <span key={tag} className="px-3 py-1 bg-surface-container-low rounded-lg text-[10px] font-bold text-on-surface-variant/60 border border-outline-variant/5">
                                       #{tag}
                                     </span>
@@ -2284,12 +2289,12 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                                 </div>
                               )}
 
-                              <div className="pt-6 border-t border-outline-variant/10 flex items-center justify-between">
-                                <div className="flex items-center gap-3 text-on-surface-variant">
+                              <div className="pt-6 border-t border-outline-variant/10 flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-3 text-on-surface-variant min-w-0">
                                   <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
                                     <CheckCircle2 size={18} />
                                   </div>
-                                  <span className="text-sm font-black tracking-tight">{item.time}</span>
+                                  <span className="text-sm font-black tracking-tight whitespace-nowrap">{item.time}</span>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <button
