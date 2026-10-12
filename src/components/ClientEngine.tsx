@@ -38,9 +38,9 @@ export const PlanSetup: React.FC<{
   };
   return (
     <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 px-4 py-3 md:px-5 space-y-3">
-      <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-6">
+      <div className="flex flex-col gap-2.5">
         <div className="flex items-center gap-2 flex-wrap">
-          <Label>Posting on</Label>
+          <Label className="w-24 shrink-0">Posting on</Label>
           {PLAN_PLATFORMS.map(p => (
             <button key={p.id} onClick={() => toggle(p.id)}
               className={cn("flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all",
@@ -49,8 +49,8 @@ export const PlanSetup: React.FC<{
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2 flex-wrap min-w-0 lg:flex-1">
-          <Label>Learning from</Label>
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <Label className="w-24 shrink-0">Learning from</Label>
           {busy ? (
             <span className="flex items-center gap-1.5 text-[11px] font-bold text-primary"><Loader2 size={12} className="animate-spin" /> Finding competitors and reading their best posts…</span>
           ) : intel?.competitors?.length ? (
