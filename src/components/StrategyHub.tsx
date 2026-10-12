@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 import { safeStorageName, toPostableJpeg } from '@/src/lib/postMedia';
 import localforage from 'localforage';
+import { PlanSetup, EngineTop, WinningPosts, EngineMiddle, EngineBottom } from '@/src/components/ClientEngine';
 
 type StrategyTab = 'competitor' | 'calendar' | 'plan';
 
@@ -147,6 +148,12 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   const [competitorIntel, setCompetitorIntel] = useState<CompetitorIntel | null>(() => { try { return JSON.parse(localStorage.getItem('titanleap_competitor_intel') || 'null'); } catch { return null; } });
   const [isResearching, setIsResearching] = useState(false);
   const [openDay, setOpenDay] = useState<number | null>(0);
+  const [planPlatforms, setPlanPlatforms] = useState<string[]>(() => {
+    try { const saved = JSON.parse(localStorage.getItem('titanleap_plan_platforms') || 'null'); if (Array.isArray(saved) && saved.length) return saved; } catch {}
+    const p = String(auditData?.primaryPlatform || 'Instagram');
+    return [/twitter|x\b/i.test(p) ? 'Twitter' : (['Instagram', 'TikTok', 'LinkedIn', 'YouTube', 'Facebook'].find(x => p.toLowerCase().includes(x.toLowerCase())) || 'Instagram')];
+  });
+  const choosePlatforms = (p: string[]) => { setPlanPlatforms(p); try { localStorage.setItem('titanleap_plan_platforms', JSON.stringify(p)); } catch {} };
   const [aiBudget, setAiBudget] = useState<{ spent: number; budget: number } | null>(null);
   const refreshBudget = () => { getAIBudget().then(b => b && setAiBudget(b)); };
   useEffect(() => { refreshBudget(); }, []);
@@ -980,7 +987,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       if (!intel) intel = await handleResearchCompetitors(true);
       setGenerationState('building');
 
-      const plan = await generate30DayPlan(auditData, intel);
+      const plan = await generate30DayPlan(auditData, intel, planPlatforms);
       refreshBudget();
       
       if (plan && plan.strategicSyncSummary) {
@@ -1242,80 +1249,11 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     }
   }, [forceRegenerateTimestamp]);
 
-  const renderCompetitorEvidence = () => {
-    const pb = competitorIntel?.playbook;
-    const posts = competitorIntel?.competitors?.reduce((n: number, c: any) => n + (c.postsAnalyzed || 0), 0) || 0;
-    return (
-      <div className="bg-surface-container-low p-5 md:p-6 rounded-3xl border border-outline-variant/10 shadow-sm space-y-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 text-primary"><Network size={18} /><h4 className="font-black text-base md:text-lg tracking-tight">Competitor Evidence</h4></div>
-          {competitorIntel ? (
-            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-600">
-              {posts} real posts · {competitorIntel.competitors.length} competitors · {new Date(competitorIntel.researchedAt).toLocaleDateString()}
-            </span>
-          ) : (
-            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg bg-amber-500/10 text-amber-600">Not researched yet — runs automatically with the plan</span>
-          )}
-          {aiBudget && (
-            <span title="Claude spend this month on research, plans, refines and ⚡ captions" className={cn("ml-auto text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg",
-              aiBudget.spent >= aiBudget.budget ? "bg-red-500/10 text-red-600" : "bg-surface-container-highest/40 text-on-surface-variant")}>
-              AI budget ${aiBudget.spent.toFixed(2)} / ${aiBudget.budget.toFixed(2)}
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-on-surface-variant/70 font-medium">We find your competitors from your audit and read their real top posts, then build the plan on what is proven to work. Leave the box empty to let us pick, or paste your own (one per line) to override.</p>
-        <div className="flex flex-col md:flex-row gap-3">
-          <textarea value={competitorInput} onChange={e => setCompetitorInput(e.target.value)} rows={3}
-            placeholder={"Leave empty — we'll find them from your audit.\nOr paste: https://www.instagram.com/competitor"}
-            className="flex-1 bg-surface-container-lowest border border-outline-variant/20 rounded-xl p-3 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
-          <button onClick={() => handleResearchCompetitors()} disabled={isResearching}
-            className="md:w-48 bg-primary text-white px-5 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60">
-            {isResearching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-            {isResearching ? 'Researching (1–2 min)…' : competitorIntel ? 'Re-research' : competitorInput.trim() ? 'Research these' : 'Find competitors'}
-          </button>
-        </div>
-        {pb && (
-          <div className="space-y-4 pt-2">
-            {pb.summary && <p className="text-sm text-on-surface-variant/80 font-medium leading-relaxed">{pb.summary}</p>}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50">What's working</p>
-                {(pb.winningPatterns || []).slice(0, 6).map((w: any, i: number) => (
-                  <div key={i} className="p-3 bg-surface-container-lowest rounded-xl border border-outline-variant/5">
-                    <p className="text-xs font-black text-on-surface">{w.pattern} <span className="font-bold text-primary/70">· {w.format}</span></p>
-                    <p className="text-[11px] text-on-surface-variant/70 mt-0.5">{w.whyItWorks}</p>
-                    <p className="text-[10px] text-emerald-600 font-bold mt-1">{w.evidence}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50">Proven hooks → ours</p>
-                {(pb.provenHooks || []).slice(0, 6).map((h: any, i: number) => (
-                  <div key={i} className="p-3 bg-surface-container-lowest rounded-xl border border-outline-variant/5">
-                    <p className="text-[11px] text-on-surface-variant/60 italic">"{h.original}" <span className="not-italic text-[10px]">— {h.source}</span></p>
-                    <p className="text-xs font-bold text-on-surface mt-1">→ {h.ourVersion}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {(pb.gaps?.length > 0 || pb.avoid?.length > 0) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] font-medium">
-                {pb.gaps?.length > 0 && <div><p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50 mb-1">Gaps we can own</p>{pb.gaps.map((g: string, i: number) => <p key={i} className="text-on-surface-variant/80">• {g}</p>)}</div>}
-                {pb.avoid?.length > 0 && <div><p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50 mb-1">Avoid</p>{pb.avoid.map((g: string, i: number) => <p key={i} className="text-on-surface-variant/80">• {g}</p>)}</div>}
-              </div>
-            )}
-            <div className="flex flex-wrap gap-2">
-              {competitorIntel!.competitors.map((c: any, i: number) => (
-                <span key={i} className="text-[10px] font-bold px-2 py-1 rounded-lg bg-surface-container-highest/40 text-on-surface-variant">
-                  {c.platform === 'web' ? c.handle : `@${c.handle}`} · {c.source === 'scraped' ? `${c.postsAnalyzed} posts${c.postsPerWeek ? `, ${c.postsPerWeek}/wk` : ''}` : 'web research'}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
+  const renderCompetitorEvidence = () => (
+    <PlanSetup platforms={planPlatforms} onPlatforms={choosePlatforms} intel={competitorIntel}
+      input={competitorInput} onInput={setCompetitorInput} onResearch={() => handleResearchCompetitors()}
+      busy={isResearching} budget={aiBudget} />
+  );
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -1580,7 +1518,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
               <div className="space-y-12">
                 {/* Strategy Header & Refinement */}
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
-                  <h3 className="text-2xl md:text-3xl font-black tracking-tight text-on-surface">30-Day Viral Strategy</h3>
+                  <h3 className="text-2xl md:text-3xl font-black tracking-tight text-on-surface">{thirtyDayPlan.engine ? 'Your Client Engine' : '30-Day Viral Strategy'}</h3>
                   <div className="flex flex-wrap items-center gap-3 md:gap-4">
                     <button 
                       onClick={handleGeneratePlan}
@@ -1693,6 +1631,58 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                   )}
                 </AnimatePresence>
 
+                <EngineTop plan={thirtyDayPlan} />
+                <WinningPosts intel={competitorIntel} />
+                <EngineMiddle plan={thirtyDayPlan} />
+
+                {/* Daily Content Grid Preview */}
+                <div className="bg-surface-container-low rounded-3xl md:rounded-[40px] p-6 md:p-10 border border-outline-variant/10 shadow-sm space-y-6 md:space-y-8">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
+                    <div className="space-y-1">
+                      <h3 className="text-xl md:text-2xl font-black tracking-tight text-on-surface">Daily Content Execution</h3>
+                      <p className="text-xs md:text-sm font-medium text-on-surface-variant/60">All 30 days. Tap a day for the hook, body and caption.{thirtyDayPlan.builtOnEvidence ? ' Built on competitor evidence.' : ' Not built on competitor evidence — research competitors above and regenerate.'}</p>
+                    </div>
+                    <button 
+                      onClick={handleSyncToCalendar}
+                      className="w-full md:w-auto bg-primary text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest shadow-lg md:shadow-xl shadow-primary/20 md:shadow-primary/30 hover:scale-[1.02] md:hover:scale-105 transition-all active:scale-95"
+                    >
+                      Sync to Calendar
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {thirtyDayPlan.calendar?.map((day: any, idx: number) => (
+                      <div key={idx} className={cn("bg-surface-container-lowest rounded-2xl border transition-all", openDay === idx ? "border-primary/30" : "border-outline-variant/5 hover:border-primary/20")}>
+                        <button onClick={() => setOpenDay(openDay === idx ? null : idx)} className="w-full flex items-center gap-3 p-3 md:p-4 text-left">
+                          <span className="text-[10px] font-black text-on-surface-variant/40 w-12 shrink-0">Day {String(idx + 1).padStart(2, '0')}</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-primary/70 w-20 shrink-0 truncate">{day.platform}</span>
+                          <span className="text-xs font-bold text-on-surface flex-1 min-w-0 truncate">{day.hook || day.message}</span>
+                          <span className="hidden md:inline text-[9px] font-black uppercase tracking-wider text-on-surface-variant/40 shrink-0">{day.format}</span>
+                          <ChevronRight size={14} className={cn("shrink-0 text-on-surface-variant/40 transition-transform", openDay === idx && "rotate-90")} />
+                        </button>
+                        {openDay === idx && (
+                          <div className="px-4 pb-4 md:pl-[4.5rem] space-y-2 text-xs">
+                            {[['Hook', day.hook], ['Body', day.body || day.message], ['Caption', day.caption], ['Other platforms', day.crossPost], ['CTA', day.cta], ['Hashtags', day.hashtags]].filter(([, v]) => v).map(([k, v]) => (
+                              <div key={k as string}>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/50">{k}</span>
+                                <p className="font-medium text-on-surface whitespace-pre-line">{v}</p>
+                              </div>
+                            ))}
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              {day.pillar && <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-primary/5 text-primary">{day.pillar}</span>}
+                              {day.viralMechanic && <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-secondary/5 text-secondary">{day.viralMechanic}</span>}
+                              {day.postTime && <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-surface-container-highest/40 text-on-surface-variant">{day.postTime}</span>}
+                            </div>
+                            {day.modeledOn && <p className="text-[10px] font-bold text-emerald-600">Modeled on: {day.modeledOn}</p>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <EngineBottom plan={thirtyDayPlan} />
+
                 {/* Strategic Sync Summary */}
                 <div className="bg-surface-container-low p-6 md:p-8 rounded-3xl md:rounded-[32px] border border-outline-variant/10 shadow-sm space-y-4">
                   <div className="flex items-center gap-3 text-primary">
@@ -1754,51 +1744,6 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                   </div>
                 </div>
 
-                {/* Daily Content Grid Preview */}
-                <div className="bg-surface-container-low rounded-3xl md:rounded-[40px] p-6 md:p-10 border border-outline-variant/10 shadow-sm space-y-6 md:space-y-8">
-                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
-                    <div className="space-y-1">
-                      <h3 className="text-xl md:text-2xl font-black tracking-tight text-on-surface">Daily Content Execution</h3>
-                      <p className="text-xs md:text-sm font-medium text-on-surface-variant/60">All 30 days. Tap a day for the hook, body and caption.{thirtyDayPlan.builtOnEvidence ? ' Built on competitor evidence.' : ' Not built on competitor evidence — research competitors above and regenerate.'}</p>
-                    </div>
-                    <button 
-                      onClick={handleSyncToCalendar}
-                      className="w-full md:w-auto bg-primary text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest shadow-lg md:shadow-xl shadow-primary/20 md:shadow-primary/30 hover:scale-[1.02] md:hover:scale-105 transition-all active:scale-95"
-                    >
-                      Sync to Calendar
-                    </button>
-                  </div>
-
-                  <div className="space-y-2">
-                    {thirtyDayPlan.calendar?.map((day: any, idx: number) => (
-                      <div key={idx} className={cn("bg-surface-container-lowest rounded-2xl border transition-all", openDay === idx ? "border-primary/30" : "border-outline-variant/5 hover:border-primary/20")}>
-                        <button onClick={() => setOpenDay(openDay === idx ? null : idx)} className="w-full flex items-center gap-3 p-3 md:p-4 text-left">
-                          <span className="text-[10px] font-black text-on-surface-variant/40 w-12 shrink-0">Day {String(idx + 1).padStart(2, '0')}</span>
-                          <span className="text-[9px] font-black uppercase tracking-widest text-primary/70 w-20 shrink-0 truncate">{day.platform}</span>
-                          <span className="text-xs font-bold text-on-surface flex-1 min-w-0 truncate">{day.hook || day.message}</span>
-                          <span className="hidden md:inline text-[9px] font-black uppercase tracking-wider text-on-surface-variant/40 shrink-0">{day.format}</span>
-                          <ChevronRight size={14} className={cn("shrink-0 text-on-surface-variant/40 transition-transform", openDay === idx && "rotate-90")} />
-                        </button>
-                        {openDay === idx && (
-                          <div className="px-4 pb-4 md:pl-[4.5rem] space-y-2 text-xs">
-                            {[['Hook', day.hook], ['Body', day.body || day.message], ['Caption', day.caption], ['CTA', day.cta], ['Hashtags', day.hashtags]].filter(([, v]) => v).map(([k, v]) => (
-                              <div key={k as string}>
-                                <span className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/50">{k}</span>
-                                <p className="font-medium text-on-surface whitespace-pre-line">{v}</p>
-                              </div>
-                            ))}
-                            <div className="flex flex-wrap gap-2 pt-1">
-                              {day.pillar && <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-primary/5 text-primary">{day.pillar}</span>}
-                              {day.viralMechanic && <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-secondary/5 text-secondary">{day.viralMechanic}</span>}
-                              {day.postTime && <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-surface-container-highest/40 text-on-surface-variant">{day.postTime}</span>}
-                            </div>
-                            {day.modeledOn && <p className="text-[10px] font-bold text-emerald-600">Modeled on: {day.modeledOn}</p>}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-16 md:py-24 space-y-6 md:space-y-8 text-center px-4">

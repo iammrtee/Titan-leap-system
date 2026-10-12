@@ -120,7 +120,7 @@ export const generateClaudeContent = async (params: {
 
     const send = (searchTool: string) => client.messages.create({
       model: modelId,
-      max_tokens: 16000,
+      max_tokens: 20000,
       ...(acceptsTemperature(modelId) ? { temperature: params.temperature ?? 0.7 } : { output_config: { effort: params.effort ?? 'medium' } as any }),
       system: params.systemPrompt,
       messages: [{ role: "user", content: [{ type: "text", text: promptText }] }],
