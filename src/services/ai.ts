@@ -527,7 +527,7 @@ ${intelBlock(intel)}
           "viralMechanic": "string (2-4 words)",
           "hook": "string (max 15 words) — the exact first line / first 3 seconds",
           "message": "string (1 sentence: what the post is about)",
-          "body": "string (max 45 words): the talking points or slide flow, in order",
+          "body": "string (max 60 words): the outline in order — number every slide or beat separately (Slide 1: …, Slide 2: …), never ranges like 'Slides 2-4'",
           "caption": "string (max 40 words): ready-to-post caption, ends with the CTA",
           "modeledOn": "string (max 15 words): the proven competitor post/pattern this copies the structure of",
           "cta": "string (max 10 words)",
@@ -1251,4 +1251,55 @@ export const getAIBudget = async (): Promise<{ spent: number; budget: number; mo
     const r = await fetch('/api/ai/budget', { headers: await getAuthHeader() });
     return r.ok ? await r.json() : null;
   } catch { return null; }
+};
+
+// Writes one calendar day out in full, ready to make: every slide's exact words, or the full
+// script with what to show, or the full thread. Counts toward the monthly AI budget (~2–3¢).
+export const writeFullPost = async (day: any, plan: any, ctx: any) => {
+  const e = plan?.engine || {};
+  const prompt = `You are the copywriter for ${ctx?.businessName || 'this brand'}. Write this post out IN FULL, ready to make and publish. No abbreviations, no placeholders, no ranges like "Slides 2-4" — every slide, beat or tweet written out word for word.
+
+BRAND: ${ctx?.businessName || ''} — sells ${ctx?.mainOffer || ctx?.mainProduct || ''} to ${ctx?.audience || ctx?.targetAudience || 'their buyers'}.
+${ctx?.tone ? `TONE: ${ctx.tone}` : ''}
+${ctx?.proof ? `REAL PROOF (use only this, never invent results): ${ctx.proof}` : 'Never invent results, numbers or client names.'}
+OFFER / CTA ON EVERY POST: ${e.cta || 'one clear call to action'}
+
+THE PLANNED POST:
+${JSON.stringify({ platform: day.platform, format: day.format, pillar: day.pillar, hook: day.hook, message: day.message, outline: day.body, caption: day.caption, crossPost: day.crossPost, cta: day.cta, modeledOn: day.modeledOn })}
+
+Pick the matching shape:
+- Carousel / slides: 6-9 slides. Slide 1 is the hook. Each slide: a short headline (max 8 words) and the exact on-slide text (max 30 words). Last slide is the CTA.
+- Reel / video / talking head: a script in beats with timing, the exact words to say, and what to show on screen. 30-60 seconds.
+- Thread / text post: every tweet or paragraph written out (each tweet max 270 characters).
+
+Return ONLY JSON:
+{
+  "kind": "carousel | video | thread | post",
+  "slides": [{ "headline": "string", "text": "string" }],
+  "script": [{ "time": "0-3s", "say": "exact words", "show": "what is on screen" }],
+  "thread": ["tweet 1", "tweet 2"],
+  "caption": "the full caption, line breaks as \\n, ends with the CTA",
+  "hashtags": "3-5 hashtags",
+  "crossPost": "the full native version for the other platform(s), or empty",
+  "notes": "1 line of production notes (visual style, b-roll), or empty"
+}
+Include only the array that matches "kind" (others empty).`;
+  const res = await unifiedGenerateContent({ prompt, responseMimeType: "application/json", budgeted: true });
+  const out = parseJSON(res.text, null);
+  if (!out) throw new Error('Could not write the full post. Try again.');
+  return out;
+};
+
+// Plain-text version of a full post, for the calendar and copy/paste.
+export const fullPostToText = (f: any) => {
+  if (!f) return '';
+  const parts: string[] = [];
+  if (f.slides?.length) parts.push(f.slides.map((s: any, i: number) => `SLIDE ${i + 1}: ${s.headline}${s.text ? `\n${s.text}` : ''}`).join('\n\n'));
+  if (f.script?.length) parts.push(f.script.map((b: any) => `[${b.time}] SAY: ${b.say}${b.show ? `\nSHOW: ${b.show}` : ''}`).join('\n\n'));
+  if (f.thread?.length) parts.push(f.thread.map((t: string, i: number) => `${i + 1}/ ${t}`).join('\n\n'));
+  if (f.caption) parts.push(`CAPTION:\n${f.caption}`);
+  if (f.hashtags) parts.push(f.hashtags);
+  if (f.crossPost) parts.push(`OTHER PLATFORMS:\n${f.crossPost}`);
+  if (f.notes) parts.push(`NOTES: ${f.notes}`);
+  return parts.join('\n\n');
 };

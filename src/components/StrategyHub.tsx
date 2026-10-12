@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anchor, Network, LineChart, Download, Clapperboard, Info, Bolt, Search, Users, TrendingUp, Calendar, Upload, Clock, CheckCircle2, List, LayoutGrid, Filter, Plus, ChevronRight, Share2, MoreHorizontal, Instagram, Twitter, Linkedin, Youtube, Facebook, Play, Zap, Rocket, Loader2, Sparkles, AlertCircle, FileText, ExternalLink, MoreVertical, Target, RefreshCw, X, Terminal, Trash2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent, generateCalendarFromBlueprint, researchCompetitors, getAIBudget, smartFillForm, type CompetitorIntel } from '@/src/services/ai';
+import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent, generateCalendarFromBlueprint, researchCompetitors, getAIBudget, smartFillForm, writeFullPost, fullPostToText, type CompetitorIntel } from '@/src/services/ai';
 import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 import { safeStorageName, toPostableJpeg } from '@/src/lib/postMedia';
@@ -942,6 +942,40 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
 
   const [generationState, setGenerationState] = useState<'idle' | 'crafting' | 'building' | 'completed'>('idle');
 
+  // Write one planned day out in full (every slide / script beat / tweet), save it on the plan
+  // and on the synced calendar item.
+  const [writingDay, setWritingDay] = useState<number | null>(null);
+  const handleWriteFull = async (idx: number): Promise<string | null> => {
+    const day = thirtyDayPlan?.calendar?.[idx];
+    if (!day || writingDay !== null) return null;
+    setWritingDay(idx);
+    try {
+      const full = await writeFullPost(day, thirtyDayPlan, businessContext());
+      setThirtyDayPlan((p: any) => { const cal = [...(p?.calendar || [])]; cal[idx] = { ...cal[idx], full }; return { ...p, calendar: cal }; });
+      const text = fullPostToText(full);
+      setCalendarItems(prev => prev.map(it => it.id.startsWith(`ai-${idx}-`) ? { ...it, description: text } : it));
+      return text;
+    } catch (err: any) {
+      toast.error(err.message || 'Could not write the full post');
+      return null;
+    } finally {
+      setWritingDay(null);
+      refreshBudget();
+    }
+  };
+  const to24h = (t?: string) => {
+    const m = String(t || '').match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (!m) return '';
+    let h = Number(m[1]) % 12;
+    if (m[3]?.toUpperCase() === 'PM') h += 12; else if (!m[3]) h = Number(m[1]);
+    return `${String(h).padStart(2, '0')}:${m[2]}`;
+  };
+  const to12h = (t: string) => {
+    const [hh, mm] = t.split(':').map(Number);
+    if (Number.isNaN(hh)) return t;
+    return `${String(((hh + 11) % 12) + 1).padStart(2, '0')}:${String(mm || 0).padStart(2, '0')} ${hh >= 12 ? 'PM' : 'AM'}`;
+  };
+
   // A plan can come from the audit or from a quick brief (no audit needed).
   const [planSource, setPlanSource] = useState<'audit' | 'brief'>(() => (auditData ? 'audit' : 'brief'));
   const [brief, setBriefState] = useState<PlanBrief>(() => {
@@ -1121,7 +1155,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
         year: date.getFullYear(),
         platform: platform as any,
         title: content.hook || content.message?.substring(0, 50) || 'AI Generated Post',
-        description: [
+        description: content.full ? fullPostToText(content.full) : [
           content.hook && `HOOK: ${content.hook}`,
           content.body && `BODY: ${content.body}`,
           content.caption && `CAPTION: ${content.caption}`,
@@ -1738,6 +1772,24 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                               {day.postTime && <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-surface-container-highest/40 text-on-surface-variant">{day.postTime}</span>}
                             </div>
                             {day.modeledOn && <p className="text-[10px] font-bold text-emerald-600">Modeled on: {day.modeledOn}</p>}
+                            {day.full ? (
+                              <div className="mt-2 p-3 md:p-4 rounded-xl bg-surface-container-low border border-primary/10 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-primary">Full post</span>
+                                  <span className="flex items-center gap-3">
+                                    <button onClick={() => { navigator.clipboard?.writeText(fullPostToText(day.full)).then(() => toast.success('Copied')).catch(() => {}); }} className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant/60 hover:text-primary">Copy</button>
+                                    <button onClick={() => handleWriteFull(idx)} disabled={writingDay !== null} className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant/60 hover:text-primary disabled:opacity-40">{writingDay === idx ? 'Rewriting…' : 'Rewrite'}</button>
+                                  </span>
+                                </div>
+                                <p className="text-xs font-medium text-on-surface whitespace-pre-line leading-relaxed">{fullPostToText(day.full)}</p>
+                              </div>
+                            ) : (
+                              <button onClick={() => handleWriteFull(idx)} disabled={writingDay !== null}
+                                className="mt-1 flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50">
+                                {writingDay === idx ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+                                {writingDay === idx ? 'Writing every slide…' : 'Write full post'}
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -2351,12 +2403,27 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                         </div>
 
                         <div className="space-y-1.5 md:space-y-2">
-                          <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant/60 ml-1">Description</label>
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant/60 ml-1">Description</label>
+                            {(() => {
+                              const m = editingItem?.id.match(/^ai-(\d+)-/);
+                              const idx = m ? Number(m[1]) : -1;
+                              if (idx < 0 || !thirtyDayPlan?.calendar?.[idx]) return null;
+                              return (
+                                <button type="button" disabled={writingDay !== null}
+                                  onClick={async () => { const text = await handleWriteFull(idx); if (text) setNewItem(prev => ({ ...prev, description: text })); }}
+                                  className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-primary hover:underline disabled:opacity-50">
+                                  {writingDay === idx ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+                                  {writingDay === idx ? 'Writing…' : thirtyDayPlan.calendar[idx].full ? 'Rewrite full post' : 'Write full post'}
+                                </button>
+                              );
+                            })()}
+                          </div>
                           <textarea 
                             placeholder="Enter content description..."
                             value={newItem.description || ''}
                             onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                            rows={3}
+                            rows={8}
                             className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl md:rounded-2xl px-4 md:px-6 py-3 md:py-4 text-xs md:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none"
                           />
                         </div>
@@ -2395,8 +2462,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                             <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant/60 ml-1">Time</label>
                             <input 
                               type="time" 
-                              value={newItem.time}
-                              onChange={(e) => setNewItem({ ...newItem, time: e.target.value })}
+                              value={to24h(newItem.time)}
+                              onChange={(e) => setNewItem({ ...newItem, time: to12h(e.target.value) })}
                               className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl md:rounded-2xl px-4 md:px-6 py-3 md:py-4 text-xs md:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                             />
                           </div>
