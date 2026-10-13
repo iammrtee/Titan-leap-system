@@ -228,34 +228,22 @@ const H: React.FC<{ eyebrow: string; title: string; sub?: string }> = ({ eyebrow
   </div>
 );
 
-// The top half of the plan: the system that turns posts into clients.
-export const EngineTop: React.FC<{ plan: any }> = ({ plan }) => {
-  const e = plan?.engine;
-  if (!e) return null;
+const firstSentence = (t?: string) => (String(t || '').match(/^.*?[.!?](\s|$)/)?.[0] || String(t || '')).trim();
+
+// The headline of the plan: the one idea, the CTA, and the why in one line.
+export const OneIdea: React.FC<{ plan: any }> = ({ plan }) => {
+  const e = plan?.engine || {};
+  const idea = e.bigIdea || firstSentence(plan?.strategicSyncSummary?.[0]);
+  if (!idea) return null;
+  const why = firstSentence(plan?.strategicSyncSummary?.[2] || plan?.strategicSyncSummary?.[0]);
   return (
-    <div className="space-y-6">
-      {e.bigIdea && (
-        <div className="rounded-3xl bg-primary text-white p-6 md:p-8 space-y-2">
-          <p className="text-[10px] font-black uppercase tracking-widest text-amber-300">The one idea</p>
-          <p className="text-lg md:text-2xl font-black leading-snug tracking-tight">{e.bigIdea}</p>
-          {e.cta && <p className="text-xs md:text-sm font-bold text-white/80 pt-1">Every post ends with: “{e.cta}”</p>}
-        </div>
-      )}
-      {e.funnel?.length > 0 && (
-        <Card>
-          <H eyebrow="From post to paying client" title="The funnel" />
-          <div className="flex flex-wrap gap-2">
-            {e.funnel.map((s: any, i: number) => (
-              <div key={i} className={cn("flex-1 min-w-[130px] rounded-xl border p-3 space-y-0.5",
-                i >= e.funnel.length - 2 ? "border-amber-400/60 bg-amber-400/5" : "border-outline-variant/15 bg-surface-container-lowest")}>
-                <p className="text-xs font-black text-on-surface">{s.step}</p>
-                <p className="text-[11px] text-on-surface-variant/70 leading-snug">{s.detail}</p>
-              </div>
-            ))}
-          </div>
-          {e.bio && <p className="text-xs text-on-surface-variant/70"><span className="font-black text-on-surface">Bio:</span> {e.bio}</p>}
-        </Card>
-      )}
+    <div className="rounded-3xl bg-primary text-white p-6 md:p-8 space-y-3">
+      <p className="text-[10px] font-black uppercase tracking-widest text-amber-300">The one idea</p>
+      <p className="text-lg md:text-2xl font-black leading-snug tracking-tight max-w-4xl">{idea}</p>
+      <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-6 text-xs md:text-sm font-bold text-white/80">
+        {e.cta && <span>Every post ends with: “{e.cta}”</span>}
+        {why && why !== idea && <span className="text-white/60 font-medium">{why}</span>}
+      </div>
     </div>
   );
 };
@@ -328,107 +316,169 @@ export const WinningPosts: React.FC<{ intel: CompetitorIntel | null }> = ({ inte
   );
 };
 
-// Pillars, weekly rhythm and the 30-day arc: what to post, when, and the story across the month.
-export const EngineMiddle: React.FC<{ plan: any }> = ({ plan }) => {
-  const e = plan?.engine;
-  if (!e) return null;
+// The plan, arranged like Content Production: a stat row and tabs with equal spacing.
+type PlanTabId = 'plan' | 'pillars' | 'rhythm' | 'scripts';
+export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan, days }) => {
+  const [tab, setTab] = useState<PlanTabId>('plan');
+  const e = plan?.engine || {};
+  const cal: any[] = plan?.calendar || [];
+  const written = cal.filter(d => d.full).length;
+  const pillars: any[] = (e.pillars || []).slice(0, 4);
+  const tabs: { id: PlanTabId; label: string; count: number }[] = [
+    { id: 'plan', label: '30-Day Plan', count: cal.length },
+    { id: 'pillars', label: 'Content Pillars', count: pillars.length },
+    { id: 'rhythm', label: 'Rhythm & KPIs', count: (e.weeklyRhythm || []).length },
+    { id: 'scripts', label: 'Lead Scripts', count: (e.scripts || []).length },
+  ];
+  const stats = [
+    { label: 'Posts planned', value: cal.length, sub: `${(plan?.platforms || []).map((p: string) => p === 'Twitter' ? 'X' : p).join(', ') || 'All platforms'}`, sc: 'text-primary' },
+    { label: 'Written in full', value: `${written}/${cal.length}`, sub: written === cal.length && cal.length ? 'All ready' : 'Open a day to write it', sc: 'text-amber-500' },
+    { label: 'Content pillars', value: pillars.length, sub: pillars.map(p => p.name).slice(0, 2).join(' · '), sc: 'text-cyan-500' },
+    { label: 'Call to action', value: e.offer ? '1' : '—', sub: e.offer || 'Set in the plan', sc: 'text-green-500' },
+  ];
+  const th = "text-left p-3 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50";
   return (
     <div className="space-y-6">
-      {e.pillars?.length > 0 && (
-        <Card>
-          <H eyebrow="What we post" title="Content pillars" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {e.pillars.map((p: any, i: number) => (
-              <div key={i} className="border-t-[3px] border-primary pt-3 space-y-1 min-w-0">
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-sm font-black text-on-surface">{p.name}</p>
-                  <span className="text-[10px] font-black text-on-surface-variant/50 shrink-0">{p.share}</span>
-                </div>
-                <p className="text-xs text-on-surface-variant/80">{p.what}</p>
-                {p.example && <p className="text-xs italic text-on-surface-variant/60">“{p.example}”</p>}
-              </div>
-            ))}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {stats.map(t => (
+          <div key={t.label} className="bg-surface-container-low rounded-2xl border border-outline-variant/10 p-4 min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50">{t.label}</p>
+            <p className="text-2xl md:text-3xl font-black text-on-surface mt-1 tabular-nums">{t.value}</p>
+            <p className={cn("text-[11px] font-bold truncate", t.sc)} title={t.sub}>{t.sub}</p>
           </div>
-          {e.repurpose && <p className="text-xs text-on-surface-variant/70">{e.repurpose}</p>}
-        </Card>
-      )}
-      {e.weeklyRhythm?.length > 0 && (
-        <Card>
-          <H eyebrow="When we post" title="Weekly rhythm" />
-          <div className="overflow-x-auto rounded-xl border border-outline-variant/10">
-            <table className="w-full text-xs min-w-[520px]">
-              <thead>
-                <tr className="bg-surface-container-lowest">
-                  <th className="text-left p-3 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50">Day</th>
-                  {(e.rhythmColumns || ['Post']).map((c: string) => (
-                    <th key={c} className="text-left p-3 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50">{c}</th>
-                  ))}
-                  <th className="text-left p-3 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50">Pillar</th>
-                </tr>
-              </thead>
-              <tbody>
-                {e.weeklyRhythm.map((r: any, i: number) => (
-                  <tr key={i} className="border-t border-outline-variant/10 align-top">
-                    <td className="p-3 font-black text-on-surface">{r.day}</td>
-                    {(e.rhythmColumns || ['Post']).map((c: string, j: number) => (
-                      <td key={c} className="p-3 text-on-surface-variant/90">{(r.posts || [])[j] || '—'}</td>
-                    ))}
-                    <td className="p-3"><span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-primary/5 text-primary whitespace-nowrap">{r.pillar || '—'}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-      {e.arc?.length > 0 && (
-        <Card>
-          <H eyebrow="The story across the month" title="30-day arc" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {e.arc.map((a: any, i: number) => (
-              <div key={i} className="rounded-2xl bg-surface-container-lowest p-4 space-y-1 min-w-0">
-                <Label>{a.days}</Label>
-                <p className="text-sm font-black text-on-surface">{a.title}</p>
-                <p className="text-xs text-on-surface-variant/80">{a.focus}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-};
+        ))}
+      </div>
 
-// After the 30 days: what to say to leads and how to keep score.
-export const EngineBottom: React.FC<{ plan: any }> = ({ plan }) => {
-  const e = plan?.engine;
-  if (!e) return null;
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {e.scripts?.length > 0 && (
-        <Card>
-          <H eyebrow="What we say" title="Lead scripts" />
-          {e.scripts.map((s: any, i: number) => (
-            <div key={i} className="border-l-[3px] border-amber-400 pl-3 space-y-0.5">
-              <Label>{s.label}</Label>
-              <p className="text-xs text-on-surface font-medium whitespace-pre-line">{s.text}</p>
+      <div className="flex items-center justify-between gap-4 border-b border-outline-variant/15 overflow-x-auto no-scrollbar">
+        {tabs.map(t => {
+          const active = tab === t.id;
+          return (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={cn("relative flex items-center gap-2 py-3.5 text-sm font-bold tracking-tight whitespace-nowrap transition-colors",
+                active ? "text-primary" : "text-on-surface-variant/60 hover:text-on-surface")}>
+              {t.label}
+              <span className={cn("min-w-[22px] h-[22px] px-1.5 rounded-full text-[11px] font-black flex items-center justify-center transition-colors",
+                active ? "bg-primary text-white" : "bg-surface-container-highest text-on-surface-variant/70")}>{t.count}</span>
+              <span className={cn("absolute left-0 right-0 -bottom-px h-0.5 rounded-full transition-all", active ? "bg-primary" : "bg-transparent")} />
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === 'plan' && (
+        <div className="space-y-6">
+          {e.arc?.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {e.arc.map((a: any, i: number) => (
+                <div key={i} className="rounded-2xl bg-surface-container-low border border-outline-variant/10 p-4 space-y-1 min-w-0">
+                  <Label>{a.days}</Label>
+                  <p className="text-sm font-black text-on-surface">{a.title}</p>
+                  <p className="text-xs text-on-surface-variant/80">{a.focus}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </Card>
+          )}
+          {days}
+        </div>
       )}
-      {e.scoreboard?.length > 0 && (
-        <Card>
-          <H eyebrow="How we know it works" title="Scoreboard" sub={e.scoreboardNote} />
-          <div className="divide-y divide-outline-variant/10">
-            {e.scoreboard.map((m: any, i: number) => (
-              <div key={i} className="flex items-center justify-between gap-3 py-2 text-xs">
-                <span className="font-bold text-on-surface-variant">{m.metric}</span>
-                <span className="font-black text-primary tabular-nums whitespace-nowrap">{m.target}</span>
+
+      {tab === 'pillars' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2">
+            <H eyebrow="What we post" title="Content pillars" sub={e.repurpose} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {pillars.map((p: any, i: number) => (
+                <div key={i} className="border-t-[3px] border-primary pt-3 space-y-1 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-sm font-black text-on-surface">{p.name}</p>
+                    <span className="text-[10px] font-black text-on-surface-variant/50 shrink-0">{p.share}</span>
+                  </div>
+                  <p className="text-xs text-on-surface-variant/80">{p.what}</p>
+                  {p.example && <p className="text-xs italic text-on-surface-variant/60">“{p.example}”</p>}
+                </div>
+              ))}
+            </div>
+          </Card>
+          <Card>
+            <H eyebrow="What we test" title="A/B tests" />
+            {(plan?.abTestPlan || []).map((t: any, i: number) => (
+              <div key={i} className="space-y-0.5">
+                <Label>Test: {t.variable}</Label>
+                <p className="text-xs font-bold text-on-surface">{t.hypothesis}</p>
+                {t.successMetric && <p className="text-[11px] text-on-surface-variant/60">Win if: {t.successMetric}</p>}
               </div>
             ))}
-          </div>
-          <p className="text-[10px] text-on-surface-variant/50">Targets to steer by, not promises.</p>
-        </Card>
+          </Card>
+        </div>
+      )}
+
+      {tab === 'rhythm' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2">
+            <H eyebrow="When we post" title="Weekly rhythm" />
+            <div className="overflow-x-auto rounded-xl border border-outline-variant/10">
+              <table className="w-full text-xs min-w-[480px]">
+                <thead><tr className="bg-surface-container-lowest">
+                  <th className={th}>Day</th>
+                  {(e.rhythmColumns || ['Post']).map((c: string) => <th key={c} className={th}>{c}</th>)}
+                  <th className={th}>Pillar</th>
+                </tr></thead>
+                <tbody>
+                  {(e.weeklyRhythm || []).map((r: any, i: number) => (
+                    <tr key={i} className="border-t border-outline-variant/10 align-top">
+                      <td className="p-3 font-black text-on-surface">{r.day}</td>
+                      {(e.rhythmColumns || ['Post']).map((c: string, j: number) => <td key={c} className="p-3 text-on-surface-variant/90">{(r.posts || [])[j] || '—'}</td>)}
+                      <td className="p-3"><span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-primary/5 text-primary whitespace-nowrap">{r.pillar || '—'}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+          <Card>
+            <H eyebrow="How we know it works" title="KPIs" sub={e.scoreboardNote} />
+            {(plan?.weeklyKPIs || []).length > 0 && (
+              <div className="space-y-1">
+                <Label>Weekly</Label>
+                {plan.weeklyKPIs.map((k: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between gap-3 py-1.5 text-xs border-b border-outline-variant/10 last:border-0">
+                    <span className="font-bold text-on-surface-variant">{k.kpi}</span>
+                    <span className="font-black text-primary tabular-nums text-right">{k.target}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {(e.scoreboard || []).length > 0 && (
+              <div className="space-y-1">
+                <Label>30-day targets</Label>
+                {e.scoreboard.map((m: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between gap-3 py-1.5 text-xs border-b border-outline-variant/10 last:border-0">
+                    <span className="font-bold text-on-surface-variant">{m.metric}</span>
+                    <span className="font-black text-primary tabular-nums text-right">{m.target}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[10px] text-on-surface-variant/50">Targets to steer by, not promises.</p>
+          </Card>
+        </div>
+      )}
+
+      {tab === 'scripts' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {(e.scripts || []).map((sc: any, i: number) => (
+            <Card key={i} className="space-y-2">
+              <Label className="text-primary/70">{sc.label}</Label>
+              <p className="text-sm text-on-surface font-medium whitespace-pre-line leading-relaxed">{sc.text}</p>
+            </Card>
+          ))}
+          {e.bio && (
+            <Card className="md:col-span-3">
+              <Label>Profile bio</Label>
+              <p className="text-sm font-bold text-on-surface">{e.bio}</p>
+            </Card>
+          )}
+        </div>
       )}
     </div>
   );
