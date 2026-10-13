@@ -443,7 +443,7 @@ export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel 
   const prompt = `
     You are a world-class content strategist who builds content systems that bring in CLIENTS, not just views.
 
-    ${auditData?.issues?.length ? 'I have completed a full audit for' : 'Here is a short brief for'} ${auditData?.businessName || 'the brand'}${auditData?.websiteUrl ? ` (${auditData.websiteUrl})` : ''}. Build their 30-day CLIENT ENGINE: one clear low-friction offer every post points to, a funnel from post to paying client, content pillars, a weekly rhythm, a 30-day story arc, lead scripts, a scoreboard, and a 30-day calendar ready to execute.
+    ${auditData?.issues?.length || auditData?.primaryConstraint ? 'I have completed a full audit for' : 'Here is a short brief for'} ${auditData?.businessName || 'the brand'}${auditData?.websiteUrl ? ` (${auditData.websiteUrl})` : ''}. Build their 30-day CLIENT ENGINE: one clear low-friction offer every post points to, a funnel from post to paying client, content pillars, a weekly rhythm, a 30-day story arc, lead scripts, a scoreboard, and a 30-day calendar ready to execute.
 
     This is not a generic content plan. Every post must be informed by the audit and the competitor evidence, and every post must move a viewer one step toward the offer.
 
@@ -467,7 +467,10 @@ export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel 
     Estimated Revenue Gap: $${auditData?.revenueGap || 'Unknown'}
 
     🚨 CRITICAL LEAKAGE POINTS (ISSUES TO FIX WITH CONTENT):
-    ${auditData?.issues?.map((issue: any) => `- ${issue.area}: ${issue.problem} (Impact: $${issue.impact}) -> Action: ${issue.action}`).join('\n    ') || 'No specific issues identified.'}
+    ${auditData?.issues?.map((issue: any) => `- ${issue.area}: ${issue.problem} (Impact: $${issue.impact}) -> Action: ${issue.action}`).join('\n    ')
+      || [auditData?.primaryConstraint, auditData?.secondaryConstraint, auditData?.thirdConstraint].filter(Boolean)
+        .map((c: any) => `- ${c.category || 'Leak'}: ${c.whatWeFound || ''}${c.fix ? ` -> Fix: ${c.fix}` : ''}`).join('\n    ')
+      || 'No specific issues identified.'}
 
     ⚠️ CURRENT CHALLENGES:
     ${auditData?.challenges?.map((c: string) => `- ${c}`).join('\n    ') || 'No specific challenges listed.'}
