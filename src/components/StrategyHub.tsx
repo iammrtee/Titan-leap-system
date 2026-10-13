@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 import { safeStorageName, toPostableJpeg } from '@/src/lib/postMedia';
 import localforage from 'localforage';
-import { PlanStart, PlanCompetitors, EngineTop, WinningPosts, EngineMiddle, EngineBottom, EMPTY_BRIEF, type PlanBrief } from '@/src/components/ClientEngine';
+import { PlanStart, PlanCompetitors, OneIdea, PlanTabs, EMPTY_BRIEF, type PlanBrief } from '@/src/components/ClientEngine';
 
 type StrategyTab = 'competitor' | 'calendar' | 'plan';
 
@@ -997,7 +997,6 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
         businessName: d?.businessName || brief.businessName,
         industry: d?.industry || brief.industry,
         mainOffer: d?.mainOffer || brief.mainOffer,
-        pricePoint: brief.pricePoint || (d?.pricePoint && d.pricePoint !== '0' ? `$${d.pricePoint}` : ''),
         result: brief.result || d?.differentiator || '',
         audience: d?.targetAudience || d?.audience || brief.audience,
         socialHandles: Array.isArray(d?.socialHandles) ? d.socialHandles.join(', ') : (d?.socialHandles || brief.socialHandles),
@@ -1598,7 +1597,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                 </div>
               </div>
             ) : thirtyDayPlan ? (
-              <div className="space-y-12">
+              <div className="space-y-8">
                 {/* Strategy Header & Refinement */}
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
                   <div className="space-y-1">
@@ -1729,10 +1728,9 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                   )}
                 </AnimatePresence>
 
-                <EngineTop plan={thirtyDayPlan} />
-                <WinningPosts intel={competitorIntel} />
-                <EngineMiddle plan={thirtyDayPlan} />
-
+                <OneIdea plan={thirtyDayPlan} />
+                <PlanTabs plan={thirtyDayPlan} days={(
+                  <>
                 {/* Daily Content Grid Preview */}
                 <div className="bg-surface-container-low rounded-3xl md:rounded-[40px] p-6 md:p-10 border border-outline-variant/10 shadow-sm space-y-6 md:space-y-8">
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
@@ -1796,69 +1794,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                     ))}
                   </div>
                 </div>
-
-                <EngineBottom plan={thirtyDayPlan} />
-
-                {/* Strategic Sync Summary */}
-                <div className="bg-surface-container-low p-6 md:p-8 rounded-3xl md:rounded-[32px] border border-outline-variant/10 shadow-sm space-y-4">
-                  <div className="flex items-center gap-3 text-primary">
-                    <Target size={24} />
-                    <h4 className="font-black text-lg md:text-xl tracking-tight">Strategic Sync Summary</h4>
-                  </div>
-                  <div className="space-y-4 text-sm md:text-base text-on-surface-variant/80 font-medium leading-relaxed">
-                    {thirtyDayPlan.strategicSyncSummary?.map((paragraph: string, idx: number) => (
-                      <p key={idx}>{paragraph}</p>
-                    ))}
-                  </div>
-                </div>
-
-                {/* KPIs and A/B Testing */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-                  <div className="bg-surface-container-low p-6 md:p-8 rounded-3xl md:rounded-[32px] border border-outline-variant/10 shadow-sm space-y-4">
-                    <div className="flex items-center gap-3 text-secondary">
-                      <TrendingUp size={24} />
-                      <h4 className="font-black text-lg md:text-xl tracking-tight">Weekly KPIs</h4>
-                    </div>
-                    <div className="space-y-3">
-                      {thirtyDayPlan.weeklyKPIs?.map((kpi: any, idx: number) => (
-                        <div key={idx} className="flex items-center justify-between p-3 bg-surface-container-lowest rounded-xl border border-outline-variant/5">
-                          <span className="text-xs md:text-sm font-bold text-on-surface-variant">{kpi.kpi}</span>
-                          <span className="text-xs md:text-sm font-black text-primary">{kpi.target}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="bg-surface-container-low p-6 md:p-8 rounded-3xl md:rounded-[32px] border border-outline-variant/10 shadow-sm space-y-4">
-                    <div className="flex items-center gap-3 text-tertiary">
-                      <Zap size={24} />
-                      <h4 className="font-black text-lg md:text-xl tracking-tight">A/B Test Plan</h4>
-                    </div>
-                    <div className="space-y-3">
-                      {thirtyDayPlan.abTestPlan?.map((test: any, idx: number) => (
-                        <div key={idx} className="p-3 bg-surface-container-lowest rounded-xl border border-outline-variant/5 space-y-1">
-                          <p className="text-[10px] md:text-xs font-black uppercase tracking-widest text-tertiary/60">Test: {test.variable}</p>
-                          <p className="text-xs md:text-sm font-bold text-on-surface-variant">{test.hypothesis}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Hook Library */}
-                <div className="bg-surface-container-low p-6 md:p-8 rounded-3xl md:rounded-[32px] border border-outline-variant/10 shadow-sm space-y-4">
-                  <div className="flex items-center gap-3 text-on-surface">
-                    <Sparkles size={24} />
-                    <h4 className="font-black text-lg md:text-xl tracking-tight">Hook Library</h4>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {thirtyDayPlan.hookLibrary?.map((hook: string, idx: number) => (
-                      <div key={idx} className="p-4 bg-surface-container-lowest rounded-xl border border-outline-variant/5">
-                        <p className="text-sm font-bold text-on-surface-variant italic">"{hook}"</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                  </>
+                )} />
 
               </div>
             ) : (

@@ -446,7 +446,7 @@ const CurrentFunnelView = ({
 
   const [selectedStageId, setSelectedStageId] = useState<number | null>(3); // Default to Landing
 
-  const layers = [
+  const defaultLayers = [
     { id: 1, name: 'TRAFFIC SOURCE', icon: Megaphone, color: 'text-blue-500', bg: 'bg-blue-500/10', detail: intakeData?.trafficSources || 'Direct, Organic Search, and Social Media channels.', conversion: '4.2%' },
     { id: 2, name: 'HOOK & CONTENT', icon: Target, color: 'text-purple-500', bg: 'bg-purple-500/10', detail: intakeData?.hookStrategy || 'Educational blog posts and viral video hooks.', conversion: '12.8%' },
     { id: 3, name: 'LANDING PAGE', icon: Layout, color: 'text-blue-600', bg: 'bg-blue-600/10', detail: intakeData?.landingPage || 'High-converting VSL and lead magnet opt-in.', conversion: '24.5%' },
@@ -454,7 +454,47 @@ const CurrentFunnelView = ({
     { id: 5, name: 'BACKEND & RETENTION', icon: Mail, color: 'text-amber-500', bg: 'bg-amber-500/10', detail: intakeData?.backendRetention || 'Email follow-up sequence and upsell flow.', conversion: '15.0%' },
   ];
 
-  const selectedStage = layers.find(l => l.id === selectedStageId);
+  // The map follows the funnel in the 30-day plan (Strategy) when there is one; steps can be
+  // edited here and the change is saved back to the plan. Leaks come from the latest audit.
+  const readPlan = () => { try { return JSON.parse(localStorage.getItem('titanleap_strategy_plan') || 'null'); } catch { return null; } };
+  const [plan, setPlan] = useState<any>(readPlan);
+  const planFunnel: { step: string; detail: string }[] = plan?.engine?.funnel || [];
+  const auditLeaks: any[] = (() => { try { return JSON.parse(localStorage.getItem('titanleap_audit_report') || 'null')?.issues || []; } catch { return []; } })();
+  const STAGE_STYLES = [
+    { icon: Megaphone, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { icon: MessageSquare, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+    { icon: ClipboardList, color: 'text-blue-600', bg: 'bg-blue-600/10' },
+    { icon: FileText, color: 'text-cyan-600', bg: 'bg-cyan-600/10' },
+    { icon: Users, color: 'text-emerald-600', bg: 'bg-emerald-600/10' },
+    { icon: ShoppingBag, color: 'text-red-500', bg: 'bg-red-500/10' },
+    { icon: Trophy, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+  ];
+  const layers: { id: number; name: string; icon: any; color: string; bg: string; detail: string; conversion: string | null }[] = planFunnel.length
+    ? planFunnel.map((f, i) => ({ id: i + 1, name: String(f.step || '').toUpperCase(), ...STAGE_STYLES[i % STAGE_STYLES.length], detail: f.detail || '', conversion: null }))
+    : defaultLayers;
+  const [editingStage, setEditingStage] = useState<{ step: string; detail: string } | null>(null);
+  const saveStage = (idx: number, next: { step: string; detail: string } | null) => {
+    if (!plan?.engine) return;
+    const funnel = [...planFunnel];
+    if (next) funnel[idx] = next; else funnel.splice(idx, 1);
+    const updated = { ...plan, engine: { ...plan.engine, funnel } };
+    setPlan(updated);
+    try { localStorage.setItem('titanleap_strategy_plan', JSON.stringify(updated)); } catch {}
+    setEditingStage(null);
+    if (!next) setSelectedStageId(Math.max(1, idx));
+    toast.success(next ? 'Funnel step saved to your plan' : 'Step removed from your plan');
+  };
+  const addStage = () => {
+    if (!plan?.engine) return;
+    const funnel = [...planFunnel, { step: 'New step', detail: 'What happens here' }];
+    const updated = { ...plan, engine: { ...plan.engine, funnel } };
+    setPlan(updated);
+    try { localStorage.setItem('titanleap_strategy_plan', JSON.stringify(updated)); } catch {}
+    setSelectedStageId(funnel.length);
+    setEditingStage(funnel[funnel.length - 1]);
+  };
+
+  const selectedStage = layers.find(l => l.id === selectedStageId) || layers[0];
 
   return (
     <div className="relative min-h-screen pb-24 space-y-8">
@@ -552,13 +592,16 @@ const CurrentFunnelView = ({
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0 mb-8 md:mb-12">
           <div className="space-y-1">
             <h3 className="text-xl font-black text-on-surface tracking-tight">Funnel Architecture Map</h3>
-            <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-[0.2em]">Visualizing the end-to-end customer journey</p>
+            <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-[0.2em]">
+              {planFunnel.length ? `From your 30-day plan${plan?.builtFor ? ` for ${plan.builtFor}` : ''} · click a step to edit it` : 'Example funnel · generate a 30-day plan in Strategy to build yours'}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-3 md:gap-4">
-            <div className="flex items-center gap-2 px-4 py-2 bg-surface-container-low rounded-xl border border-outline-variant/5">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/60">Live Tracking Active</span>
-            </div>
+            {planFunnel.length > 0 && (
+              <button onClick={addStage} className="flex items-center gap-2 px-4 py-2 bg-surface-container-low rounded-xl border border-outline-variant/5 text-[9px] font-black uppercase tracking-widest text-on-surface-variant/60 hover:text-primary">
+                <Plus size={12} /> Add step
+              </button>
+            )}
             <button 
               onClick={() => toast.info("Full map view coming soon!")}
               className="px-6 py-2.5 bg-surface-container-low border border-outline-variant/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 hover:text-primary hover:border-primary/40 transition-all"
@@ -572,14 +615,14 @@ const CurrentFunnelView = ({
           {/* Connecting Line */}
           <div className="absolute top-1/2 left-12 right-12 h-[2px] bg-outline-variant/10 -translate-y-1/2 min-w-[800px]" />
           
-          <div className="flex justify-between items-center relative z-10 px-4 min-w-[800px]">
+          <div className="flex justify-between items-center gap-4 relative z-10 px-4" style={{ minWidth: Math.max(800, layers.length * 150) }}>
             {layers.map((layer, idx) => (
               <React.Fragment key={layer.id}>
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.1 }}
-                  onClick={() => setSelectedStageId(layer.id)}
+                  onClick={() => { setSelectedStageId(layer.id); setEditingStage(null); }}
                   className="flex flex-col items-center gap-6 group cursor-pointer"
                 >
                   <div className={cn(
@@ -598,7 +641,7 @@ const CurrentFunnelView = ({
                       "text-[10px] font-black tracking-widest uppercase transition-colors",
                       selectedStageId === layer.id ? "text-primary" : "text-on-surface"
                     )}>{layer.name}</h4>
-                    <p className="text-[8px] font-bold text-on-surface-variant/30 uppercase tracking-widest">Stage 0{layer.id}</p>
+                    <p className="text-[8px] font-bold text-on-surface-variant/30 uppercase tracking-widest">Stage {String(layer.id).padStart(2, '0')}</p>
                   </div>
                 </motion.div>
                 {idx < layers.length - 1 && (
@@ -608,9 +651,11 @@ const CurrentFunnelView = ({
                     transition={{ delay: idx * 0.1 + 0.05 }}
                     className="hidden md:flex flex-col items-center justify-center -mt-12"
                   >
-                    <div className="px-3 py-1 bg-surface-container-low border border-outline-variant/10 rounded-full mb-2">
-                      <span className="text-[8px] font-black text-primary uppercase tracking-widest">{layers[idx+1].conversion}</span>
-                    </div>
+                    {layers[idx+1].conversion && (
+                      <div className="px-3 py-1 bg-surface-container-low border border-outline-variant/10 rounded-full mb-2">
+                        <span className="text-[8px] font-black text-primary uppercase tracking-widest">{layers[idx+1].conversion}</span>
+                      </div>
+                    )}
                     <ArrowRight size={20} className="text-outline-variant/30 animate-pulse" />
                   </motion.div>
                 )}
@@ -639,9 +684,31 @@ const CurrentFunnelView = ({
                     <h4 className="text-lg font-black text-on-surface">{selectedStage.name}</h4>
                   </div>
                 </div>
-                <p className="text-xs text-on-surface/60 font-medium leading-relaxed">{selectedStage.detail}</p>
+                {editingStage ? (
+                  <div className="space-y-2">
+                    <input value={editingStage.step} onChange={e => setEditingStage({ ...editingStage, step: e.target.value })}
+                      className="w-full bg-white border border-outline-variant/20 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                    <textarea value={editingStage.detail} onChange={e => setEditingStage({ ...editingStage, detail: e.target.value })} rows={3}
+                      className="w-full bg-white border border-outline-variant/20 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => saveStage(selectedStage.id - 1, editingStage)} className="px-4 py-2 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest">Save</button>
+                      <button onClick={() => setEditingStage(null)} className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Cancel</button>
+                      <button onClick={() => saveStage(selectedStage.id - 1, null)} className="ml-auto text-[10px] font-black uppercase tracking-widest text-red-500">Remove step</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-on-surface/60 font-medium leading-relaxed">{selectedStage.detail}</p>
+                    {planFunnel.length > 0 && (
+                      <button onClick={() => setEditingStage({ ...planFunnel[selectedStage.id - 1] })} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-primary hover:underline">
+                        <Edit3 size={12} /> Edit step
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
 
+              {selectedStage.conversion ? (
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-white rounded-2xl border border-outline-variant/5">
                   <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest mb-1">Conversion</p>
@@ -652,6 +719,17 @@ const CurrentFunnelView = ({
                   <p className="text-xl font-black text-red-500">{(100 - parseFloat(selectedStage.conversion)).toFixed(1)}%</p>
                 </div>
               </div>
+              ) : (
+                <div className="space-y-2 min-w-0">
+                  <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest">Leaks from your audit</p>
+                  {auditLeaks.length ? auditLeaks.slice(0, 3).map((l: any, i: number) => (
+                    <div key={i} className="p-3 bg-red-50/60 rounded-xl border border-red-100">
+                      <p className="text-[11px] font-black text-red-600">{l.area}</p>
+                      <p className="text-[10px] text-red-500/80 font-medium leading-snug">{l.problem}</p>
+                    </div>
+                  )) : <p className="text-xs text-on-surface-variant/60">Run an audit to see where this funnel leaks.</p>}
+                </div>
+              )}
 
               <div className="flex flex-col justify-center gap-3">
                 <button 

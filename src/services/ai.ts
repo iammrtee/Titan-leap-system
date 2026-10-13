@@ -455,7 +455,7 @@ export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel 
     POST ONLY ON THESE PLATFORMS: ${postOn}
     Main Offer: ${auditData?.mainOffer || auditData?.mainProduct || 'Premium Service'}
     Who They Sell To: ${auditData?.targetAudience || auditData?.audience || 'Infer from the offer and industry'}
-    Price Point: ${auditData?.pricePoint || 'Unknown'}
+    Price Point: ${auditData?.pricePoint && auditData.pricePoint !== '0' ? auditData.pricePoint : 'Not given — do not guess one'}
     Differentiator: ${auditData?.differentiator || 'Unique Approach'}
     Current Revenue: ${auditData?.currentRevenue || 'Unknown'}
     Target Revenue: ${auditData?.targetRevenue || 'Unknown'}
@@ -561,15 +561,13 @@ ${intelBlock(intel)}
       ],
       "abTestPlan": [
         { "hypothesis": "string (1 sentence)", "variable": "string", "successMetric": "string" }
-      ],
-      "hookLibrary": [
-        "string (hook 1, max 15 words)", "string (hook 2, max 15 words)"
       ]
     }
     
     Engine sizes: 5-7 funnel steps ending in the paid offers, 3-4 pillars, 7 weeklyRhythm rows (Mon-Sun; rest days allowed), 4 arc items, 3 scripts (reply to the CTA, delivering the free offer, the sales call), 6 scoreboard rows (posts, reach-to-DM numbers, leads, calls, sales).
     Every caption ends with the engine's exact CTA.
-    Ensure exactly 30 items in the "calendar" array, exactly 4 items in "weeklyKPIs" (one per week), exactly 3 items in "abTestPlan", and exactly 10 items in "hookLibrary". Stay within every length limit above — brevity is required, not optional.
+    PRICES: only use a price that appears in the brand profile above. Never guess or invent a price; if none is given, name the offer without a price.
+    Ensure exactly 30 items in the "calendar" array, exactly 4 items in "weeklyKPIs" (one per week), and exactly 3 items in "abTestPlan". Stay within every length limit above — brevity is required, not optional.
   `;
 
   try {
