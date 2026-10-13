@@ -459,7 +459,16 @@ const CurrentFunnelView = ({
   const readPlan = () => { try { return JSON.parse(localStorage.getItem('titanleap_strategy_plan') || 'null'); } catch { return null; } };
   const [plan, setPlan] = useState<any>(readPlan);
   const planFunnel: { step: string; detail: string }[] = plan?.engine?.funnel || [];
-  const auditLeaks: any[] = (() => { try { return JSON.parse(localStorage.getItem('titanleap_audit_report') || 'null')?.issues || []; } catch { return []; } })();
+  // Audit leaks = its three constraints. Only shown when the plan came from that audit.
+  const auditLeaks: any[] = (() => {
+    try {
+      const r = JSON.parse(localStorage.getItem('titanleap_audit_report') || 'null');
+      if (!r || (planFunnel.length && plan?.source === 'brief')) return [];
+      const list = r.issues?.length ? r.issues : [r.primaryConstraint, r.secondaryConstraint, r.thirdConstraint].filter(Boolean)
+        .map((c: any) => ({ area: c.category || c.title || 'Leak', problem: c.whatWeFound || c.problem || '' }));
+      return list;
+    } catch { return []; }
+  })();
   const STAGE_STYLES = [
     { icon: Megaphone, color: 'text-blue-500', bg: 'bg-blue-500/10' },
     { icon: MessageSquare, color: 'text-purple-500', bg: 'bg-purple-500/10' },
@@ -725,9 +734,9 @@ const CurrentFunnelView = ({
                   {auditLeaks.length ? auditLeaks.slice(0, 3).map((l: any, i: number) => (
                     <div key={i} className="p-3 bg-red-50/60 rounded-xl border border-red-100">
                       <p className="text-[11px] font-black text-red-600">{l.area}</p>
-                      <p className="text-[10px] text-red-500/80 font-medium leading-snug">{l.problem}</p>
+                      <p className="text-[10px] text-red-500/80 font-medium leading-snug line-clamp-3">{l.problem}</p>
                     </div>
-                  )) : <p className="text-xs text-on-surface-variant/60">Run an audit to see where this funnel leaks.</p>}
+                  )) : <p className="text-xs text-on-surface-variant/60">{plan?.source === 'brief' ? 'This plan came from a quick brief. Run an audit on this business to see its leaks here.' : 'Run an audit to see where this funnel leaks.'}</p>}
                 </div>
               )}
 
