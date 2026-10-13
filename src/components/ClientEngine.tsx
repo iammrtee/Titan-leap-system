@@ -13,7 +13,7 @@ export const PLAN_PLATFORMS: { id: string; label: string; icon: React.ReactNode 
 ];
 
 const Label: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
-  <p className={cn("text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50", className)}>{children}</p>
+  <p className={cn("text-[11px] font-medium text-on-surface-variant/60", className)}>{children}</p>
 );
 
 const fmt = (n: number | null | undefined) =>
@@ -218,12 +218,12 @@ export const PlanCompetitors: React.FC<{
 };
 
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
-  <section className={cn("bg-surface-container-low p-5 md:p-7 rounded-3xl border border-outline-variant/10 space-y-4", className)}>{children}</section>
+  <section className={cn("bg-surface-container-lowest p-6 md:p-8 rounded-[18px] shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.08)] space-y-5", className)}>{children}</section>
 );
 const H: React.FC<{ eyebrow: string; title: string; sub?: string }> = ({ eyebrow, title, sub }) => (
   <div className="space-y-1">
-    <Label className="text-primary/70">{eyebrow}</Label>
-    <h4 className="font-black text-lg md:text-xl tracking-tight text-on-surface">{title}</h4>
+    <Label className="text-primary">{eyebrow}</Label>
+    <h4 className="font-semibold text-xl md:text-2xl tracking-tight text-on-surface">{title}</h4>
     {sub && <p className="text-xs md:text-sm text-on-surface-variant/70 font-medium">{sub}</p>}
   </div>
 );
@@ -237,10 +237,10 @@ export const OneIdea: React.FC<{ plan: any }> = ({ plan }) => {
   if (!idea) return null;
   const why = firstSentence(plan?.strategicSyncSummary?.[2] || plan?.strategicSyncSummary?.[0]);
   return (
-    <div className="rounded-3xl bg-primary text-white p-6 md:p-8 space-y-3">
-      <p className="text-[10px] font-black uppercase tracking-widest text-amber-300">The one idea</p>
-      <p className="text-lg md:text-2xl font-black leading-snug tracking-tight max-w-4xl">{idea}</p>
-      <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-6 text-xs md:text-sm font-bold text-white/80">
+    <div className="rounded-[22px] bg-primary text-white p-7 md:p-10 space-y-4">
+      <p className="text-xs font-medium text-amber-300">The one idea</p>
+      <p className="text-xl md:text-[28px] font-semibold leading-snug tracking-tight max-w-4xl">{idea}</p>
+      <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-6 text-sm font-medium text-white/85">
         {e.cta && <span>Every post ends with: “{e.cta}”</span>}
         {why && why !== idea && <span className="text-white/60 font-medium">{why}</span>}
       </div>
@@ -319,15 +319,15 @@ export const WinningPosts: React.FC<{ intel: CompetitorIntel | null }> = ({ inte
 // The plan, arranged like Content Production: a stat row and tabs with equal spacing.
 type PlanTabId = 'plan' | 'pillars' | 'rhythm' | 'scripts';
 export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan, days }) => {
-  const [tab, setTab] = useState<PlanTabId>('plan');
+  const [tab, setTab] = useState<PlanTabId>('pillars');
   const e = plan?.engine || {};
   const cal: any[] = plan?.calendar || [];
   const written = cal.filter(d => d.full).length;
   const pillars: any[] = (e.pillars || []).slice(0, 4);
   const tabs: { id: PlanTabId; label: string; count: number }[] = [
-    { id: 'plan', label: '30-Day Plan', count: cal.length },
     { id: 'pillars', label: 'Content Pillars', count: pillars.length },
     { id: 'rhythm', label: 'Rhythm & KPIs', count: (e.weeklyRhythm || []).length },
+    { id: 'plan', label: '30-Day Plan', count: cal.length },
     { id: 'scripts', label: 'Lead Scripts', count: (e.scripts || []).length },
   ];
   const stats = [
@@ -336,15 +336,15 @@ export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan,
     { label: 'Content pillars', value: pillars.length, sub: pillars.map(p => p.name).slice(0, 2).join(' · '), sc: 'text-cyan-500' },
     { label: 'Call to action', value: e.offer ? '1' : '—', sub: e.offer || 'Set in the plan', sc: 'text-green-500' },
   ];
-  const th = "text-left p-3 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50";
+  const th = "text-left p-3 text-xs font-medium text-on-surface-variant/60";
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {stats.map(t => (
-          <div key={t.label} className="bg-surface-container-low rounded-2xl border border-outline-variant/10 p-4 min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50">{t.label}</p>
-            <p className="text-2xl md:text-3xl font-black text-on-surface mt-1 tabular-nums">{t.value}</p>
-            <p className={cn("text-[11px] font-bold truncate", t.sc)} title={t.sub}>{t.sub}</p>
+          <div key={t.label} className="bg-surface-container-lowest rounded-[18px] shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.08)] p-5 min-w-0">
+            <p className="text-xs font-medium text-on-surface-variant/60">{t.label}</p>
+            <p className="text-3xl md:text-4xl font-semibold tracking-tight text-on-surface mt-1 tabular-nums">{t.value}</p>
+            <p className={cn("text-xs font-medium truncate mt-0.5", t.sc)} title={t.sub}>{t.sub}</p>
           </div>
         ))}
       </div>
@@ -354,7 +354,7 @@ export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan,
           const active = tab === t.id;
           return (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={cn("relative flex items-center gap-2 py-3.5 text-sm font-bold tracking-tight whitespace-nowrap transition-colors",
+              className={cn("relative flex items-center gap-2 py-4 text-[15px] font-semibold tracking-tight whitespace-nowrap transition-colors",
                 active ? "text-primary" : "text-on-surface-variant/60 hover:text-on-surface")}>
               {t.label}
               <span className={cn("min-w-[22px] h-[22px] px-1.5 rounded-full text-[11px] font-black flex items-center justify-center transition-colors",
@@ -370,10 +370,10 @@ export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan,
           {e.arc?.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {e.arc.map((a: any, i: number) => (
-                <div key={i} className="rounded-2xl bg-surface-container-low border border-outline-variant/10 p-4 space-y-1 min-w-0">
+                <div key={i} className="rounded-[18px] bg-surface-container-lowest shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.08)] p-5 space-y-1.5 min-w-0">
                   <Label>{a.days}</Label>
-                  <p className="text-sm font-black text-on-surface">{a.title}</p>
-                  <p className="text-xs text-on-surface-variant/80">{a.focus}</p>
+                  <p className="text-base font-semibold tracking-tight text-on-surface">{a.title}</p>
+                  <p className="text-sm text-on-surface-variant/80 leading-relaxed">{a.focus}</p>
                 </div>
               ))}
             </div>
@@ -390,11 +390,11 @@ export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan,
               {pillars.map((p: any, i: number) => (
                 <div key={i} className="border-t-[3px] border-primary pt-3 space-y-1 min-w-0">
                   <div className="flex items-baseline justify-between gap-2">
-                    <p className="text-sm font-black text-on-surface">{p.name}</p>
-                    <span className="text-[10px] font-black text-on-surface-variant/50 shrink-0">{p.share}</span>
+                    <p className="text-base font-semibold tracking-tight text-on-surface">{p.name}</p>
+                    <span className="text-xs font-medium text-on-surface-variant/60 shrink-0">{p.share}</span>
                   </div>
-                  <p className="text-xs text-on-surface-variant/80">{p.what}</p>
-                  {p.example && <p className="text-xs italic text-on-surface-variant/60">“{p.example}”</p>}
+                  <p className="text-sm text-on-surface-variant/80 leading-relaxed">{p.what}</p>
+                  {p.example && <p className="text-sm italic text-on-surface-variant/60">“{p.example}”</p>}
                 </div>
               ))}
             </div>
@@ -404,7 +404,7 @@ export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan,
             {(plan?.abTestPlan || []).map((t: any, i: number) => (
               <div key={i} className="space-y-0.5">
                 <Label>Test: {t.variable}</Label>
-                <p className="text-xs font-bold text-on-surface">{t.hypothesis}</p>
+                <p className="text-sm font-medium text-on-surface leading-snug">{t.hypothesis}</p>
                 {t.successMetric && <p className="text-[11px] text-on-surface-variant/60">Win if: {t.successMetric}</p>}
               </div>
             ))}
@@ -426,7 +426,7 @@ export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan,
                 <tbody>
                   {(e.weeklyRhythm || []).map((r: any, i: number) => (
                     <tr key={i} className="border-t border-outline-variant/10 align-top">
-                      <td className="p-3 font-black text-on-surface">{r.day}</td>
+                      <td className="p-3 font-semibold text-on-surface">{r.day}</td>
                       {(e.rhythmColumns || ['Post']).map((c: string, j: number) => <td key={c} className="p-3 text-on-surface-variant/90">{(r.posts || [])[j] || '—'}</td>)}
                       <td className="p-3"><span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-primary/5 text-primary whitespace-nowrap">{r.pillar || '—'}</span></td>
                     </tr>
@@ -442,8 +442,8 @@ export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan,
                 <Label>Weekly</Label>
                 {plan.weeklyKPIs.map((k: any, i: number) => (
                   <div key={i} className="flex items-center justify-between gap-3 py-1.5 text-xs border-b border-outline-variant/10 last:border-0">
-                    <span className="font-bold text-on-surface-variant">{k.kpi}</span>
-                    <span className="font-black text-primary tabular-nums text-right">{k.target}</span>
+                    <span className="font-medium text-on-surface-variant">{k.kpi}</span>
+                    <span className="font-semibold text-primary tabular-nums text-right">{k.target}</span>
                   </div>
                 ))}
               </div>
@@ -453,8 +453,8 @@ export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan,
                 <Label>30-day targets</Label>
                 {e.scoreboard.map((m: any, i: number) => (
                   <div key={i} className="flex items-center justify-between gap-3 py-1.5 text-xs border-b border-outline-variant/10 last:border-0">
-                    <span className="font-bold text-on-surface-variant">{m.metric}</span>
-                    <span className="font-black text-primary tabular-nums text-right">{m.target}</span>
+                    <span className="font-medium text-on-surface-variant">{m.metric}</span>
+                    <span className="font-semibold text-primary tabular-nums text-right">{m.target}</span>
                   </div>
                 ))}
               </div>
@@ -469,7 +469,7 @@ export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan,
           {(e.scripts || []).map((sc: any, i: number) => (
             <Card key={i} className="space-y-2">
               <Label className="text-primary/70">{sc.label}</Label>
-              <p className="text-sm text-on-surface font-medium whitespace-pre-line leading-relaxed">{sc.text}</p>
+              <p className="text-[15px] text-on-surface whitespace-pre-line leading-relaxed">{sc.text}</p>
             </Card>
           ))}
           {e.bio && (
