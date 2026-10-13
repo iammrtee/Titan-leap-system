@@ -568,7 +568,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       const saved = localStorage.getItem('titanleap_calendar_items');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
     return INITIAL_CALENDAR_ITEMS;
@@ -881,6 +881,17 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
 
   const handleDeleteContent = (id: string) => {
     setCalendarItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  // Click a post → popup with everything. Clear empties the calendar (with Undo).
+  const [viewItem, setViewItem] = useState<CalendarItem | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const handleClearCalendar = () => {
+    if (!confirmClear) { setConfirmClear(true); setTimeout(() => setConfirmClear(false), 3500); return; }
+    const before = calendarItems;
+    setCalendarItems([]);
+    setConfirmClear(false);
+    toast.success(`Calendar cleared (${before.length} posts)`, { action: { label: 'Undo', onClick: () => setCalendarItems(before) }, duration: 8000 });
   };
 
   const handleEditClick = (item: CalendarItem) => {
@@ -1335,6 +1346,57 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       onGenerate={handleGeneratePlan} busy={isGeneratingPlan} budget={aiBudget} onCancel={onCancel} />
   );
 
+  const renderViewPopup = () => {
+    if (!viewItem) return null;
+    const item = calendarItems.find(i => i.id === viewItem.id) || viewItem;
+    const m = item.id.match(/^ai-(\d+)-/);
+    const planIdx = m ? Number(m[1]) : -1;
+    const canWrite = planIdx >= 0 && !!thirtyDayPlan?.calendar?.[planIdx];
+    const sections = String(item.description || '').split(/\n(?=(?:HOOK|BODY|CAPTION|CTA|SLIDE \d+|\[\d|OTHER PLATFORMS|NOTES|Modeled on)\b)/);
+    return createPortal(
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setViewItem(null)}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-2xl max-h-[88vh] flex flex-col bg-surface-container-lowest rounded-[22px] shadow-[0_8px_20px_rgba(0,0,0,0.08),0_20px_60px_rgba(0,0,0,0.16)] overflow-hidden">
+          <div className="flex items-start justify-between gap-4 p-6 md:p-8 pb-4">
+            <div className="space-y-1.5 min-w-0">
+              <p className="text-xs font-medium text-on-surface-variant/60">
+                {item.platform === 'Twitter' ? 'X' : item.platform} · {item.type} · {MONTH_NAMES[item.month]?.slice(0, 3)} {item.day} · {item.time}
+              </p>
+              <h3 className="text-xl md:text-2xl font-semibold tracking-tight text-on-surface leading-snug">{item.title}</h3>
+            </div>
+            <button onClick={() => setViewItem(null)} className="shrink-0 w-9 h-9 rounded-full bg-surface-container-highest/60 flex items-center justify-center text-on-surface-variant hover:text-on-surface"><X size={16} /></button>
+          </div>
+          <div className="px-6 md:px-8 pb-6 overflow-y-auto space-y-4">
+            {item.description ? sections.map((sec, i) => {
+              const head = sec.match(/^(HOOK|BODY|CAPTION|CTA|OTHER PLATFORMS|NOTES|Modeled on|SLIDE \d+)\s*:?\s*/);
+              return (
+                <div key={i} className="space-y-1">
+                  {head && <p className="text-[11px] font-semibold text-primary">{head[1].charAt(0) + head[1].slice(1).toLowerCase()}</p>}
+                  <p className="text-sm text-on-surface leading-relaxed whitespace-pre-line break-words">{head ? sec.slice(head[0].length) : sec}</p>
+                </div>
+              );
+            }) : <p className="text-sm text-on-surface-variant/60">No content yet.</p>}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 p-4 md:px-8 border-t border-outline-variant/10 bg-surface-container-low/50">
+            {canWrite && (
+              <button disabled={writingDay !== null} onClick={() => handleWriteFull(planIdx)}
+                className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-full text-xs font-semibold disabled:opacity-50">
+                {writingDay === planIdx ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+                {writingDay === planIdx ? 'Writing…' : thirtyDayPlan.calendar[planIdx].full ? 'Rewrite full post' : 'Write full post'}
+              </button>
+            )}
+            <button onClick={() => { navigator.clipboard?.writeText(item.description || '').then(() => toast.success('Copied')).catch(() => {}); }}
+              className="px-4 py-2.5 rounded-full text-xs font-semibold bg-surface-container-highest/60 text-on-surface hover:bg-surface-container-highest">Copy</button>
+            <button onClick={() => { handleSendToProduction(item); }}
+              className="px-4 py-2.5 rounded-full text-xs font-semibold bg-surface-container-highest/60 text-on-surface hover:bg-surface-container-highest">Send to Production</button>
+            <button onClick={() => { setViewItem(null); handleEditClick(item); }}
+              className="ml-auto px-4 py-2.5 rounded-full text-xs font-semibold text-primary hover:bg-primary/5">Edit</button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'competitor':
@@ -1601,7 +1663,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                 {/* Strategy Header & Refinement */}
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
                   <div className="space-y-1">
-                    <h3 className="text-2xl md:text-3xl font-black tracking-tight text-on-surface">{thirtyDayPlan.engine ? 'Your Client Engine' : '30-Day Viral Strategy'}</h3>
+                    <h3 className="text-3xl md:text-4xl font-semibold tracking-tight text-on-surface">{thirtyDayPlan.engine ? 'Your Client Engine' : '30-Day Viral Strategy'}</h3>
                     {(thirtyDayPlan.builtFor || thirtyDayPlan.platforms) && (
                       <p className="text-xs font-medium text-on-surface-variant/60">
                         {thirtyDayPlan.builtFor && <>For {thirtyDayPlan.builtFor} · {thirtyDayPlan.source === 'brief' ? 'from a quick brief' : 'from the audit'}</>}
@@ -1732,10 +1794,10 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                 <PlanTabs plan={thirtyDayPlan} days={(
                   <>
                 {/* Daily Content Grid Preview */}
-                <div className="bg-surface-container-low rounded-3xl md:rounded-[40px] p-6 md:p-10 border border-outline-variant/10 shadow-sm space-y-6 md:space-y-8">
+                <div className="bg-surface-container-lowest rounded-[18px] p-6 md:p-8 shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.08)] space-y-6">
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
                     <div className="space-y-1">
-                      <h3 className="text-xl md:text-2xl font-black tracking-tight text-on-surface">Daily Content Execution</h3>
+                      <h3 className="text-xl md:text-2xl font-semibold tracking-tight text-on-surface">Daily content</h3>
                       <p className="text-xs md:text-sm font-medium text-on-surface-variant/60">All 30 days. Tap a day for the hook, body and caption.{thirtyDayPlan.builtOnEvidence ? ' Built on competitor evidence.' : ' Not built on competitor evidence — research competitors above and regenerate.'}</p>
                     </div>
                     <button 
@@ -1748,11 +1810,11 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
 
                   <div className="space-y-2">
                     {thirtyDayPlan.calendar?.map((day: any, idx: number) => (
-                      <div key={idx} className={cn("bg-surface-container-lowest rounded-2xl border transition-all", openDay === idx ? "border-primary/30" : "border-outline-variant/5 hover:border-primary/20")}>
+                      <div key={idx} className={cn("bg-surface-container-low/60 rounded-[14px] border transition-all", openDay === idx ? "border-primary/25 bg-surface-container-lowest shadow-sm" : "border-transparent hover:bg-surface-container-low")}>
                         <button onClick={() => setOpenDay(openDay === idx ? null : idx)} className="w-full flex items-center gap-3 p-3 md:p-4 text-left">
                           <span className="text-[10px] font-black text-on-surface-variant/40 w-12 shrink-0">Day {String(idx + 1).padStart(2, '0')}</span>
                           <span className="text-[9px] font-black uppercase tracking-widest text-primary/70 w-20 shrink-0 truncate">{day.platform}</span>
-                          <span className="text-xs font-bold text-on-surface flex-1 min-w-0 truncate">{day.hook || day.message}</span>
+                          <span className="text-sm font-medium text-on-surface flex-1 min-w-0 truncate">{day.hook || day.message}</span>
                           <span className="hidden md:inline text-[9px] font-black uppercase tracking-wider text-on-surface-variant/40 shrink-0">{day.format}</span>
                           <ChevronRight size={14} className={cn("shrink-0 text-on-surface-variant/40 transition-transform", openDay === idx && "rotate-90")} />
                         </button>
@@ -1941,6 +2003,15 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                       )}
                     </AnimatePresence>
 
+                    <button
+                      onClick={handleClearCalendar}
+                      disabled={calendarItems.length === 0}
+                      className={cn("flex-1 md:flex-none justify-center px-4 md:px-6 py-2.5 md:py-3 rounded-lg md:rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest border flex items-center gap-2 md:gap-3 transition-all disabled:opacity-40",
+                        confirmClear ? "bg-red-500 text-white border-red-500" : "bg-surface-container-highest text-red-500 border-outline-variant/10 hover:bg-red-50")}
+                    >
+                      <Trash2 size={14} className="md:w-4 md:h-4" />
+                      {confirmClear ? 'Tap again to clear' : 'Clear calendar'}
+                    </button>
                     <button 
                       onClick={handleExportCSV}
                       className="flex-1 md:flex-none justify-center bg-surface-container-highest text-on-surface-variant px-4 md:px-6 py-2.5 md:py-3 rounded-lg md:rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest border border-outline-variant/10 flex items-center gap-2 md:gap-3 hover:bg-surface-container-high transition-all shadow-lg shadow-black/5"
@@ -2036,8 +2107,9 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                               {items.map(item => (
                                 <div 
                                   key={item.id}
+                                  onClick={(e) => { e.stopPropagation(); setViewItem(item); }}
                                   className={cn(
-                                    "p-2 md:p-3 rounded-xl md:rounded-2xl border shadow-sm space-y-1 md:space-y-2 relative group/item",
+                                    "p-2 md:p-3 rounded-xl md:rounded-2xl border shadow-sm space-y-1 md:space-y-2 relative group/item cursor-pointer hover:shadow-md transition-shadow",
                                     item.platform === 'LinkedIn' && "bg-indigo-50/50 border-indigo-200/50 text-indigo-900",
                                     item.platform === 'Twitter' && "bg-sky-50/50 border-sky-200/50 text-sky-900",
                                     item.platform === 'Instagram' && "bg-amber-50/50 border-amber-200/50 text-amber-900",
@@ -2190,7 +2262,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                       <div className="space-y-6">
                         {selectedDayItems.length > 0 ? (
                           selectedDayItems.map(item => (
-                            <div key={item.id} className="bg-surface-container-lowest rounded-2xl md:rounded-[32px] p-6 md:p-8 border border-outline-variant/10 shadow-sm space-y-4 md:space-y-6 group">
+                            <div key={item.id} onClick={() => setViewItem(item)} className="bg-surface-container-lowest rounded-2xl md:rounded-[32px] p-6 md:p-8 border border-outline-variant/10 shadow-sm hover:shadow-md transition-shadow space-y-4 md:space-y-6 group cursor-pointer">
                               <div className="flex items-center justify-between">
                                 <span className="text-4xl md:text-6xl font-black text-on-surface-variant/10 group-hover:text-primary/10 transition-colors">{item.day}</span>
                                 <span className={cn(
@@ -2207,12 +2279,9 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                                   <h5 className="text-xl md:text-2xl font-black text-on-surface leading-tight tracking-tight">{item.title}</h5>
                                 </div>
                                 {item.description && (
-                                  <button type="button" onClick={() => handleEditClick(item)} className="block w-full text-left group/desc">
-                                    <p className="text-sm font-medium text-on-surface-variant/60 leading-relaxed line-clamp-4 whitespace-pre-line break-words">
-                                      {item.description}
-                                    </p>
-                                    <span className="text-[10px] font-black uppercase tracking-wider text-primary/70 group-hover/desc:text-primary">Open full post →</span>
-                                  </button>
+                                  <p className="text-sm font-medium text-on-surface-variant/60 leading-relaxed line-clamp-4 whitespace-pre-line break-words">
+                                    {item.description}
+                                  </p>
                                 )}
                               </div>
 
@@ -2226,7 +2295,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                                 </div>
                               )}
 
-                              <div className="pt-6 border-t border-outline-variant/10 flex flex-wrap items-center justify-between gap-2">
+                              <div onClick={e => e.stopPropagation()} className="pt-6 border-t border-outline-variant/10 flex flex-wrap items-center justify-between gap-2">
                                 <div className="flex items-center gap-3 text-on-surface-variant min-w-0">
                                   <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
                                     <CheckCircle2 size={18} />
@@ -2642,6 +2711,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
           transition={{ duration: 0.2 }}
         >
           {renderTabContent()}
+          {renderViewPopup()}
         </motion.div>
       </AnimatePresence>
 
