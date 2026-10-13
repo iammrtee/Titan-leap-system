@@ -1352,7 +1352,9 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     const m = item.id.match(/^ai-(\d+)-/);
     const planIdx = m ? Number(m[1]) : -1;
     const canWrite = planIdx >= 0 && !!thirtyDayPlan?.calendar?.[planIdx];
-    const sections = String(item.description || '').split(/\n(?=(?:HOOK|BODY|CAPTION|CTA|SLIDE \d+|\[\d|OTHER PLATFORMS|NOTES|Modeled on)\b)/);
+    const planFull = canWrite ? thirtyDayPlan.calendar[planIdx].full : null;
+    const text = planFull ? fullPostToText(planFull) : String(item.description || '');
+    const sections = text.split(/\n(?=(?:HOOK|BODY|CAPTION|CTA|SLIDE \d+|\[\d|OTHER PLATFORMS|NOTES|Modeled on)\b)/);
     return createPortal(
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setViewItem(null)}>
         <div onClick={e => e.stopPropagation()} className="w-full max-w-2xl max-h-[88vh] flex flex-col bg-surface-container-lowest rounded-[22px] shadow-[0_8px_20px_rgba(0,0,0,0.08),0_20px_60px_rgba(0,0,0,0.16)] overflow-hidden">
@@ -1366,7 +1368,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
             <button onClick={() => setViewItem(null)} className="shrink-0 w-9 h-9 rounded-full bg-surface-container-highest/60 flex items-center justify-center text-on-surface-variant hover:text-on-surface"><X size={16} /></button>
           </div>
           <div className="px-6 md:px-8 pb-6 overflow-y-auto space-y-4">
-            {item.description ? sections.map((sec, i) => {
+            {text ? sections.map((sec, i) => {
               const head = sec.match(/^(HOOK|BODY|CAPTION|CTA|OTHER PLATFORMS|NOTES|Modeled on|SLIDE \d+)\s*:?\s*/);
               return (
                 <div key={i} className="space-y-1">
@@ -1384,7 +1386,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                 {writingDay === planIdx ? 'Writing…' : thirtyDayPlan.calendar[planIdx].full ? 'Rewrite full post' : 'Write full post'}
               </button>
             )}
-            <button onClick={() => { navigator.clipboard?.writeText(item.description || '').then(() => toast.success('Copied')).catch(() => {}); }}
+            <button onClick={() => { navigator.clipboard?.writeText(text).then(() => toast.success('Copied')).catch(() => {}); }}
               className="px-4 py-2.5 rounded-full text-xs font-semibold bg-surface-container-highest/60 text-on-surface hover:bg-surface-container-highest">Copy</button>
             <button onClick={() => { handleSendToProduction(item); }}
               className="px-4 py-2.5 rounded-full text-xs font-semibold bg-surface-container-highest/60 text-on-surface hover:bg-surface-container-highest">Send to Production</button>
