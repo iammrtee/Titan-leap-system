@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabase';
 import { safeStorageName, toPostableJpeg } from '@/src/lib/postMedia';
 import localforage from 'localforage';
+import { ContentImport, type ImportedPost } from '@/src/components/ContentImport';
 import { PlanStart, PlanCompetitors, OneIdea, PlanTabs, EMPTY_BRIEF, type PlanBrief } from '@/src/components/ClientEngine';
 
 type StrategyTab = 'competitor' | 'calendar' | 'plan';
@@ -25,6 +26,7 @@ interface CalendarItem {
   time: string;
   link?: string;
   tags?: string[];
+  brand?: string;
 }
 
 const today = new Date();
@@ -600,6 +602,20 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     type: [] as string[]
   });
   const [showFilters, setShowFilters] = useState(false);
+  // Brands: one calendar, each post tagged with the brand it's for (e.g. personal brand, TitanLeap).
+  const [brands, setBrands] = useState<string[]>(() => {
+    try { const b = JSON.parse(localStorage.getItem('titanleap_brands') || 'null'); if (Array.isArray(b) && b.length) return b; } catch {}
+    return ['Personal brand', 'TitanLeap'];
+  });
+  const addBrand = (name: string) => setBrands(prev => {
+    if (prev.includes(name)) return prev;
+    const next = [...prev, name];
+    try { localStorage.setItem('titanleap_brands', JSON.stringify(next)); } catch {}
+    return next;
+  });
+  const [activeBrand, setActiveBrandState] = useState<string>(() => { try { return localStorage.getItem('titanleap_active_brand') || 'All'; } catch { return 'All'; } });
+  const setActiveBrand = (b: string) => { setActiveBrandState(b); try { localStorage.setItem('titanleap_active_brand', b); } catch {} };
+  const [showImport, setShowImport] = useState(false);
 
   // Regen for Notion State
   const [showRegenModal, setShowRegenModal] = useState(false);
@@ -629,7 +645,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     const platformMatch = filters.platform.length === 0 || filters.platform.includes(item.platform);
     const statusMatch = filters.status.length === 0 || filters.status.includes(item.status);
     const typeMatch = filters.type.length === 0 || filters.type.includes(item.type);
-    return platformMatch && statusMatch && typeMatch;
+    const brandMatch = activeBrand === 'All' || !item.brand || item.brand === activeBrand;
+    return platformMatch && statusMatch && typeMatch && brandMatch;
   });
 
   const toggleFilter = (category: 'platform' | 'status' | 'type', value: string) => {
@@ -889,9 +906,30 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   const handleClearCalendar = () => {
     if (!confirmClear) { setConfirmClear(true); setTimeout(() => setConfirmClear(false), 3500); return; }
     const before = calendarItems;
-    setCalendarItems([]);
+    const keep = activeBrand === 'All' ? [] : before.filter(it => it.brand !== activeBrand);
+    setCalendarItems(keep);
     setConfirmClear(false);
-    toast.success(`Calendar cleared (${before.length} posts)`, { action: { label: 'Undo', onClick: () => setCalendarItems(before) }, duration: 8000 });
+    toast.success(`${activeBrand === 'All' ? 'Calendar' : activeBrand} cleared (${before.length - keep.length} posts)`, { action: { label: 'Undo', onClick: () => setCalendarItems(before) }, duration: 8000 });
+  };
+
+  const handleImportContent = (posts: ImportedPost[], brand: string, replace: boolean) => {
+    const key = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const dates = new Set(posts.map(p => key(p.date)));
+    const fresh: CalendarItem[] = posts.map(p => ({
+      id: `imp-${Math.random().toString(36).slice(2, 10)}`,
+      day: p.date.getDate(), month: p.date.getMonth(), year: p.date.getFullYear(),
+      platform: p.platform as CalendarItem['platform'], title: p.title, description: p.description,
+      status: 'draft', type: p.type, time: p.time, tags: ['imported'], brand,
+    }));
+    const before = calendarItems;
+    setCalendarItems(prev => [
+      ...prev.filter(it => !(replace && it.brand === brand && dates.has(`${it.year}-${it.month}-${it.day}`))),
+      ...fresh,
+    ]);
+    if (activeBrand !== 'All' && activeBrand !== brand) setActiveBrand(brand);
+    const first = posts[0]?.date;
+    if (first) setSelectedDate({ day: first.getDate(), month: first.getMonth(), year: first.getFullYear() });
+    toast.success(`Added ${fresh.length} posts for ${brand}`, { action: { label: 'Undo', onClick: () => setCalendarItems(before) }, duration: 8000 });
   };
 
   const handleEditClick = (item: CalendarItem) => {
@@ -1177,7 +1215,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
         type: content.format?.toLowerCase().includes('video') ? 'video' : 
               content.format?.toLowerCase().includes('article') ? 'article' : 'post',
         time: content.postTime || '09:00 AM',
-        tags: ['ai-generated', 'strategy', content.pillar || '']
+        tags: ['ai-generated', 'strategy', content.pillar || ''],
+        brand: activeBrand !== 'All' ? activeBrand : undefined,
       };
     });
 
@@ -1361,7 +1400,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
           <div className="flex items-start justify-between gap-4 p-6 md:p-8 pb-4">
             <div className="space-y-1.5 min-w-0">
               <p className="text-xs font-medium text-on-surface-variant/60">
-                {item.platform === 'Twitter' ? 'X' : item.platform} · {item.type} · {MONTH_NAMES[item.month]?.slice(0, 3)} {item.day} · {item.time}
+                {item.brand ? `${item.brand} · ` : ''}{item.platform === 'Twitter' ? 'X' : item.platform} · {item.type} · {MONTH_NAMES[item.month]?.slice(0, 3)} {item.day} · {item.time}
               </p>
               <h3 className="text-xl md:text-2xl font-semibold tracking-tight text-on-surface leading-snug">{item.title}</h3>
             </div>
@@ -1882,6 +1921,13 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 w-full md:w-auto">
                     <h3 className="text-2xl md:text-3xl font-black tracking-tight text-on-surface">{MONTH_NAMES[selectedDate.month]} {selectedDate.year}</h3>
+                    <div className="flex items-center gap-1 p-1 rounded-full bg-surface-container-low border border-outline-variant/10">
+                      {['All', ...brands].map(b => (
+                        <button key={b} onClick={() => setActiveBrand(b)}
+                          className={cn("text-xs font-semibold px-3 py-1.5 rounded-full transition-all whitespace-nowrap",
+                            activeBrand === b ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant/60 hover:text-on-surface")}>{b}</button>
+                      ))}
+                    </div>
                     <div className="flex gap-2">
                       <button 
                         onClick={() => {
@@ -1906,6 +1952,13 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 md:gap-4 relative w-full md:w-auto">
+                    <button
+                      onClick={() => setShowImport(true)}
+                      className="flex-1 md:flex-none justify-center bg-primary text-white px-4 md:px-6 py-2.5 md:py-3 rounded-lg md:rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest flex items-center gap-2 md:gap-3 hover:brightness-110 transition-all shadow-lg shadow-primary/20"
+                    >
+                      <Upload size={14} className="md:w-4 md:h-4" />
+                      Import content
+                    </button>
                     <button 
                       onClick={() => setShowFilters(!showFilters)}
                       className={cn(
@@ -2012,7 +2065,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                         confirmClear ? "bg-red-500 text-white border-red-500" : "bg-surface-container-highest text-red-500 border-outline-variant/10 hover:bg-red-50")}
                     >
                       <Trash2 size={14} className="md:w-4 md:h-4" />
-                      {confirmClear ? 'Tap again to clear' : 'Clear calendar'}
+                      {confirmClear ? 'Tap again to clear' : activeBrand === 'All' ? 'Clear calendar' : `Clear ${activeBrand}`}
                     </button>
                     <button 
                       onClick={handleExportCSV}
@@ -2714,6 +2767,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
         >
           {renderTabContent()}
           {renderViewPopup()}
+          {showImport && <ContentImport brands={brands} defaultBrand={activeBrand !== 'All' ? activeBrand : brands[0]} onAddBrand={addBrand} onImport={handleImportContent} onClose={() => setShowImport(false)} />}
         </motion.div>
       </AnimatePresence>
 

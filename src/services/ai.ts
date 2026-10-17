@@ -1304,3 +1304,31 @@ export const fullPostToText = (f: any) => {
   if (f.notes) parts.push(`NOTES: ${f.notes}`);
   return parts.join('\n\n');
 };
+
+// Turns pasted/uploaded content (a Claude chat answer, a doc, a CSV) into calendar posts.
+// Keeps the user's words verbatim — it only splits, labels and dates them.
+export const parseContentImport = async (text: string, opts: { days: number; keepDays: boolean; platforms: string[] }) => {
+  const prompt = `Split this content into individual social media posts for a content calendar.
+
+RULES
+- Keep the author's words EXACTLY as written. Do not rewrite, shorten, summarise or improve anything. Only split, label and organise.
+- One object per post. If a day has posts for two platforms, make two objects with the same dayOffset.
+- dayOffset: ${opts.keepDays ? `use the day the text gives ("Day 1" = 0, "Day 2" = 1, a weekday or date relative to the first one). If no days are given, spread the posts evenly across ${opts.days} days.` : `spread the posts evenly across ${opts.days} days (0 to ${opts.days - 1}), in the order they appear.`}
+- platform: the one the text names, else ${opts.platforms[0] || 'Instagram'}${opts.platforms.length > 1 ? ` (alternate between ${opts.platforms.join(', ')} when the text doesn't say)` : ''}. Use exactly one of: Instagram, TikTok, LinkedIn, Twitter, YouTube.
+- type: "video" for reels/videos/scripts, "article" for long-form, else "post".
+- Put each part where it belongs: hook (first line / first 3 seconds), body (slides, script beats, or the main text, in order, with line breaks), caption, cta, hashtags. Leave a part empty if the text doesn't have it.
+- title: the hook, or the post's first line if there is no hook (max 90 characters).
+- time: the time the text gives as "hh:mm AM/PM", else empty.
+
+Return ONLY JSON: {"posts":[{"dayOffset":0,"platform":"Instagram","type":"post","title":"","hook":"","body":"","caption":"","cta":"","hashtags":"","time":""}]}
+
+CONTENT:
+"""
+${text.slice(0, 60000)}
+"""`;
+  const res = await unifiedGenerateContent({ prompt, responseMimeType: "application/json", budgeted: true });
+  const out = parseJSON(res.text, null);
+  const posts = Array.isArray(out?.posts) ? out.posts : Array.isArray(out) ? out : [];
+  if (!posts.length) throw new Error("Couldn't find any posts in that text. Paste the content with one post per day or per heading.");
+  return posts as any[];
+};
