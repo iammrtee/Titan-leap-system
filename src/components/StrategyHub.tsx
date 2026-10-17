@@ -1013,7 +1013,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       const full = await writeFullPost(day, { engine: { cta: day.cta || thirtyDayPlan?.engine?.cta } }, businessContext());
       const text = fullPostToText(full);
       setCalendarItems(prev => prev.map(it => it.id === item.id ? { ...it, description: text } : it));
-      toast.success('Post expanded');
+      toast.success('Full post written');
     } catch (err: any) {
       toast.error(err.message || 'Could not expand the post');
     } finally {
@@ -1446,8 +1446,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
               return (
                 <button disabled={writingDay !== null || !!expandingId} onClick={() => canWrite ? handleWriteFull(planIdx) : handleExpandItem(item)}
                   className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-full text-xs font-semibold disabled:opacity-50">
-                  {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                  {busy ? 'Expanding…' : done ? 'Expand again' : 'Expand post'}
+                  {busy ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+                  {busy ? 'Writing…' : done ? 'Rewrite full post' : 'Write full post'}
                 </button>
               );
             })()}
