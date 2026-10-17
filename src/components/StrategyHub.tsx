@@ -602,19 +602,33 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     type: [] as string[]
   });
   const [showFilters, setShowFilters] = useState(false);
-  // Brands: one calendar, each post tagged with the brand it's for (e.g. personal brand, TitanLeap).
-  const [brands, setBrands] = useState<string[]>(() => {
-    try { const b = JSON.parse(localStorage.getItem('titanleap_brands') || 'null'); if (Array.isArray(b) && b.length) return b; } catch {}
-    return ['Personal brand', 'TitanLeap'];
-  });
-  const addBrand = (name: string) => setBrands(prev => {
-    if (prev.includes(name)) return prev;
-    const next = [...prev, name];
-    try { localStorage.setItem('titanleap_brands', JSON.stringify(next)); } catch {}
-    return next;
-  });
-  const [activeBrand, setActiveBrandState] = useState<string>(() => { try { return localStorage.getItem('titanleap_active_brand') || 'All'; } catch { return 'All'; } });
-  const setActiveBrand = (b: string) => { setActiveBrandState(b); try { localStorage.setItem('titanleap_active_brand', b); } catch {} };
+  // Two brands only: Company (default) and Personal. Personal is an opt-in per user, saved in
+  // Supabase (user_prefs) with localStorage as a fallback.
+  type Brand = 'company' | 'personal';
+  const BRAND_LABEL: Record<Brand, string> = { company: 'Company', personal: 'Personal' };
+  const [personalEnabled, setPersonalEnabledState] = useState<boolean>(() => { try { return localStorage.getItem('titanleap_personal_brand') === '1'; } catch { return false; } });
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/prefs', { headers: await getAuthHeader() });
+        if (r.ok) { const d = await r.json(); setPersonalEnabledState(!!d.personalBrand); try { localStorage.setItem('titanleap_personal_brand', d.personalBrand ? '1' : '0'); } catch {} }
+      } catch {}
+    })();
+  }, []);
+  const setPersonalEnabled = async (on: boolean) => {
+    setPersonalEnabledState(on);
+    if (!on) setActiveBrand('company');
+    try { localStorage.setItem('titanleap_personal_brand', on ? '1' : '0'); } catch {}
+    try { await fetch('/api/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(await getAuthHeader()) }, body: JSON.stringify({ personalBrand: on }) }); } catch {}
+    toast.success(on ? 'Personal brand added. Switch between Company and Personal above the calendar.' : 'Personal brand turned off');
+  };
+  // View: one brand, or All (both together, each post labelled).
+  type BrandView = Brand | 'all';
+  const [activeBrand, setActiveBrandState] = useState<BrandView>(() => { try { const v = localStorage.getItem('titanleap_active_brand'); return v === 'personal' || v === 'all' ? v : 'company'; } catch { return 'company'; } });
+  const setActiveBrand = (b: BrandView) => { setActiveBrandState(b); try { localStorage.setItem('titanleap_active_brand', b); } catch {} };
+  const brandOf = (it: { brand?: string }): Brand => (it.brand === 'personal' ? 'personal' : 'company');
+  // Before syncing a plan to the calendar, people with a personal brand pick which one.
+  const [brandPick, setBrandPick] = useState<null | 'sync' | 'draft'>(null);
   const [showImport, setShowImport] = useState(false);
 
   // Regen for Notion State
@@ -645,7 +659,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     const platformMatch = filters.platform.length === 0 || filters.platform.includes(item.platform);
     const statusMatch = filters.status.length === 0 || filters.status.includes(item.status);
     const typeMatch = filters.type.length === 0 || filters.type.includes(item.type);
-    const brandMatch = activeBrand === 'All' || !item.brand || item.brand === activeBrand;
+    const brandMatch = !personalEnabled || activeBrand === 'all' || brandOf(item) === activeBrand;
     return platformMatch && statusMatch && typeMatch && brandMatch;
   });
 
@@ -688,41 +702,43 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     }
   }, []);
 
-  // Persistence: Load calendar items from Supabase (if configured). This runs after the
-  // localStorage load above and overrides it once the Supabase fetch resolves, so Supabase
-  // is the source of truth when available but localStorage still works offline / without it.
+  // Calendar lives in Supabase per user and per brand (server: /api/calendar). localStorage
+  // stays as the offline copy. Saves are debounced and send the whole calendar, so deletes
+  // and Clear stick too.
+  const calendarLoaded = React.useRef(false);
+  const calendarMigrated = React.useRef(false);
+  const [calendarCloud, setCalendarCloud] = useState<'loading' | 'on' | 'off'>('loading');
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     (async () => {
       try {
-        const { data, error } = await supabase
-          .from('calendar_items')
-          .select('*')
-          .eq('profile_id', profileId)
-          .order('year', { ascending: true })
-          .order('month', { ascending: true })
-          .order('day', { ascending: true });
-        if (!error && data && data.length > 0) {
-          setCalendarItems(data.map((row: any) => ({
-            id: row.id,
-            day: row.day,
-            month: row.month,
-            year: row.year,
-            platform: row.platform,
-            title: row.title,
-            description: row.description,
-            status: row.status,
-            type: row.type,
-            time: row.time,
-            link: row.link || undefined,
-            tags: row.tags || undefined,
-          })));
+        const r = await fetch('/api/calendar', { headers: await getAuthHeader() });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) { setCalendarCloud('off'); if (data.needsSetup) console.warn('[Calendar] Supabase needs schema section 17:', data.error); return; }
+        calendarMigrated.current = !!data.migrated;
+        if (Array.isArray(data.items) && data.items.length) setCalendarItems(data.items);
+        else if (Array.isArray(data.items)) {
+          // Nothing in the cloud yet: keep this browser's calendar and upload it (minus the demo posts).
+          setCalendarItems(prev => prev.filter(it => !/^\d+$/.test(it.id)));
         }
-      } catch (e) {
-        console.error('Failed to load calendar items from Supabase', e);
-      }
+        setCalendarCloud('on');
+      } catch { setCalendarCloud('off'); }
+      finally { calendarLoaded.current = true; }
     })();
-  }, [profileId]);
+  }, []);
+  useEffect(() => {
+    if (!calendarLoaded.current || calendarCloud !== 'on') return;
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch('/api/calendar', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...(await getAuthHeader()) },
+          body: JSON.stringify({ items: calendarItems, migrated: calendarMigrated.current }),
+        });
+        if (r.ok) calendarMigrated.current = false;
+      } catch (e) { console.error('Failed to save the calendar', e); }
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [calendarItems, calendarCloud]);
 
   // Persistence: Save data on change
   useEffect(() => {
@@ -732,34 +748,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   }, [thirtyDayPlan]);
 
   useEffect(() => {
-    localStorage.setItem('titanleap_calendar_items', JSON.stringify(calendarItems));
-    // Also sync to Supabase when configured, so the calendar survives across devices/deploys
-    // instead of living only in this browser's localStorage.
-    if (!isSupabaseConfigured || calendarItems.length === 0) return;
-    (async () => {
-      try {
-        const rows = calendarItems.map(item => ({
-          id: item.id,
-          profile_id: profileId,
-          day: item.day,
-          month: item.month,
-          year: item.year,
-          platform: item.platform,
-          title: item.title,
-          description: item.description,
-          status: item.status,
-          type: item.type,
-          time: item.time,
-          link: item.link || null,
-          tags: item.tags || null,
-          updated_at: new Date().toISOString(),
-        }));
-        await supabase.from('calendar_items').upsert(rows, { onConflict: 'id' });
-      } catch (e) {
-        console.error('Failed to sync calendar items to Supabase', e);
-      }
-    })();
-  }, [calendarItems, profileId]);
+    try { localStorage.setItem('titanleap_calendar_items', JSON.stringify(calendarItems)); } catch {}
+  }, [calendarItems]);
 
   const handleFileUpload = async (e: React.DragEvent | React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
@@ -906,13 +896,14 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   const handleClearCalendar = () => {
     if (!confirmClear) { setConfirmClear(true); setTimeout(() => setConfirmClear(false), 3500); return; }
     const before = calendarItems;
-    const keep = activeBrand === 'All' ? [] : before.filter(it => it.brand !== activeBrand);
+    const keep = personalEnabled && activeBrand !== 'all' ? before.filter(it => brandOf(it) !== activeBrand) : [];
     setCalendarItems(keep);
     setConfirmClear(false);
-    toast.success(`${activeBrand === 'All' ? 'Calendar' : activeBrand} cleared (${before.length - keep.length} posts)`, { action: { label: 'Undo', onClick: () => setCalendarItems(before) }, duration: 8000 });
+    toast.success(`${personalEnabled && activeBrand !== 'all' ? `${BRAND_LABEL[activeBrand]} calendar` : 'Calendar'} cleared (${before.length - keep.length} posts)`, { action: { label: 'Undo', onClick: () => setCalendarItems(before) }, duration: 8000 });
   };
 
-  const handleImportContent = (posts: ImportedPost[], brand: string, replace: boolean) => {
+  const handleImportContent = (posts: ImportedPost[], brandName: string, replace: boolean) => {
+    const brand: Brand = brandName === 'personal' ? 'personal' : 'company';
     const key = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
     const dates = new Set(posts.map(p => key(p.date)));
     const fresh: CalendarItem[] = posts.map(p => ({
@@ -923,13 +914,13 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     }));
     const before = calendarItems;
     setCalendarItems(prev => [
-      ...prev.filter(it => !(replace && it.brand === brand && dates.has(`${it.year}-${it.month}-${it.day}`))),
+      ...prev.filter(it => !(replace && brandOf(it) === brand && dates.has(`${it.year}-${it.month}-${it.day}`))),
       ...fresh,
     ]);
-    if (activeBrand !== 'All' && activeBrand !== brand) setActiveBrand(brand);
+    if (personalEnabled && activeBrand !== 'all') setActiveBrand(brand);
     const first = posts[0]?.date;
     if (first) setSelectedDate({ day: first.getDate(), month: first.getMonth(), year: first.getFullYear() });
-    toast.success(`Added ${fresh.length} posts for ${brand}`, { action: { label: 'Undo', onClick: () => setCalendarItems(before) }, duration: 8000 });
+    toast.success(`Added ${fresh.length} posts${personalEnabled ? ` to ${BRAND_LABEL[brand]}` : ''}`, { action: { label: 'Undo', onClick: () => setCalendarItems(before) }, duration: 8000 });
   };
 
   const handleEditClick = (item: CalendarItem) => {
@@ -1182,8 +1173,10 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     }
   };
 
-  const handleSyncToCalendar = () => {
+  const handleSyncToCalendar = (brandArg?: Brand) => {
     if (!thirtyDayPlan || !thirtyDayPlan.calendar) return;
+    if (personalEnabled && !brandArg) { setBrandPick('sync'); return; }
+    const syncBrand: Brand = brandArg || 'company';
 
     const newItems: CalendarItem[] = thirtyDayPlan.calendar.map((content: any, index: number) => {
       const date = new Date(); // Start from today
@@ -1216,15 +1209,16 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
               content.format?.toLowerCase().includes('article') ? 'article' : 'post',
         time: content.postTime || '09:00 AM',
         tags: ['ai-generated', 'strategy', content.pillar || ''],
-        brand: activeBrand !== 'All' ? activeBrand : undefined,
+        brand: syncBrand,
       };
     });
 
     setCalendarItems(prev => {
-      // Filter out previous AI generated items to avoid cluttering if synced multiple times
-      const nonAiItems = prev.filter(item => !item.id.startsWith('ai-'));
-      return [...nonAiItems, ...newItems];
+      // Re-syncing replaces this brand's earlier plan posts instead of piling up duplicates.
+      const keep = prev.filter(item => !(item.id.startsWith('ai-') && brandOf(item) === syncBrand));
+      return [...keep, ...newItems];
     });
+    if (personalEnabled && activeBrand !== 'all') setActiveBrand(syncBrand);
     setSelectedDate({ day: new Date().getDate(), month: new Date().getMonth(), year: new Date().getFullYear() });
     setActiveTab('calendar');
     toast.success("Calendar Synced!", {
@@ -1324,7 +1318,9 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     }
   };
 
-  const handleDraftCalendarFromBlueprint = async () => {
+  const handleDraftCalendarFromBlueprint = async (brandArg?: Brand) => {
+    if (personalEnabled && !brandArg) { setBrandPick('draft'); return; }
+    const draftBrand: Brand = brandArg || 'company';
     if (!thirtyDayPlan) {
       toast.error("Generate the 30-Day Plan first");
       return;
@@ -1350,7 +1346,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
             status: 'draft',
             type: item.type || 'post',
             time: item.time || '09:00 AM',
-            tags: item.tags || ['blueprint']
+            tags: item.tags || ['blueprint'],
+            brand: draftBrand,
           } as CalendarItem;
         });
 
@@ -1400,7 +1397,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
           <div className="flex items-start justify-between gap-4 p-6 md:p-8 pb-4">
             <div className="space-y-1.5 min-w-0">
               <p className="text-xs font-medium text-on-surface-variant/60">
-                {item.brand ? `${item.brand} · ` : ''}{item.platform === 'Twitter' ? 'X' : item.platform} · {item.type} · {MONTH_NAMES[item.month]?.slice(0, 3)} {item.day} · {item.time}
+                {personalEnabled ? `${BRAND_LABEL[brandOf(item)]} · ` : ''}{item.platform === 'Twitter' ? 'X' : item.platform} · {item.type} · {MONTH_NAMES[item.month]?.slice(0, 3)} {item.day} · {item.time}
               </p>
               <h3 className="text-xl md:text-2xl font-semibold tracking-tight text-on-surface leading-snug">{item.title}</h3>
             </div>
@@ -1703,15 +1700,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
               <div className="space-y-8">
                 {/* Strategy Header & Refinement */}
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
-                  <div className="space-y-1">
-                    <h3 className="text-3xl md:text-4xl font-semibold tracking-tight text-on-surface">{thirtyDayPlan.engine ? 'Your Client Engine' : '30-Day Viral Strategy'}</h3>
-                    {(thirtyDayPlan.builtFor || thirtyDayPlan.platforms) && (
-                      <p className="text-xs font-medium text-on-surface-variant/60">
-                        {thirtyDayPlan.builtFor && <>For {thirtyDayPlan.builtFor} · {thirtyDayPlan.source === 'brief' ? 'from a quick brief' : 'from the audit'}</>}
-                        {thirtyDayPlan.platforms?.length ? <> · {thirtyDayPlan.platforms.map((p: string) => p === 'Twitter' ? 'X' : p).join(', ')}</> : null}
-                      </p>
-                    )}
-                  </div>
+                  <h3 className="text-xl md:text-2xl font-semibold tracking-tight text-on-surface">For {thirtyDayPlan.builtFor || auditData?.businessName || 'your brand'}</h3>
                   <div className="flex flex-wrap items-center gap-3 md:gap-4">
                     <button 
                       onClick={handleGeneratePlan}
@@ -1773,7 +1762,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                       Export Full PDF
                     </button>
                     <button 
-                      onClick={handleDraftCalendarFromBlueprint}
+                      onClick={() => handleDraftCalendarFromBlueprint()}
                       disabled={isDraftingCalendar || !thirtyDayPlan}
                       className="flex items-center gap-2 text-emerald-600 font-black text-[10px] md:text-xs uppercase tracking-widest hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
                     >
@@ -1842,7 +1831,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                       <p className="text-xs md:text-sm font-medium text-on-surface-variant/60">All 30 days. Tap a day for the hook, body and caption.{thirtyDayPlan.builtOnEvidence ? ' Built on competitor evidence.' : ' Not built on competitor evidence — research competitors above and regenerate.'}</p>
                     </div>
                     <button 
-                      onClick={handleSyncToCalendar}
+                      onClick={() => handleSyncToCalendar()}
                       className="w-full md:w-auto bg-primary text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest shadow-lg md:shadow-xl shadow-primary/20 md:shadow-primary/30 hover:scale-[1.02] md:hover:scale-105 transition-all active:scale-95"
                     >
                       Sync to Calendar
@@ -1921,13 +1910,6 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 w-full md:w-auto">
                     <h3 className="text-2xl md:text-3xl font-black tracking-tight text-on-surface">{MONTH_NAMES[selectedDate.month]} {selectedDate.year}</h3>
-                    <div className="flex items-center gap-1 p-1 rounded-full bg-surface-container-low border border-outline-variant/10">
-                      {['All', ...brands].map(b => (
-                        <button key={b} onClick={() => setActiveBrand(b)}
-                          className={cn("text-xs font-semibold px-3 py-1.5 rounded-full transition-all whitespace-nowrap",
-                            activeBrand === b ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant/60 hover:text-on-surface")}>{b}</button>
-                      ))}
-                    </div>
                     <div className="flex gap-2">
                       <button 
                         onClick={() => {
@@ -1950,23 +1932,36 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                         <ChevronRight className="text-on-surface-variant" size={20} />
                       </button>
                     </div>
+                    {personalEnabled ? (
+                      <div className="flex items-center gap-1 p-1 rounded-full bg-surface-container-low border border-outline-variant/10">
+                        {(['all', 'company', 'personal'] as const).map(b => (
+                          <button key={b} onClick={() => setActiveBrand(b)}
+                            className={cn("text-sm font-semibold px-4 py-1.5 rounded-full transition-all whitespace-nowrap",
+                              activeBrand === b ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant/60 hover:text-on-surface")}>
+                            {b === 'all' ? `All (${calendarItems.length})` : `${BRAND_LABEL[b]} (${calendarItems.filter(it => brandOf(it) === b).length})`}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <button onClick={() => setPersonalEnabled(true)} className="text-xs font-semibold text-on-surface-variant/60 hover:text-primary whitespace-nowrap">+ Add personal brand</button>
+                    )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 md:gap-4 relative w-full md:w-auto">
+                  <div className="flex flex-wrap items-center gap-2 relative w-full md:w-auto">
                     <button
                       onClick={() => setShowImport(true)}
-                      className="flex-1 md:flex-none justify-center bg-primary text-white px-4 md:px-6 py-2.5 md:py-3 rounded-lg md:rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest flex items-center gap-2 md:gap-3 hover:brightness-110 transition-all shadow-lg shadow-primary/20"
+                      className="h-10 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all whitespace-nowrap bg-primary text-white hover:brightness-110 shadow-sm"
                     >
-                      <Upload size={14} className="md:w-4 md:h-4" />
+                      <Upload size={15} />
                       Import content
                     </button>
                     <button 
                       onClick={() => setShowFilters(!showFilters)}
                       className={cn(
-                        "flex-1 md:flex-none justify-center bg-surface-container-low text-on-surface-variant px-4 md:px-6 py-2.5 md:py-3 rounded-lg md:rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest border border-outline-variant/10 flex items-center gap-2 md:gap-3 hover:bg-surface-container transition-all shadow-sm",
+                        "h-10 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all whitespace-nowrap bg-surface-container-lowest text-on-surface-variant border border-outline-variant/15 hover:bg-surface-container-low",
                         (filters.platform.length > 0 || filters.status.length > 0 || filters.type.length > 0) && "border-primary/50 bg-primary/5"
                       )}
                     >
-                      <Filter size={14} className={cn("text-primary md:w-4 md:h-4", (filters.platform.length > 0 || filters.status.length > 0 || filters.type.length > 0) ? "text-primary" : "text-on-surface-variant/40")} />
+                      <Filter size={15} className={cn("text-primary", (filters.platform.length > 0 || filters.status.length > 0 || filters.type.length > 0) ? "text-primary" : "text-on-surface-variant/40")} />
                       Filters
                       {(filters.platform.length + filters.status.length + filters.type.length) > 0 && (
                         <span className="bg-primary text-white w-3.5 h-3.5 md:w-4 md:h-4 rounded-full flex items-center justify-center text-[7px] md:text-[8px]">
@@ -2061,27 +2056,18 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                     <button
                       onClick={handleClearCalendar}
                       disabled={calendarItems.length === 0}
-                      className={cn("flex-1 md:flex-none justify-center px-4 md:px-6 py-2.5 md:py-3 rounded-lg md:rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest border flex items-center gap-2 md:gap-3 transition-all disabled:opacity-40",
-                        confirmClear ? "bg-red-500 text-white border-red-500" : "bg-surface-container-highest text-red-500 border-outline-variant/10 hover:bg-red-50")}
+                      className={cn("h-10 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all whitespace-nowrap border disabled:opacity-40",
+                        confirmClear ? "bg-red-500 text-white border-red-500" : "bg-surface-container-lowest text-red-500 border-outline-variant/15 hover:bg-red-50")}
                     >
-                      <Trash2 size={14} className="md:w-4 md:h-4" />
-                      {confirmClear ? 'Tap again to clear' : activeBrand === 'All' ? 'Clear calendar' : `Clear ${activeBrand}`}
+                      <Trash2 size={15} />
+                      {confirmClear ? (personalEnabled && activeBrand === 'all' ? 'Tap again: clears both' : 'Tap again to clear') : personalEnabled && activeBrand !== 'all' ? `Clear ${BRAND_LABEL[activeBrand]}` : 'Clear calendar'}
                     </button>
                     <button 
                       onClick={handleExportCSV}
-                      className="flex-1 md:flex-none justify-center bg-surface-container-highest text-on-surface-variant px-4 md:px-6 py-2.5 md:py-3 rounded-lg md:rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest border border-outline-variant/10 flex items-center gap-2 md:gap-3 hover:bg-surface-container-high transition-all shadow-lg shadow-black/5"
+                      className="h-10 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all whitespace-nowrap bg-surface-container-lowest text-on-surface-variant border border-outline-variant/15 hover:bg-surface-container-low"
                     >
-                      <Download size={14} className="md:w-4 md:h-4" />
-                      <span className="hidden sm:inline">Export CSV</span>
-                      <span className="sm:hidden">CSV</span>
-                    </button>
-                    <button 
-                      onClick={() => setShowRegenModal(true)}
-                      className="flex-1 md:flex-none justify-center bg-[#FFD600] text-black px-4 md:px-6 py-2.5 md:py-3 rounded-lg md:rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest border border-outline-variant/10 flex items-center gap-2 md:gap-3 hover:brightness-105 transition-all shadow-lg shadow-[#FFD600]/20"
-                    >
-                      <Share2 size={14} className="md:w-4 md:h-4" />
-                      <span className="hidden sm:inline">Regen for Notion</span>
-                      <span className="sm:hidden">Notion</span>
+                      <Download size={15} />
+                      Export CSV
                     </button>
                   </div>
                 </div>
@@ -2193,6 +2179,9 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                                   )}
                                   <div className="flex items-center justify-between pt-1 border-t border-black/5">
                                     <span className="hidden md:inline text-[8px] font-black uppercase tracking-widest opacity-60">{item.platform}</span>
+                                    {personalEnabled && activeBrand === 'all' && (
+                                      <span className={cn("text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded", brandOf(item) === 'personal' ? "bg-fuchsia-500/15 text-fuchsia-700" : "bg-primary/10 text-primary")}>{brandOf(item) === 'personal' ? 'P' : 'C'}</span>
+                                    )}
                                     <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
                                       <button 
                                         onClick={(e) => {
@@ -2330,7 +2319,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
 
                               <div className="space-y-3 md:space-y-4">
                                 <div className="space-y-1">
-                                  <p className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant/60">{item.platform} / {item.type}</p>
+                                  <p className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant/60">{personalEnabled ? `${BRAND_LABEL[brandOf(item)]} · ` : ''}{item.platform} / {item.type}</p>
                                   <h5 className="text-xl md:text-2xl font-black text-on-surface leading-tight tracking-tight">{item.title}</h5>
                                 </div>
                                 {item.description && (
@@ -2767,7 +2756,22 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
         >
           {renderTabContent()}
           {renderViewPopup()}
-          {showImport && <ContentImport brands={brands} defaultBrand={activeBrand !== 'All' ? activeBrand : brands[0]} onAddBrand={addBrand} onImport={handleImportContent} onClose={() => setShowImport(false)} />}
+          {showImport && <ContentImport brands={personalEnabled ? [{ id: 'company', label: 'Company' }, { id: 'personal', label: 'Personal' }] : null} defaultBrand={personalEnabled && activeBrand !== 'all' ? activeBrand : 'company'} onImport={handleImportContent} onClose={() => setShowImport(false)} />}
+          {brandPick && createPortal(
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setBrandPick(null)}>
+              <div onClick={e => e.stopPropagation()} className="w-full max-w-sm bg-surface-container-lowest rounded-[22px] p-6 space-y-4 shadow-[0_8px_20px_rgba(0,0,0,0.08),0_20px_60px_rgba(0,0,0,0.16)]">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-semibold tracking-tight text-on-surface">Which calendar?</h3>
+                  <p className="text-sm text-on-surface-variant/70">Add these 30 days to your company or your personal brand.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {(['company', 'personal'] as const).map(b => (
+                    <button key={b} onClick={() => { const which = brandPick; setBrandPick(null); which === 'draft' ? handleDraftCalendarFromBlueprint(b) : handleSyncToCalendar(b); }}
+                      className="py-4 rounded-2xl border border-outline-variant/15 hover:border-primary hover:bg-primary/5 text-sm font-semibold text-on-surface transition-all">{BRAND_LABEL[b]}</button>
+                  ))}
+                </div>
+              </div>
+            </div>, document.body)}
         </motion.div>
       </AnimatePresence>
 
