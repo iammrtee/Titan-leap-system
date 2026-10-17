@@ -23,15 +23,13 @@ const tomorrow = () => { const d = new Date(); d.setDate(d.getDate() + 1); retur
 // Paste or upload content (e.g. what Claude wrote in a chat), and it lands on the calendar,
 // one post per day, tagged with the brand it belongs to. Words are kept as written.
 export const ContentImport: React.FC<{
-  brands: string[];
+  brands: { id: string; label: string }[] | null; // null = no personal brand, everything is Company
   defaultBrand: string;
-  onAddBrand: (name: string) => void;
   onImport: (posts: ImportedPost[], brand: string, replace: boolean) => void;
   onClose: () => void;
-}> = ({ brands, defaultBrand, onAddBrand, onImport, onClose }) => {
+}> = ({ brands, defaultBrand, onImport, onClose }) => {
   const [text, setText] = useState('');
   const [brand, setBrand] = useState(defaultBrand);
-  const [newBrand, setNewBrand] = useState('');
   const [start, setStart] = useState(tomorrow());
   const [days, setDays] = useState(30);
   const [keepDays, setKeepDays] = useState(true);
@@ -105,19 +103,18 @@ export const ContentImport: React.FC<{
                 </label>
               </div>
 
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-on-surface-variant/70">Brand</p>
-                <div className="flex flex-wrap items-center gap-2">
-                  {brands.map(b => (
-                    <button key={b} type="button" onClick={() => setBrand(b)}
-                      className={cn("text-xs font-semibold px-3 py-1.5 rounded-full border transition-all",
-                        brand === b ? "bg-primary text-white border-primary" : "border-outline-variant/20 text-on-surface-variant/70 hover:text-on-surface")}>{b}</button>
-                  ))}
-                  <input id="import-new-brand" value={newBrand} onChange={e => setNewBrand(e.target.value)} placeholder="+ New brand"
-                    onKeyDown={e => { if (e.key === 'Enter' && newBrand.trim()) { onAddBrand(newBrand.trim()); setBrand(newBrand.trim()); setNewBrand(''); } }}
-                    className="text-xs px-3 py-1.5 rounded-full border border-dashed border-outline-variant/30 bg-transparent w-32 focus:outline-none focus:border-primary" />
+              {brands && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-on-surface-variant/70">Calendar</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {brands.map(b => (
+                      <button key={b.id} type="button" onClick={() => setBrand(b.id)}
+                        className={cn("text-xs font-semibold px-4 py-1.5 rounded-full border transition-all",
+                          brand === b.id ? "bg-primary text-white border-primary" : "border-outline-variant/20 text-on-surface-variant/70 hover:text-on-surface")}>{b.label}</button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="space-y-1.5"><span className="text-xs font-medium text-on-surface-variant/70">Start on</span>
@@ -148,7 +145,7 @@ export const ContentImport: React.FC<{
             </>
           ) : (
             <div className="space-y-3">
-              <p className="text-sm font-semibold text-on-surface">{preview.length} posts for {brand} · {span}</p>
+              <p className="text-sm font-semibold text-on-surface">{preview.length} posts{brands ? ` for ${brands.find(b => b.id === brand)?.label || brand}` : ''} · {span}</p>
               <div className="rounded-[14px] border border-outline-variant/10 divide-y divide-outline-variant/10 max-h-[45vh] overflow-y-auto">
                 {preview.map((p, i) => (
                   <div key={i} className="flex items-center gap-3 px-4 py-2.5 text-sm">
@@ -160,7 +157,7 @@ export const ContentImport: React.FC<{
               </div>
               <label className="flex items-center gap-2 text-sm text-on-surface cursor-pointer">
                 <input type="checkbox" checked={replace} onChange={e => setReplace(e.target.checked)} />
-                Replace {brand}'s existing posts on these dates
+                Replace existing {brands ? `${brands.find(b => b.id === brand)?.label} ` : ''}posts on these dates
               </label>
             </div>
           )}

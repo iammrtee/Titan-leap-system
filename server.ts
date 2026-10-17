@@ -151,6 +151,74 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
     res.json({ spent: +(await getAiSpend()).toFixed(4), budget: aiBudget(), month: spendMonth() });
   });
 
+  // ── Content calendar, saved per user and per brand ('company' | 'personal') ──
+  // Needs supabase-schema.sql section 17 (owner + brand columns, user_prefs table).
+  // The client keeps localStorage as a fallback when these calls fail.
+  const calRow = (r: any) => ({
+    id: r.id, day: r.day, month: r.month, year: r.year, platform: r.platform, title: r.title,
+    description: r.description, status: r.status, type: r.type, time: r.time,
+    link: r.link || undefined, tags: r.tags || undefined, brand: r.brand === 'personal' ? 'personal' : 'company',
+  });
+  app.get("/api/calendar", requireUser, async (req, res) => {
+    const owner = String((req as any).user?.email || '').toLowerCase();
+    try {
+      const { data, error } = await supabase.from('calendar_items').select('*').eq('owner', owner).limit(5000);
+      if (error) return res.status(503).json({ error: error.message, needsSetup: /owner|brand|column|relation/i.test(error.message) });
+      let rows = data || [];
+      let migrated = false;
+      // First load after the switch: adopt the old shared calendar so nothing is lost.
+      if (!rows.length) {
+        const legacy = await supabase.from('calendar_items').select('*').is('owner', null).limit(5000);
+        if (!legacy.error && legacy.data?.length) { rows = legacy.data; migrated = true; }
+      }
+      res.json({ items: rows.map(calRow), migrated });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || 'Could not load the calendar' });
+    }
+  });
+  app.put("/api/calendar", requireUser, async (req, res) => {
+    const owner = String((req as any).user?.email || '').toLowerCase();
+    const items: any[] = Array.isArray(req.body?.items) ? req.body.items.slice(0, 5000) : [];
+    try {
+      const now = new Date().toISOString();
+      const rows = items.map(it => ({
+        id: String(it.id).slice(0, 120), profile_id: 'default', owner,
+        brand: it.brand === 'personal' ? 'personal' : 'company',
+        day: Number(it.day), month: Number(it.month), year: Number(it.year),
+        platform: String(it.platform || 'Instagram'), title: it.title ?? null, description: it.description ?? null,
+        status: it.status || 'draft', type: it.type || 'post', time: it.time ?? null,
+        link: it.link ?? null, tags: it.tags ?? null, updated_at: now,
+      }));
+      for (let i = 0; i < rows.length; i += 200) {
+        const { error } = await supabase.from('calendar_items').upsert(rows.slice(i, i + 200), { onConflict: 'id' });
+        if (error) return res.status(503).json({ error: error.message, needsSetup: /owner|brand|column|relation/i.test(error.message) });
+      }
+      // Anything of this user's that is no longer in the calendar was deleted or cleared.
+      const { data: existing } = await supabase.from('calendar_items').select('id').eq('owner', owner).limit(10000);
+      const keep = new Set(rows.map(r => r.id));
+      const gone = (existing || []).map((r: any) => r.id).filter((id: string) => !keep.has(id));
+      for (let i = 0; i < gone.length; i += 200) await supabase.from('calendar_items').delete().eq('owner', owner).in('id', gone.slice(i, i + 200));
+      // Legacy shared rows we adopted are now owned copies; drop the unowned originals.
+      if (req.body?.migrated) await supabase.from('calendar_items').delete().is('owner', null);
+      res.json({ saved: rows.length, removed: gone.length });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || 'Could not save the calendar' });
+    }
+  });
+  // Personal brand is opt-in per user.
+  app.get("/api/prefs", requireUser, async (req, res) => {
+    const email = String((req as any).user?.email || '').toLowerCase();
+    const { data, error } = await supabase.from('user_prefs').select('personal_brand').eq('email', email).maybeSingle();
+    if (error) return res.status(503).json({ error: error.message });
+    res.json({ personalBrand: !!data?.personal_brand });
+  });
+  app.put("/api/prefs", requireUser, async (req, res) => {
+    const email = String((req as any).user?.email || '').toLowerCase();
+    const { error } = await supabase.from('user_prefs').upsert({ email, personal_brand: !!req.body?.personalBrand, updated_at: new Date().toISOString() }, { onConflict: 'email' });
+    if (error) return res.status(503).json({ error: error.message });
+    res.json({ ok: true });
+  });
+
   app.post("/api/ai/claude", requireUser, async (req, res) => {
     try {
       const { prompt, systemPrompt, temperature, useWebSearch, budgeted } = req.body;

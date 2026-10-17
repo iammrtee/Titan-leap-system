@@ -204,3 +204,14 @@ CREATE TABLE IF NOT EXISTS ai_spend (
   usd NUMERIC NOT NULL DEFAULT 0,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- 17. Content calendar per user and per brand, and the personal-brand opt-in.
+ALTER TABLE calendar_items ADD COLUMN IF NOT EXISTS owner TEXT;
+ALTER TABLE calendar_items ADD COLUMN IF NOT EXISTS brand TEXT DEFAULT 'company';
+CREATE INDEX IF NOT EXISTS idx_calendar_items_owner ON calendar_items(owner);
+CREATE TABLE IF NOT EXISTS user_prefs (
+  email TEXT PRIMARY KEY,
+  personal_brand BOOLEAN DEFAULT FALSE,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE user_prefs DISABLE ROW LEVEL SECURITY;
