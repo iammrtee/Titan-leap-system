@@ -260,7 +260,7 @@ export function LeakReportPanel({ formData, contentAudit, ensureContentAudit, re
               onSave={box => saveMark(editing, box)}
             />
           )}
-          <iframe title="Customer Leak Audit preview" srcDoc={html} className="w-full rounded-xl bg-white" style={{ height: '75vh', border: 0 }} />
+          <iframe title="Customer Leak Audit preview" sandbox="allow-same-origin" srcDoc={html} className="w-full rounded-xl bg-white" style={{ height: '75vh', border: 0 }} />
         </div>
       )}
     </div>
