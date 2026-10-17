@@ -44,6 +44,7 @@ if (ALLOWED_EMAILS.length === 0) {
 
 // Middleware: require a valid Supabase session token for the SPA's own logged-in user,
 // and require that user's email to be on the ALLOWED_EMAILS allowlist.
+const teamSynced = new Set<string>();
 const requireUser = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers['authorization'] || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -64,6 +65,12 @@ const requireUser = async (req: express.Request, res: express.Response, next: ex
     }
 
     (req as any).user = data.user;
+    // Database policies let a signed-in browser in only if its email is in app_users; add it
+    // on the user's first API call so locking the database never locks the team out.
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY && !teamSynced.has(email)) {
+      teamSynced.add(email);
+      supabase.from('app_users').upsert({ email }, { onConflict: 'email' }).then(({ error }) => { if (error) teamSynced.delete(email); });
+    }
     return next();
   } catch (err) {
     console.error('[Auth] Failed to verify session token:', err);
