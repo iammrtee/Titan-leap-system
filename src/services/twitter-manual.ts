@@ -3,15 +3,11 @@ import crypto from 'crypto';
 
 export const twitterManualRouter = express.Router();
 
-// Hardcoded credentials as requested
-const API_KEY = "WAQZG0xnrBo3TPCadyDsqEaZu";
-const API_SECRET = "LYn09g4lqWb89b2mMJhNoqvZ4RMGHeH70DnqXvOE24ibCUzX80";
-const ACCESS_TOKEN = "1376428684761034758-K3EfTeC2z2dZJBoHbQ5Kl0r0BpnFtI";
-const ACCESS_TOKEN_SECRET = "BiADnqU2ueo7J0oWohVISa6xgNbB887qo3dh4hZK7gDZy";
-
-// OAuth 2.0 Credentials
-const CLIENT_ID = "UGZTVEFjMURxcmtwak9WdDYtVFo6MTpjaQ";
-const CLIENT_SECRET = "5H5Us6hffUo79S20Y0E0ap39ELWBMWESNRL7mRTd9JfL4ZnJFy";
+// OAuth 1.0a keys for the legacy one-account poster. Set in the server environment only.
+const API_KEY = process.env.TWITTER_API_KEY || '';
+const API_SECRET = process.env.TWITTER_API_SECRET || '';
+const ACCESS_TOKEN = process.env.TWITTER_ACCESS_TOKEN || '';
+const ACCESS_TOKEN_SECRET = process.env.TWITTER_ACCESS_TOKEN_SECRET || '';
 
 function percentEncode(str: string) {
   return encodeURIComponent(str).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
@@ -48,6 +44,9 @@ function generateOAuth1Header(method: string, url: string) {
 }
 
 twitterManualRouter.post('/post', async (req, res) => {
+  if (!API_KEY || !API_SECRET || !ACCESS_TOKEN || !ACCESS_TOKEN_SECRET) {
+    return res.status(503).json({ success: false, error: 'X posting keys are not set. Use Connected Accounts → X instead.' });
+  }
   try {
     const { text, mediaBase64 } = req.body;
     let mediaIds: string[] = [];

@@ -74,12 +74,25 @@ const requireUser = async (req: express.Request, res: express.Response, next: ex
 // Middleware: require x-webhook-secret header for external webhooks
 const requireWebhookAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (!WEBHOOK_SECRET) {
-    console.warn('[Auth] WEBHOOK_SECRET not set â webhook endpoints are unprotected. Set it in your environment.');
-    return next();
+    // Fail closed: without a secret anyone could write leads and sales into the database.
+    return res.status(503).json({ error: 'Webhook disabled: set WEBHOOK_SECRET in the server environment' });
   }
   const secret = req.headers['x-webhook-secret'];
   if (secret === WEBHOOK_SECRET) return next();
   res.status(401).json({ error: 'Invalid webhook secret' });
+};
+
+// Blocks server-side fetches of user-supplied URLs that point at localhost or private networks.
+const isPublicHttpUrl = (raw: string) => {
+  try {
+    const u = new URL(raw);
+    if (!/^https?:$/.test(u.protocol)) return false;
+    const h = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.internal') || h.endsWith('.local') || h === '0.0.0.0') return false;
+    if (/^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.)/.test(h)) return false;
+    if (h === '::1' || /^f[cd][0-9a-f]{2}:/i.test(h) || /^fe80:/i.test(h)) return false;
+    return true;
+  } catch { return false; }
 };
 
 async function startServer() {
@@ -91,6 +104,20 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
   // Use DEFAULT_APP_PORT in AI Studio (3000), otherwise fallback to Cloud Run's PORT (8080)
   const PORT = Number(process.env.DEFAULT_APP_PORT || process.env.PORT || 3000);
 
+  // Database policies (schema section 18) only let team members in; keep that list equal to
+  // ALLOWED_EMAILS. Needs SUPABASE_SERVICE_ROLE_KEY; harmless if the table doesn't exist yet.
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY && ALLOWED_EMAILS.length) {
+    supabase.from('app_users').upsert(ALLOWED_EMAILS.map(email => ({ email })), { onConflict: 'email' })
+      .then(({ error }) => { if (error) console.warn('[Security] app_users sync skipped:', error.message); });
+  }
+  app.disable('x-powered-by');
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    next();
+  });
   app.use(express.json({ limit: '50mb' })); // Increased limit for base64 media
 
   // Connect-account OAuth. Starting a flow (/url) requires a signed-in user, so nobody else
@@ -112,7 +139,7 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
   (await import("./src/services/automations.ts")).registerAutomationRoutes(app, { supabase, requireUser });
 
   // Mount Twitter Manual Router
-  app.use("/api/twitter", twitterManualRouter);
+  app.use("/api/twitter", requireUser, twitterManualRouter);
 
   // API routes
   app.get("/api/health", (req, res) => {
@@ -147,6 +174,16 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
       ? `Monthly AI budget reached ($${spent.toFixed(2)} of $${aiBudget().toFixed(2)}). It resets on the 1st, or raise AI_MONTHLY_BUDGET_USD in Render.`
       : null;
   };
+  app.get("/api/system/security", requireUser, (_req, res) => {
+    res.json({
+      databaseAdminKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      webhookSecret: !!WEBHOOK_SECRET,
+      tokenVaultKey: !!process.env.TOKEN_VAULT_KEY,
+      allowedEmails: ALLOWED_EMAILS.length,
+      xKeysFromEnv: !!process.env.TWITTER_API_KEY,
+    });
+  });
+
   app.get("/api/ai/budget", requireUser, async (_req, res) => {
     res.json({ spent: +(await getAiSpend()).toFixed(4), budget: aiBudget(), month: spendMonth() });
   });
@@ -355,6 +392,7 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
 
   const socialDiscoveryCache = new Map<string, { data: Array<{ platform: string; url: string }>; expiresAt: number }>();
   async function fetchPageHtml(url: string, timeoutMs = 10000): Promise<string> {
+    if (!isPublicHttpUrl(url)) return '';
     try {
       const r = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36' },
@@ -414,6 +452,7 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
     try {
       const { url } = req.body;
       if (!url) return res.status(400).json({ error: "URL is required" });
+      if (!isPublicHttpUrl(String(url))) return res.status(400).json({ error: "Enter a public website address (https://…)" });
 
       // Fetch the page server-side (avoids CORS, can actually read content)
       let pageText = '';
@@ -1610,7 +1649,7 @@ The first character of your response must be "{" and the last must be "}".`;
       const cap = Number(process.env.CAPTION_DAILY_LIMIT || 40);
       if (used >= cap) return res.status(429).json({ error: `Daily limit of ${cap} AI captions reached. Try again tomorrow.` });
 
-      const urls: string[] = (Array.isArray(mediaUrls) ? mediaUrls : []).filter((x: any) => typeof x === 'string' && /^https?:\/\//i.test(x) && !/\.(mp4|mov|webm)(\?|$)/i.test(x)).slice(0, 3);
+      const urls: string[] = (Array.isArray(mediaUrls) ? mediaUrls : []).filter((x: any) => typeof x === 'string' && isPublicHttpUrl(x) && !/\.(mp4|mov|webm)(\?|$)/i.test(x)).slice(0, 3);
       const hasVideo = (Array.isArray(mediaUrls) ? mediaUrls : []).some((x: any) => /\.(mp4|mov|webm)(\?|$)/i.test(String(x)));
       const images: { mime: string; data: string }[] = [];
       for (const url of urls) {
@@ -2022,15 +2061,6 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     } catch (err) {
       console.error("[n8n Webhook Sales] Error:", err);
       res.status(500).json({ success: false, error: "Failed to process sale" });
-    }
-  });
-
-  app.get("/api/system/export-text", (req, res) => {
-    const filePath = path.join(process.cwd(), 'public', 'codebase.txt');
-    if (fs.existsSync(filePath)) {
-      res.download(filePath, "titanleap-codebase.txt");
-    } else {
-      res.status(404).send("Codebase text file not generated yet.");
     }
   });
 

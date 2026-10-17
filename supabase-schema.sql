@@ -215,3 +215,30 @@ CREATE TABLE IF NOT EXISTS user_prefs (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 ALTER TABLE user_prefs DISABLE ROW LEVEL SECURITY;
+
+-- 18. SECURITY: lock the database. Run ONLY after SUPABASE_SERVICE_ROLE_KEY is set in Render
+-- (the server then bypasses these rules; the public key in the website can no longer read tables).
+CREATE TABLE IF NOT EXISTS app_users (email TEXT PRIMARY KEY); -- filled from ALLOWED_EMAILS by the server
+CREATE OR REPLACE FUNCTION public.is_team() RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (SELECT 1 FROM public.app_users WHERE email = lower(auth.jwt() ->> 'email'));
+$$;
+-- Turn row level security on for every table in the public schema.
+DO $$ DECLARE t record; BEGIN
+  FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t.tablename);
+  END LOOP;
+END $$;
+-- The few tables the browser uses directly: signed-in team members only.
+DO $$ DECLARE t text; BEGIN
+  FOREACH t IN ARRAY ARRAY['posts', 'leads', 'sales_transactions', 'production_tasks'] LOOP
+    IF to_regclass('public.' || t) IS NOT NULL THEN
+      EXECUTE format('DROP POLICY IF EXISTS team_all ON public.%I', t);
+      EXECUTE format('CREATE POLICY team_all ON public.%I FOR ALL TO authenticated USING (public.is_team()) WITH CHECK (public.is_team())', t);
+    END IF;
+  END LOOP;
+END $$;
+-- Media uploads (Auto Post): team only. Reading stays public so platforms can fetch the files.
+DROP POLICY IF EXISTS team_upload_media ON storage.objects;
+CREATE POLICY team_upload_media ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'media' AND public.is_team());

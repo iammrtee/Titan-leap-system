@@ -207,19 +207,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       }
 
       try {
-        // 1. Load Credentials
-        const { data: credsData } = await supabase
-          .from('user_settings')
-          .select('*')
-          .eq('profile_id', profileId)
-          .single();
-          
-        if (credsData && credsData.twitter_username) {
-          setTwitterCredentials({
-            username: credsData.twitter_username,
-            password: credsData.twitter_password || ''
-          });
-        }
+        // Account credentials never load into the browser; connected accounts are handled server-side.
 
         // 2. Load Latest Draft
         const { data: draftData } = await supabase
@@ -428,7 +416,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
 
         const response = await fetch('/api/twitter/post', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(await getAuthHeader()) },
           body: JSON.stringify({
             text: postScript,
             mediaBase64
