@@ -1256,10 +1256,10 @@ The first character of your response must be "{" and the last must be "}".`;
   const AUDIT_MODEL = 'claude-sonnet-5-5';
   // Research text calls: free Gemini (with Google Search) first when GEMINI_API_KEY is set,
   // then Claude. RESEARCH_PROVIDER=claude forces Claude.
-  async function researchText(prompt: string, opts: { search: boolean; maxSearches?: number; claudeModel?: string; budgeted?: boolean }) {
+  async function researchText(prompt: string, opts: { search: boolean; maxSearches?: number; claudeModel?: string; budgeted?: boolean; claudeOnly?: boolean }) {
     const budgeted = opts.budgeted !== false;
     const gemKey = process.env.GEMINI_API_KEY;
-    if (gemKey && process.env.RESEARCH_PROVIDER !== 'claude') {
+    if (gemKey && !opts.claudeOnly && process.env.RESEARCH_PROVIDER !== 'claude') {
       try {
         const { GoogleGenAI } = await import("@google/genai");
         const ai = new GoogleGenAI({ apiKey: gemKey });
@@ -1424,8 +1424,8 @@ Limits: 5-8 winningPatterns, 8-12 provenHooks, 4-6 topicsThatWin, 3-5 formatsTha
     }
   });
 
-  // Write one post out in full. Cheapest route that still writes well: free Gemini first
-  // (GEMINI_API_KEY), then Claude Haiku (WRITE_POST_MODEL to override). ~0.3c on Haiku.
+  // Write one post out in full on Claude Sonnet (owner's choice, ~2-3c a post).
+  // WRITE_POST_MODEL overrides, e.g. claude-haiku-4-5-20251001 for ~0.3c.
   const writePostCache = new Map<string, { text: string; expiresAt: number }>();
   app.post("/api/ai/write-post", requireUser, async (req, res) => {
     try {
@@ -1434,7 +1434,7 @@ Limits: 5-8 winningPatterns, 8-12 provenHooks, 4-6 topicsThatWin, 3-5 formatsTha
       const key = crypto.createHash('sha256').update(prompt).digest('hex');
       const hit = writePostCache.get(key);
       if (hit && hit.expiresAt > Date.now() && !req.body?.fresh) return res.json({ text: hit.text });
-      const text = await researchText(prompt, { search: false, claudeModel: process.env.WRITE_POST_MODEL || 'claude-haiku-4-5-20251001' });
+      const text = await researchText(prompt, { search: false, claudeOnly: true, claudeModel: process.env.WRITE_POST_MODEL || 'claude-sonnet-5-5' });
       writePostCache.set(key, { text, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
       if (writePostCache.size > 300) writePostCache.delete(writePostCache.keys().next().value as string);
       res.json({ text });
