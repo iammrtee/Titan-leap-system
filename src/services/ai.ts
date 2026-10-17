@@ -1285,8 +1285,14 @@ Return ONLY JSON:
   "notes": "1 line of production notes (visual style, b-roll), or empty"
 }
 Include only the array that matches "kind" (others empty).`;
-  const res = await unifiedGenerateContent({ prompt, responseMimeType: "application/json", budgeted: true });
-  const out = parseJSON(res.text, null);
+  const r = await fetch('/api/ai/write-post', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await getAuthHeader()) },
+    body: JSON.stringify({ prompt, fresh: !!day?.full }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || 'Could not write the full post');
+  const out = parseJSON(data.text, null);
   if (!out) throw new Error('Could not write the full post. Try again.');
   return out;
 };
