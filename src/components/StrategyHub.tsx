@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
+import { Maximize2, Minimize2 } from 'lucide-react';
 import { Anchor, Network, LineChart, Download, Clapperboard, Info, Bolt, Search, Users, TrendingUp, Calendar, Upload, Clock, CheckCircle2, List, LayoutGrid, Filter, Plus, ChevronRight, Share2, MoreHorizontal, Instagram, Twitter, Linkedin, Youtube, Facebook, Play, Zap, Rocket, Loader2, Sparkles, AlertCircle, FileText, ExternalLink, MoreVertical, Target, RefreshCw, X, Terminal, Trash2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { generateContentScripts, generate30DayPlan, refinePlan, generateNotionContent, generateCalendarFromBlueprint, researchCompetitors, getAIBudget, smartFillForm, writeFullPost, fullPostToText, type CompetitorIntel } from '@/src/services/ai';
@@ -879,7 +880,9 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   };
 
   // Click a post → popup with everything. Clear empties the calendar (with Undo).
-  const [viewItem, setViewItem] = useState<CalendarItem | null>(null);
+  const [viewItem, setViewItemState] = useState<CalendarItem | null>(null);
+  const [popupMax, setPopupMax] = useState(false);
+  const setViewItem = (it: CalendarItem | null) => { setViewItemState(it); if (!it) setPopupMax(false); };
   const [confirmClear, setConfirmClear] = useState(false);
   const handleClearCalendar = () => {
     if (!confirmClear) { setConfirmClear(true); setTimeout(() => setConfirmClear(false), 3500); return; }
@@ -1380,8 +1383,9 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     const text = planFull ? fullPostToText(planFull) : String(item.description || '');
     const sections = text.split(/\n(?=(?:HOOK|BODY|CAPTION|CTA|SLIDE \d+|\[\d|OTHER PLATFORMS|NOTES|Modeled on)\b)/);
     return createPortal(
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setViewItem(null)}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-2xl max-h-[88vh] flex flex-col bg-surface-container-lowest rounded-[22px] shadow-[0_8px_20px_rgba(0,0,0,0.08),0_20px_60px_rgba(0,0,0,0.16)] overflow-hidden">
+      <div className={cn("fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm", popupMax ? "p-2 md:p-4" : "p-4")} onClick={() => setViewItem(null)}>
+        <div onClick={e => e.stopPropagation()} className={cn("w-full flex flex-col bg-surface-container-lowest shadow-[0_8px_20px_rgba(0,0,0,0.08),0_20px_60px_rgba(0,0,0,0.16)] overflow-hidden transition-all duration-300",
+          popupMax ? "h-full max-w-none rounded-[18px]" : "max-w-2xl max-h-[88vh] rounded-[22px]")}>
           <div className="flex items-start justify-between gap-4 p-6 md:p-8 pb-4">
             <div className="space-y-1.5 min-w-0">
               <p className="text-xs font-medium text-on-surface-variant/60">
@@ -1389,9 +1393,15 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
               </p>
               <h3 className="text-xl md:text-2xl font-semibold tracking-tight text-on-surface leading-snug">{item.title}</h3>
             </div>
-            <button onClick={() => setViewItem(null)} className="shrink-0 w-9 h-9 rounded-full bg-surface-container-highest/60 flex items-center justify-center text-on-surface-variant hover:text-on-surface"><X size={16} /></button>
+            <div className="shrink-0 flex items-center gap-2">
+              <button onClick={() => setPopupMax(m => !m)} title={popupMax ? 'Exit full screen' : 'Full screen'} aria-label={popupMax ? 'Exit full screen' : 'Full screen'}
+                className="w-9 h-9 rounded-full bg-surface-container-highest/60 flex items-center justify-center text-on-surface-variant hover:text-on-surface">
+                {popupMax ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              </button>
+              <button onClick={() => setViewItem(null)} aria-label="Close" className="w-9 h-9 rounded-full bg-surface-container-highest/60 flex items-center justify-center text-on-surface-variant hover:text-on-surface"><X size={16} /></button>
+            </div>
           </div>
-          <div className="px-6 md:px-8 pb-6 overflow-y-auto space-y-4">
+          <div className={cn("px-6 md:px-8 pb-6 overflow-y-auto space-y-4 flex-1", popupMax && "md:px-16 lg:px-24 [&_p]:text-base")}>
             {text ? sections.map((sec, i) => {
               const head = sec.match(/^(HOOK|BODY|CAPTION|CTA|OTHER PLATFORMS|NOTES|Modeled on|SLIDE \d+)\s*:?\s*/);
               return (
