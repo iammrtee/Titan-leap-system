@@ -994,6 +994,33 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       refreshBudget();
     }
   };
+  // Expand any calendar post (imported or typed) into the full thing, using its hook/body/
+  // caption/CTA as the brief. Saved back onto the post.
+  const [expandingId, setExpandingId] = useState<string | null>(null);
+  const handleExpandItem = async (item: CalendarItem) => {
+    if (expandingId) return;
+    const part = (label: string) => {
+      const m = String(item.description || '').match(new RegExp(`${label}:\\s*([\\s\\S]*?)(?=\\n(?:HOOK|BODY|CAPTION|CTA|OTHER PLATFORMS|NOTES|Modeled on)\\b|$)`));
+      return m ? m[1].trim() : '';
+    };
+    const day = {
+      platform: item.platform, format: item.type === 'video' ? 'Video' : item.type === 'article' ? 'Article' : 'Post',
+      hook: part('HOOK') || item.title, message: item.title, body: part('BODY') || item.description,
+      caption: part('CAPTION'), cta: part('CTA'),
+    };
+    setExpandingId(item.id);
+    try {
+      const full = await writeFullPost(day, { engine: { cta: day.cta || thirtyDayPlan?.engine?.cta } }, businessContext());
+      const text = fullPostToText(full);
+      setCalendarItems(prev => prev.map(it => it.id === item.id ? { ...it, description: text } : it));
+      toast.success('Post expanded');
+    } catch (err: any) {
+      toast.error(err.message || 'Could not expand the post');
+    } finally {
+      setExpandingId(null);
+      refreshBudget();
+    }
+  };
   const to24h = (t?: string) => {
     const m = String(t || '').match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
     if (!m) return '';
@@ -1413,13 +1440,17 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
             }) : <p className="text-sm text-on-surface-variant/60">No content yet.</p>}
           </div>
           <div className="flex flex-wrap items-center gap-2 p-4 md:px-8 border-t border-outline-variant/10 bg-surface-container-low/50">
-            {canWrite && (
-              <button disabled={writingDay !== null} onClick={() => handleWriteFull(planIdx)}
-                className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-full text-xs font-semibold disabled:opacity-50">
-                {writingDay === planIdx ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-                {writingDay === planIdx ? 'Writing…' : thirtyDayPlan.calendar[planIdx].full ? 'Rewrite full post' : 'Write full post'}
-              </button>
-            )}
+            {(() => {
+              const busy = canWrite ? writingDay === planIdx : expandingId === item.id;
+              const done = canWrite ? !!thirtyDayPlan.calendar[planIdx].full : /^(SLIDE 1|\[0|1\/ )/m.test(item.description || '');
+              return (
+                <button disabled={writingDay !== null || !!expandingId} onClick={() => canWrite ? handleWriteFull(planIdx) : handleExpandItem(item)}
+                  className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-full text-xs font-semibold disabled:opacity-50">
+                  {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  {busy ? 'Expanding…' : done ? 'Expand again' : 'Expand post'}
+                </button>
+              );
+            })()}
             <button onClick={() => { navigator.clipboard?.writeText(text).then(() => toast.success('Copied')).catch(() => {}); }}
               className="px-4 py-2.5 rounded-full text-xs font-semibold bg-surface-container-highest/60 text-on-surface hover:bg-surface-container-highest">Copy</button>
             <button onClick={() => { handleSendToProduction(item); }}
