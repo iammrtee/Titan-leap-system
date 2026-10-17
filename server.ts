@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import express from "express";
 import "dotenv/config";
 import { createServer as createViteServer } from "vite";
@@ -1420,6 +1421,25 @@ Limits: 5-8 winningPatterns, 8-12 provenHooks, 4-6 topicsThatWin, 3-5 formatsTha
     } catch (e: any) {
       console.error("[CompetitorIntel] failed:", e?.message || e);
       res.status(500).json({ error: e?.message || "Competitor research failed" });
+    }
+  });
+
+  // Write one post out in full. Cheapest route that still writes well: free Gemini first
+  // (GEMINI_API_KEY), then Claude Haiku (WRITE_POST_MODEL to override). ~0.3c on Haiku.
+  const writePostCache = new Map<string, { text: string; expiresAt: number }>();
+  app.post("/api/ai/write-post", requireUser, async (req, res) => {
+    try {
+      const prompt = String(req.body?.prompt || '').slice(0, 20000);
+      if (!prompt) return res.status(400).json({ error: 'Nothing to write' });
+      const key = crypto.createHash('sha256').update(prompt).digest('hex');
+      const hit = writePostCache.get(key);
+      if (hit && hit.expiresAt > Date.now() && !req.body?.fresh) return res.json({ text: hit.text });
+      const text = await researchText(prompt, { search: false, claudeModel: process.env.WRITE_POST_MODEL || 'claude-haiku-4-5-20251001' });
+      writePostCache.set(key, { text, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
+      if (writePostCache.size > 300) writePostCache.delete(writePostCache.keys().next().value as string);
+      res.json({ text });
+    } catch (e: any) {
+      res.status(e?.message?.includes('budget') ? 402 : 500).json({ error: e?.message || 'Could not write the post' });
     }
   });
 
