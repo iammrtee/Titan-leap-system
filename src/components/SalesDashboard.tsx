@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, TrendingUp, DollarSign, Target, ArrowUpRight, MoreHorizontal, Rocket, Zap, CheckCircle2, AlertCircle, LayoutGrid, List, Filter, Plus, ChevronRight, Share2, Clock, Upload, Instagram, Twitter, Linkedin, Youtube, Play, FileText, BarChart3, Sparkles, PieChart, RefreshCw, Search, X } from 'lucide-react';
+import { Users, TrendingUp, DollarSign, Target, ArrowUpRight, MoreHorizontal, Rocket, Zap, CheckCircle2, AlertCircle, LayoutGrid, List, Filter, Plus, ChevronRight, Share2, Clock, Upload, Instagram, Twitter, Linkedin, Youtube, Play, FileText, BarChart3, Sparkles, PieChart, RefreshCw, Search, X, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { supabase } from '@/src/services/supabase';
 import { toast } from 'sonner';
@@ -42,6 +42,14 @@ export const SalesDashboard: React.FC = () => {
   const [totalConverted, setTotalConverted] = useState(0);
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  // Phone numbers are hidden by default (privacy on screen shares); the eye shows them.
+  const [showPhones, setShowPhones] = useState(false);
+  const maskPhone = (p?: string) => {
+    if (!p) return '';
+    if (showPhones) return p;
+    const digits = p.replace(/\D/g, '');
+    return `•••• ••• ${digits.slice(-2) ? '••' + digits.slice(-2) : '••••'}`;
+  };
   const [importing, setImporting] = useState(false);
 
   // Import a prospect CSV into the leads table. Existing emails are skipped, so re-importing is safe.
@@ -234,6 +242,11 @@ export const SalesDashboard: React.FC = () => {
               <span>{importing ? 'Importing…' : 'Import CSV'}</span>
               <input type="file" accept=".csv,text/csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) importLeadsCsv(f); e.target.value = ''; }} />
             </label>
+            <button onClick={() => setShowPhones(v => !v)} title={showPhones ? 'Hide phone numbers' : 'Show phone numbers'} aria-label={showPhones ? 'Hide phone numbers' : 'Show phone numbers'}
+              className={cn("w-10 h-10 rounded-xl flex items-center justify-center border transition-all",
+                showPhones ? "bg-primary text-white border-primary" : "bg-surface-container-lowest text-on-surface-variant border-outline-variant/20 hover:text-on-surface")}>
+              {showPhones ? <Eye size={16} /> : <EyeOff size={16} />}
+            </button>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={14} />
               <input 
@@ -257,12 +270,11 @@ export const SalesDashboard: React.FC = () => {
               <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Status</th>
               <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Product</th>
               <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Date</th>
-              <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant/10">
             {leads.map((lead) => (
-              <tr key={lead.id} className="hover:bg-surface-container-lowest transition-colors group">
+              <tr key={lead.id} onClick={() => setSelectedLead(lead)} className="hover:bg-surface-container-lowest transition-colors group cursor-pointer">
                 <td className="px-8 py-4">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-[10px] font-black text-on-surface-variant">
@@ -279,10 +291,12 @@ export const SalesDashboard: React.FC = () => {
                     const d = parseLeadNotes(lead.score_reason);
                     return (
                       <div className="flex flex-col gap-0.5">
-                        {lead.phone && <a href={`tel:${lead.phone}`} className="hover:text-primary">{lead.phone}</a>}
+                        {lead.phone && (showPhones
+                          ? <a href={`tel:${lead.phone}`} onClick={e => e.stopPropagation()} className="hover:text-primary">{lead.phone}</a>
+                          : <span className="tracking-wider text-on-surface-variant/60">{maskPhone(lead.phone)}</span>)}
                         <div className="flex gap-2">
-                          {d.instagram && <a href={d.instagram} target="_blank" rel="noreferrer" className="text-primary hover:underline">Instagram</a>}
-                          {d.website && <a href={d.website} target="_blank" rel="noreferrer" className="text-primary hover:underline">Website</a>}
+                          {d.instagram && <a href={d.instagram} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:underline">Instagram</a>}
+                          {d.website && <a href={d.website} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:underline">Website</a>}
                         </div>
                       </div>
                     );
@@ -304,14 +318,6 @@ export const SalesDashboard: React.FC = () => {
                 </td>
                 <td className="px-8 py-4 text-xs font-medium text-on-surface-variant">
                   {new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                </td>
-                <td className="px-8 py-4 text-right">
-                  <button 
-                    onClick={() => setSelectedLead(lead)}
-                    className="text-on-surface-variant/40 hover:text-on-surface transition-colors"
-                  >
-                    <MoreHorizontal size={18} />
-                  </button>
                 </td>
               </tr>
             ))}
@@ -368,7 +374,14 @@ export const SalesDashboard: React.FC = () => {
                   </div>
                   <div className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/10">
                     <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-1">Phone</p>
-                    <p className="text-sm font-medium text-on-surface">{selectedLead.phone || 'N/A'}</p>
+                    <p className="text-sm font-medium text-on-surface flex items-center gap-2">
+                      {selectedLead.phone ? (showPhones ? <a href={`tel:${selectedLead.phone}`} className="text-primary hover:underline">{selectedLead.phone}</a> : <span className="tracking-wider">{maskPhone(selectedLead.phone)}</span>) : 'N/A'}
+                      {selectedLead.phone && (
+                        <button onClick={() => setShowPhones(v => !v)} className="text-on-surface-variant/60 hover:text-primary" aria-label={showPhones ? 'Hide phone numbers' : 'Show phone numbers'}>
+                          {showPhones ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                      )}
+                    </p>
                   </div>
                   <div className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/10">
                     <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-1">Source</p>
