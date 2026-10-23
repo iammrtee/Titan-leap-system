@@ -2309,6 +2309,21 @@ Exactly 3 leaks, exactly 5 checks and exactly 2 channels.`;
     twitter: ['twitter_token', 'twitter_refresh_token'],
     youtube: ['youtube_token', 'youtube_refresh_token', 'youtube_channel'],
   };
+  // Clients (workspaces): each is a profile_id in user_settings with its own connected accounts.
+  app.get("/api/clients", requireUser, async (_req, res) => {
+    const { data, error } = await supabase.from('user_settings').select('profile_id').limit(500);
+    if (error) return res.status(500).json({ error: error.message });
+    const ids = [...new Set(['default', ...(data || []).map((r: any) => r.profile_id).filter((p: string) => p && !p.startsWith('pref:'))])];
+    res.json({ clients: ids });
+  });
+  app.post("/api/clients", requireUser, async (req, res) => {
+    const id = String(req.body?.id || '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 40);
+    if (!id || id === 'default') return res.status(400).json({ error: 'Enter a client name' });
+    const { error } = await supabase.from('user_settings').upsert({ profile_id: id }, { onConflict: 'profile_id', ignoreDuplicates: true });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ id });
+  });
+
   app.post("/api/accounts/:platform/disconnect", requireUser, async (req, res) => {
     const fields = DISCONNECT_FIELDS[req.params.platform];
     if (!fields) return res.status(400).json({ error: 'Unknown platform' });
