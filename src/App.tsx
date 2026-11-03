@@ -18,6 +18,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Instagram, Twitter, Linkedin, Youtube, Github, Globe, Plus, Loader2 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { cn } from './lib/utils';
+import { useClientId } from './lib/clientProfile';
 import { supabase } from './lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
@@ -89,6 +90,7 @@ export default function App() {
     setActiveView('strategy');
   };
 
+  const clientId = useClientId();
   const renderView = () => {
     switch (activeView) {
       case 'dashboard':
@@ -96,7 +98,8 @@ export default function App() {
       case 'audit':
         return <AuditView onStartStrategy={handleStartStrategy} onViewStrategy={handleViewStrategy} />;
       case 'strategy':
-        return <StrategyHub auditData={auditData} forceRegenerateTimestamp={forceRegenerateTimestamp} />;
+        // Remount per client so each client's plan, competitors and calendar load cleanly.
+        return <StrategyHub key={clientId} auditData={auditData} forceRegenerateTimestamp={forceRegenerateTimestamp} />;
       case 'content':
         return <ContentManager />;
       case 'ads':
@@ -104,7 +107,7 @@ export default function App() {
       case 'sales':
         return <SalesDashboard />;
       case 'funnel':
-        return <FunnelHub />;
+        return <FunnelHub key={clientId} />;
       case 'emails':
         return <EmailCampaigns />;
       case 'ai':

@@ -10,6 +10,8 @@ import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabas
 import { safeStorageName, toPostableJpeg } from '@/src/lib/postMedia';
 import localforage from 'localforage';
 import { ContentImport, type ImportedPost } from '@/src/components/ContentImport';
+import { ClientSwitcher } from '@/src/components/ClientSwitcher';
+import { useClientId, clientKey, clientLabel } from '@/src/lib/clientProfile';
 import { PlanStart, PlanCompetitors, OneIdea, PlanTabs, EMPTY_BRIEF, type PlanBrief } from '@/src/components/ClientEngine';
 
 type StrategyTab = 'competitor' | 'calendar' | 'plan';
@@ -22,13 +24,26 @@ interface CalendarItem {
   platform: 'TikTok' | 'LinkedIn' | 'Instagram' | 'YouTube' | 'Twitter';
   title: string;
   description: string;
-  status: 'scheduled' | 'published' | 'draft';
+  // Workflow: draft = needs design/video · ready = asset attached · approved · scheduled · published = posted
+  status: 'draft' | 'ready' | 'approved' | 'scheduled' | 'published';
   type: 'video' | 'article' | 'post';
   time: string;
   link?: string;
   tags?: string[];
   brand?: string;
+  client?: string; // profile id ('default' = TitanLeap)
+  media?: string[]; // attached design/video URLs
 }
+
+// The post's journey from idea to posted. Shown as a coloured dot/label everywhere.
+const STAGES: Record<CalendarItem['status'], { label: string; dot: string; chip: string }> = {
+  draft: { label: 'Needs design', dot: 'bg-slate-400', chip: 'bg-slate-100 text-slate-600 border-slate-200' },
+  ready: { label: 'Ready', dot: 'bg-sky-500', chip: 'bg-sky-50 text-sky-700 border-sky-200' },
+  approved: { label: 'Approved', dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  scheduled: { label: 'Scheduled', dot: 'bg-amber-500', chip: 'bg-amber-50 text-amber-700 border-amber-200' },
+  published: { label: 'Posted', dot: 'bg-violet-500', chip: 'bg-violet-50 text-violet-700 border-violet-200' },
+};
+const stageOf = (s?: string) => STAGES[(s as CalendarItem['status'])] || STAGES.draft;
 
 const today = new Date();
 const currentMonth = today.getMonth();
@@ -146,17 +161,20 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   const [refinementFeedback, setRefinementFeedback] = useState('');
   const [showRefineInput, setShowRefineInput] = useState(false);
   const [thirtyDayPlan, setThirtyDayPlan] = useState<any>(null);
+  // This view belongs to one client (App remounts it when the client changes).
+  const clientId = useClientId();
+  const clientOf = (it: { client?: string }) => it.client || 'default';
   // Competitor evidence the 30-day plan is built on (real top posts → proven patterns/hooks).
-  const [competitorInput, setCompetitorInput] = useState<string>(() => { try { return localStorage.getItem('titanleap_competitors') || ''; } catch { return ''; } });
-  const [competitorIntel, setCompetitorIntel] = useState<CompetitorIntel | null>(() => { try { return JSON.parse(localStorage.getItem('titanleap_competitor_intel') || 'null'); } catch { return null; } });
+  const [competitorInput, setCompetitorInput] = useState<string>(() => { try { return localStorage.getItem(clientKey('titanleap_competitors')) || ''; } catch { return ''; } });
+  const [competitorIntel, setCompetitorIntel] = useState<CompetitorIntel | null>(() => { try { return JSON.parse(localStorage.getItem(clientKey('titanleap_competitor_intel')) || 'null'); } catch { return null; } });
   const [isResearching, setIsResearching] = useState(false);
   const [openDay, setOpenDay] = useState<number | null>(0);
   const [planPlatforms, setPlanPlatforms] = useState<string[]>(() => {
-    try { const saved = JSON.parse(localStorage.getItem('titanleap_plan_platforms') || 'null'); if (Array.isArray(saved) && saved.length) return saved; } catch {}
+    try { const saved = JSON.parse(localStorage.getItem(clientKey('titanleap_plan_platforms')) || 'null'); if (Array.isArray(saved) && saved.length) return saved; } catch {}
     const p = String(auditData?.primaryPlatform || 'Instagram');
     return [/twitter|x\b/i.test(p) ? 'Twitter' : (['Instagram', 'TikTok', 'LinkedIn', 'YouTube', 'Facebook'].find(x => p.toLowerCase().includes(x.toLowerCase())) || 'Instagram')];
   });
-  const choosePlatforms = (p: string[]) => { setPlanPlatforms(p); try { localStorage.setItem('titanleap_plan_platforms', JSON.stringify(p)); } catch {} };
+  const choosePlatforms = (p: string[]) => { setPlanPlatforms(p); try { localStorage.setItem(clientKey('titanleap_plan_platforms'), JSON.stringify(p)); } catch {} };
   const [aiBudget, setAiBudget] = useState<{ spent: number; budget: number } | null>(null);
   const refreshBudget = () => { getAIBudget().then(b => b && setAiBudget(b)); };
   useEffect(() => { refreshBudget(); }, []);
@@ -649,7 +667,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     const statusMatch = filters.status.length === 0 || filters.status.includes(item.status);
     const typeMatch = filters.type.length === 0 || filters.type.includes(item.type);
     const brandMatch = !personalEnabled || activeBrand === 'all' || brandOf(item) === activeBrand;
-    return platformMatch && statusMatch && typeMatch && brandMatch;
+    return clientOf(item) === clientId && platformMatch && statusMatch && typeMatch && brandMatch;
   });
 
   const toggleFilter = (category: 'platform' | 'status' | 'type', value: string) => {
@@ -668,7 +686,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
 
   // Persistence: Load saved data on mount
   useEffect(() => {
-    const savedPlan = localStorage.getItem('titanleap_strategy_plan');
+    const savedPlan = localStorage.getItem(clientKey('titanleap_strategy_plan'));
     const savedCalendar = localStorage.getItem('titanleap_calendar_items');
     
     if (savedPlan) {
@@ -732,7 +750,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   // Persistence: Save data on change
   useEffect(() => {
     if (thirtyDayPlan && thirtyDayPlan.strategicSyncSummary) {
-      localStorage.setItem('titanleap_strategy_plan', JSON.stringify(thirtyDayPlan));
+      localStorage.setItem(clientKey('titanleap_strategy_plan'), JSON.stringify(thirtyDayPlan));
     }
   }, [thirtyDayPlan]);
 
@@ -861,6 +879,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
         day: selectedDate.day,
         month: selectedDate.month,
         year: selectedDate.year,
+        client: clientId,
       } as CalendarItem;
       setCalendarItems([...calendarItems, item]);
     }
@@ -887,7 +906,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   const handleClearCalendar = () => {
     if (!confirmClear) { setConfirmClear(true); setTimeout(() => setConfirmClear(false), 3500); return; }
     const before = calendarItems;
-    const keep = personalEnabled && activeBrand !== 'all' ? before.filter(it => brandOf(it) !== activeBrand) : [];
+    const keep = before.filter(it => clientOf(it) !== clientId || (personalEnabled && activeBrand !== 'all' && brandOf(it) !== activeBrand));
     setCalendarItems(keep);
     setConfirmClear(false);
     toast.success(`${personalEnabled && activeBrand !== 'all' ? `${BRAND_LABEL[activeBrand]} calendar` : 'Calendar'} cleared (${before.length - keep.length} posts)`, { action: { label: 'Undo', onClick: () => setCalendarItems(before) }, duration: 8000 });
@@ -901,11 +920,11 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       id: `imp-${Math.random().toString(36).slice(2, 10)}`,
       day: p.date.getDate(), month: p.date.getMonth(), year: p.date.getFullYear(),
       platform: p.platform as CalendarItem['platform'], title: p.title, description: p.description,
-      status: 'draft', type: p.type, time: p.time, tags: ['imported'], brand,
+      status: 'draft', type: p.type, time: p.time, tags: ['imported'], brand, client: clientId,
     }));
     const before = calendarItems;
     setCalendarItems(prev => [
-      ...prev.filter(it => !(replace && brandOf(it) === brand && dates.has(`${it.year}-${it.month}-${it.day}`))),
+      ...prev.filter(it => !(replace && clientOf(it) === clientId && brandOf(it) === brand && dates.has(`${it.year}-${it.month}-${it.day}`))),
       ...fresh,
     ]);
     if (personalEnabled && activeBrand !== 'all') setActiveBrand(brand);
@@ -1037,10 +1056,10 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   // A plan can come from the audit or from a quick brief (no audit needed).
   const [planSource, setPlanSource] = useState<'audit' | 'brief'>(() => (auditData ? 'audit' : 'brief'));
   const [brief, setBriefState] = useState<PlanBrief>(() => {
-    try { return { ...EMPTY_BRIEF, ...JSON.parse(localStorage.getItem('titanleap_plan_brief') || '{}') }; }
+    try { return { ...EMPTY_BRIEF, ...JSON.parse(localStorage.getItem(clientKey('titanleap_plan_brief')) || '{}') }; }
     catch { return { ...EMPTY_BRIEF }; }
   });
-  const setBrief = (b: PlanBrief) => { setBriefState(b); try { localStorage.setItem('titanleap_plan_brief', JSON.stringify(b)); } catch {} };
+  const setBrief = (b: PlanBrief) => { setBriefState(b); try { localStorage.setItem(clientKey('titanleap_plan_brief'), JSON.stringify(b)); } catch {} };
   const [smartFilling, setSmartFilling] = useState(false);
   const [showPlanStart, setShowPlanStart] = useState(false);
   useEffect(() => { if (!auditData && planSource === 'audit') setPlanSource('brief'); }, [auditData]);
@@ -1087,13 +1106,13 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       const ctx = businessContext();
       const intel = { ...(await researchCompetitors(list.slice(0, 5), ctx)), forBusiness: ctx.businessName || '' };
       setCompetitorIntel(intel);
-      try { localStorage.setItem('titanleap_competitor_intel', JSON.stringify(intel)); } catch {}
+      try { localStorage.setItem(clientKey('titanleap_competitor_intel'), JSON.stringify(intel)); } catch {}
       if (!list.length && intel.competitors?.length) {
         const filled = intel.competitors.map((c: any) => c.input).join('\n');
         setCompetitorInput(filled);
-        try { localStorage.setItem('titanleap_competitors', filled); } catch {}
+        try { localStorage.setItem(clientKey('titanleap_competitors'), filled); } catch {}
       } else {
-        try { localStorage.setItem('titanleap_competitors', competitorInput); } catch {}
+        try { localStorage.setItem(clientKey('titanleap_competitors'), competitorInput); } catch {}
       }
       const posts = intel.competitors.reduce((n: number, c: any) => n + (c.postsAnalyzed || 0), 0);
       if (!silent) toast.success('Competitor research done', { description: `${intel.competitors.length} competitors, ${posts} real posts analysed.` });
@@ -1228,12 +1247,13 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
         time: content.postTime || '09:00 AM',
         tags: ['ai-generated', 'strategy', content.pillar || ''],
         brand: syncBrand,
+        client: clientId,
       };
     });
 
     setCalendarItems(prev => {
       // Re-syncing replaces this brand's earlier plan posts instead of piling up duplicates.
-      const keep = prev.filter(item => !(item.id.startsWith('ai-') && brandOf(item) === syncBrand));
+      const keep = prev.filter(item => !(item.id.startsWith('ai-') && clientOf(item) === clientId && brandOf(item) === syncBrand));
       return [...keep, ...newItems];
     });
     if (personalEnabled && activeBrand !== 'all') setActiveBrand(syncBrand);
@@ -1313,7 +1333,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
             status: 'draft',
             type: item.type || 'post',
             time: item.time || '09:00 AM',
-            tags: item.tags || ['regen']
+            tags: item.tags || ['regen'],
+            client: clientId,
           } as CalendarItem;
         });
         
@@ -1366,6 +1387,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
             time: item.time || '09:00 AM',
             tags: item.tags || ['blueprint'],
             brand: draftBrand,
+            client: clientId,
           } as CalendarItem;
         });
 
@@ -1399,6 +1421,34 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       platforms={planPlatforms} onPlatforms={choosePlatforms}
       onGenerate={handleGeneratePlan} busy={isGeneratingPlan} budget={aiBudget} onCancel={onCancel} />
   );
+
+  // Change one calendar post (stage, attached media…).
+  const updateItem = (id: string, patch: Partial<CalendarItem>) =>
+    setCalendarItems(prev => prev.map(it => it.id === id ? { ...it, ...patch } : it));
+  const [attaching, setAttaching] = useState(false);
+  const attachMedia = async (item: CalendarItem, files: FileList | null) => {
+    if (!files?.length) return;
+    setAttaching(true);
+    try {
+      const urls: string[] = [];
+      for (const file of Array.from(files).slice(0, 10)) {
+        if (file.size > 200 * 1024 * 1024) { toast.error(`${file.name} is over 200MB`); continue; }
+        const path = `${clientId}/calendar/${Date.now()}_${safeStorageName(file.name)}`;
+        const { error } = await supabase.storage.from('media').upload(path, file, { contentType: file.type, upsert: false });
+        if (error) throw new Error(error.message);
+        urls.push(supabase.storage.from('media').getPublicUrl(path).data.publicUrl);
+      }
+      if (urls.length) {
+        const media = [...(item.media || []), ...urls];
+        updateItem(item.id, { media, status: item.status === 'draft' ? 'ready' : item.status });
+        toast.success(`${urls.length} file${urls.length > 1 ? 's' : ''} attached${item.status === 'draft' ? ' · marked Ready' : ''}`);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Upload failed');
+    } finally {
+      setAttaching(false);
+    }
+  };
 
   const renderViewPopup = () => {
     if (!viewItem) return null;
@@ -1438,6 +1488,42 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                 </div>
               );
             }) : <p className="text-sm text-on-surface-variant/60">No content yet.</p>}
+
+            <div className="pt-4 border-t border-outline-variant/10 space-y-3">
+              <p className="text-[11px] font-semibold text-primary">Stage</p>
+              <div className="flex flex-wrap gap-2">
+                {(['draft', 'ready', 'approved', 'scheduled', 'published'] as const).map(st => (
+                  <button key={st} onClick={() => updateItem(item.id, { status: st })}
+                    className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all",
+                      item.status === st ? STAGES[st].chip : "border-outline-variant/20 text-on-surface-variant/60 hover:text-on-surface")}>
+                    <span className={cn("w-1.5 h-1.5 rounded-full", STAGES[st].dot)} />{STAGES[st].label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-semibold text-primary">Design / video</p>
+                <label className={cn("flex items-center gap-1.5 text-xs font-semibold text-primary cursor-pointer hover:underline", attaching && "opacity-50 pointer-events-none")}>
+                  {attaching ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}{attaching ? 'Uploading…' : 'Attach'}
+                  <input type="file" multiple accept="image/*,video/*" className="hidden" onChange={e => { attachMedia(item, e.target.files); e.target.value = ''; }} />
+                </label>
+              </div>
+              {item.media?.length ? (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {item.media.map((u, i) => (
+                    <div key={u} className="relative group/m aspect-square rounded-xl overflow-hidden bg-surface-container-low">
+                      {/\.(mp4|mov|webm)(\?|$)/i.test(u)
+                        ? <video src={u} className="w-full h-full object-cover" muted playsInline />
+                        : <img src={u} alt={`Attachment ${i + 1}`} className="w-full h-full object-cover" />}
+                      <button onClick={() => updateItem(item.id, { media: item.media!.filter(x => x !== u) })} aria-label="Remove attachment"
+                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover/m:opacity-100 transition-opacity"><X size={12} /></button>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-xs text-on-surface-variant/60">Nothing attached yet. Attach the finished design or video and the post moves to Ready.</p>}
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 p-4 md:px-8 border-t border-outline-variant/10 bg-surface-container-low/50">
             {(() => {
@@ -2041,7 +2127,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                             <div className="space-y-2">
                               <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">Status</p>
                               <div className="flex flex-wrap gap-2">
-                                {['scheduled', 'published', 'draft'].map(s => (
+                                {(['draft', 'ready', 'approved', 'scheduled', 'published'] as const).map(s => (
                                   <button
                                     key={s}
                                     onClick={() => toggleFilter('status', s)}
@@ -2052,7 +2138,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                                         : "bg-surface-container-highest/30 text-on-surface-variant/60 border-outline-variant/10 hover:bg-surface-container-highest"
                                     )}
                                   >
-                                    {s}
+                                    {STAGES[s].label}
                                   </button>
                                 ))}
                               </div>
@@ -2100,6 +2186,24 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                     </button>
                   </div>
                 </div>
+
+                {(() => {
+                  const start = new Date(); start.setHours(0, 0, 0, 0);
+                  const end = new Date(start); end.setDate(end.getDate() + 7);
+                  const week = filteredCalendarItems.filter(it => { const d = new Date(it.year, it.month, it.day); return d >= start && d < end; });
+                  if (!week.length) return null;
+                  const count = (st: CalendarItem['status']) => week.filter(it => it.status === st).length;
+                  return (
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-sm">
+                      <span className="font-semibold text-on-surface">Next 7 days · {clientLabel(clientId)}</span>
+                      {(['draft', 'ready', 'approved', 'scheduled', 'published'] as const).filter(st => count(st)).map(st => (
+                        <span key={st} className="flex items-center gap-1.5 text-on-surface-variant">
+                          <span className={cn("w-2 h-2 rounded-full", STAGES[st].dot)} />{count(st)} {STAGES[st].label.toLowerCase()}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 <div className="bg-surface-container-lowest rounded-3xl md:rounded-[40px] overflow-hidden border border-outline-variant/10 shadow-xl shadow-black/5 overflow-x-auto">
                   <div className="min-w-[700px]">
@@ -2191,10 +2295,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                                     <div className="w-6 h-6 rounded-lg bg-on-surface/80 flex items-center justify-center shadow-sm">
                                       {item.type === 'video' ? <Play size={10} fill="currentColor" /> : <FileText size={10} />}
                                     </div>
-                                    <div className={cn(
-                                      "w-1.5 h-1.5 rounded-full",
-                                      item.status === 'published' ? "bg-emerald-500" : item.status === 'scheduled' ? "bg-amber-500" : "bg-slate-400"
-                                    )} />
+                                    <div title={stageOf(item.status).label} className={cn("w-2 h-2 rounded-full", stageOf(item.status).dot)} />
                                   </div>
                                   <div className="space-y-1">
                                     <p className="text-[10px] font-black leading-tight line-clamp-2">{item.title}</p>
@@ -2231,7 +2332,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                                       >
                                         <Rocket size={9} />
                                       </button>
-                                      <span className="text-[8px] font-black uppercase tracking-widest opacity-40">{item.status}</span>
+                                      <span className="text-[8px] font-black uppercase tracking-widest opacity-60">{stageOf(item.status).label}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -2338,11 +2439,8 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                             <div key={item.id} onClick={() => setViewItem(item)} className="bg-surface-container-lowest rounded-2xl md:rounded-[32px] p-6 md:p-8 border border-outline-variant/10 shadow-sm hover:shadow-md transition-shadow space-y-4 md:space-y-6 group cursor-pointer">
                               <div className="flex items-center justify-between">
                                 <span className="text-4xl md:text-6xl font-black text-on-surface-variant/10 group-hover:text-primary/10 transition-colors">{item.day}</span>
-                                <span className={cn(
-                                  "px-3 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest",
-                                  item.status === 'scheduled' ? "bg-amber-50 text-amber-600 border border-amber-100" : "bg-emerald-50 text-emerald-600 border border-emerald-100"
-                                )}>
-                                  {item.status}
+                                <span className={cn("px-3 md:px-4 py-1 md:py-1.5 rounded-full text-[10px] font-semibold border", stageOf(item.status).chip)}>
+                                  {stageOf(item.status).label}
                                 </span>
                               </div>
 
@@ -2736,7 +2834,10 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 md:gap-6">
         <div className="space-y-1 md:space-y-2">
           <h2 className="text-3xl md:text-4xl font-black tracking-tight text-on-surface">Strategy Hub</h2>
-          <p className="text-xs md:text-sm font-medium text-on-surface-variant/60">Orchestrate your multi-channel growth engine.</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs md:text-sm font-medium text-on-surface-variant/60">Orchestrate your multi-channel growth engine.</p>
+            <ClientSwitcher />
+          </div>
         </div>
 
         <div className="bg-surface-container-low p-1 rounded-2xl border border-outline-variant/10 shadow-sm flex gap-1 overflow-x-auto no-scrollbar w-full lg:w-auto">

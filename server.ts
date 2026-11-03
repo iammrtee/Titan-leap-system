@@ -203,6 +203,7 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
     id: r.id, day: r.day, month: r.month, year: r.year, platform: r.platform, title: r.title,
     description: r.description, status: r.status, type: r.type, time: r.time,
     link: r.link || undefined, tags: r.tags || undefined, brand: r.brand === 'personal' ? 'personal' : 'company',
+    client: r.client || 'default', media: Array.isArray(r.media) ? r.media : undefined,
   });
   app.get("/api/calendar", requireUser, async (req, res) => {
     const owner = String((req as any).user?.email || '').toLowerCase();
@@ -233,10 +234,12 @@ app.get('/tiktokYpXZpQ9XONrgK65iJfPCyWLHPVQivOuX.txt', (req, res) => {
         platform: String(it.platform || 'Instagram'), title: it.title ?? null, description: it.description ?? null,
         status: it.status || 'draft', type: it.type || 'post', time: it.time ?? null,
         link: it.link ?? null, tags: it.tags ?? null, updated_at: now,
+        client: String(it.client || 'default').slice(0, 40),
+        media: Array.isArray(it.media) ? it.media.filter((u: any) => typeof u === 'string').slice(0, 20) : null,
       }));
       for (let i = 0; i < rows.length; i += 200) {
         const { error } = await supabase.from('calendar_items').upsert(rows.slice(i, i + 200), { onConflict: 'id' });
-        if (error) return res.status(503).json({ error: error.message, needsSetup: /owner|brand|column|relation/i.test(error.message) });
+        if (error) return res.status(503).json({ error: error.message, needsSetup: /owner|brand|client|media|column|relation/i.test(error.message) });
       }
       // Anything of this user's that is no longer in the calendar was deleted or cleared.
       const { data: existing } = await supabase.from('calendar_items').select('id').eq('owner', owner).limit(10000);

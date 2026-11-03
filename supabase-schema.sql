@@ -208,6 +208,8 @@ CREATE TABLE IF NOT EXISTS ai_spend (
 -- 17. Content calendar per user and per brand, and the personal-brand opt-in.
 ALTER TABLE calendar_items ADD COLUMN IF NOT EXISTS owner TEXT;
 ALTER TABLE calendar_items ADD COLUMN IF NOT EXISTS brand TEXT DEFAULT 'company';
+ALTER TABLE calendar_items ADD COLUMN IF NOT EXISTS client TEXT DEFAULT 'default';
+ALTER TABLE calendar_items ADD COLUMN IF NOT EXISTS media JSONB;
 CREATE INDEX IF NOT EXISTS idx_calendar_items_owner ON calendar_items(owner);
 CREATE TABLE IF NOT EXISTS user_prefs (
   email TEXT PRIMARY KEY,
