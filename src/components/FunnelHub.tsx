@@ -68,6 +68,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { auditMarketingFunnel, analyzeCompetitorFunnel } from '@/src/services/ai';
 import { toast } from 'sonner';
+import { clientKey } from '@/src/lib/clientProfile';
 
 type FunnelTab = 'current' | 'editor' | 'audit' | 'competitor';
 
@@ -456,7 +457,7 @@ const CurrentFunnelView = ({
 
   // The map follows the funnel in the 30-day plan (Strategy) when there is one; steps can be
   // edited here and the change is saved back to the plan. Leaks come from the latest audit.
-  const readPlan = () => { try { return JSON.parse(localStorage.getItem('titanleap_strategy_plan') || 'null'); } catch { return null; } };
+  const readPlan = () => { try { return JSON.parse(localStorage.getItem(clientKey('titanleap_strategy_plan')) || 'null'); } catch { return null; } };
   const [plan, setPlan] = useState<any>(readPlan);
   const planFunnel: { step: string; detail: string }[] = plan?.engine?.funnel || [];
   // Audit leaks = its three constraints. Only shown when the plan came from that audit.
@@ -488,7 +489,7 @@ const CurrentFunnelView = ({
     if (next) funnel[idx] = next; else funnel.splice(idx, 1);
     const updated = { ...plan, engine: { ...plan.engine, funnel } };
     setPlan(updated);
-    try { localStorage.setItem('titanleap_strategy_plan', JSON.stringify(updated)); } catch {}
+    try { localStorage.setItem(clientKey('titanleap_strategy_plan'), JSON.stringify(updated)); } catch {}
     setEditingStage(null);
     if (!next) setSelectedStageId(Math.max(1, idx));
     toast.success(next ? 'Funnel step saved to your plan' : 'Step removed from your plan');
@@ -498,7 +499,7 @@ const CurrentFunnelView = ({
     const funnel = [...planFunnel, { step: 'New step', detail: 'What happens here' }];
     const updated = { ...plan, engine: { ...plan.engine, funnel } };
     setPlan(updated);
-    try { localStorage.setItem('titanleap_strategy_plan', JSON.stringify(updated)); } catch {}
+    try { localStorage.setItem(clientKey('titanleap_strategy_plan'), JSON.stringify(updated)); } catch {}
     setSelectedStageId(funnel.length);
     setEditingStage(funnel[funnel.length - 1]);
   };

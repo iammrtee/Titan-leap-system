@@ -19,3 +19,6 @@ export const useClientId = () => {
 };
 export const clientSlug = (name: string) => name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 export const clientLabel = (id: string) => id === 'default' ? 'TitanLeap' : id.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+// Per-client localStorage key. TitanLeap ('default') keeps the original key so nothing is lost.
+export const clientKey = (base: string, id: string = getClientId()) => (id === 'default' ? base : `${base}:${id}`);

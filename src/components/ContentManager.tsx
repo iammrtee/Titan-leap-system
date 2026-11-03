@@ -8,7 +8,8 @@ import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabas
 import { safeStorageName, toPostableJpeg, instagramRatioProblem } from '@/src/lib/postMedia';
 import { TikTokComposer, type TikTokComposerHandle } from './TikTokComposer';
 import { ConnectedAccountsPanel, type Connection } from './ConnectedAccounts';
-import { useClientId, setClientId, clientSlug, clientLabel } from '@/src/lib/clientProfile';
+import { useClientId } from '@/src/lib/clientProfile';
+import { ClientSwitcher } from './ClientSwitcher';
 
 // ─── Content Manager Tab Types ───
 type ContentManagerTab = 'production' | 'autopost';
@@ -144,29 +145,6 @@ export const ContentManager: React.FC = () => {
   const [sendToProductionSignal, setSendToProductionSignal] = useState<number>(0);
   const [showAccounts, setShowAccounts] = useState(false);
   const clientId = useClientId();
-  const [clients, setClients] = useState<string[]>(['default']);
-  const [newClient, setNewClient] = useState<string | null>(null);
-  const loadClients = async () => {
-    try {
-      const r = await fetch('/api/clients', { headers: await getAuthHeader() });
-      if (r.ok) { const d = await r.json(); setClients(d.clients?.length ? d.clients : ['default']); }
-    } catch {}
-  };
-  useEffect(() => { loadClients(); }, []);
-  const createClient = async () => {
-    const id = clientSlug(newClient || '');
-    if (!id) { toast.error('Enter the client name'); return; }
-    try {
-      const r = await fetch('/api/clients', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await getAuthHeader()) }, body: JSON.stringify({ id }) });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.error || 'Could not create the client');
-      setClients(prev => prev.includes(id) ? prev : [...prev, id]);
-      setClientId(id);
-      setNewClient(null);
-      toast.success(`${clientLabel(id)} created. Connect their accounts next.`);
-      setShowAccounts(true);
-    } catch (err: any) { toast.error(err.message); }
-  };
 
   return (
     <div className="space-y-8">
@@ -208,23 +186,7 @@ export const ContentManager: React.FC = () => {
           ))}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {newClient !== null ? (
-            <div className="flex items-center gap-2">
-              <input id="new-client-name" autoFocus value={newClient} onChange={e => setNewClient(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') createClient(); if (e.key === 'Escape') setNewClient(null); }}
-                placeholder="Client name, e.g. Oqevira" className="h-10 w-48 bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-3 text-sm font-medium focus:outline-none focus:border-primary" />
-              <button onClick={createClient} className="h-10 px-4 rounded-xl bg-primary text-white text-sm font-bold">Create</button>
-              <button onClick={() => setNewClient(null)} className="h-10 px-2 text-sm font-bold text-on-surface-variant/60">Cancel</button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1 h-10 pl-3 pr-1 rounded-xl bg-surface-container-low border border-outline-variant/20">
-              <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50">Client</span>
-              <select id="client-select" value={clientId} onChange={e => e.target.value === '__new' ? setNewClient('') : setClientId(e.target.value)}
-                className="bg-transparent text-sm font-bold text-on-surface focus:outline-none pr-1 cursor-pointer">
-                {[...new Set([...clients, clientId])].map(c => <option key={c} value={c}>{clientLabel(c)}</option>)}
-                <option value="__new">+ New client</option>
-              </select>
-            </div>
-          )}
+          <ClientSwitcher onCreated={() => setShowAccounts(true)} />
           <button onClick={() => setShowAccounts(true)}
             className="h-10 bg-surface-container-low border border-outline-variant/20 text-on-surface px-4 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:bg-surface-container transition-all whitespace-nowrap shrink-0">
             <LinkIcon size={16} /> Connected Accounts
