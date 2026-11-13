@@ -4,9 +4,35 @@ import { X, Upload, Loader2, Instagram, Twitter, Linkedin, Youtube, Play } from 
 import { toast } from 'sonner';
 import { cn } from '@/src/lib/utils';
 import { parseContentImport } from '@/src/services/ai';
+import { parseCsv } from '@/src/lib/leadCsv';
 
 export type ImportedPost = {
   date: Date; platform: string; type: 'video' | 'article' | 'post'; title: string; description: string; time: string;
+  status?: string;
+};
+
+// A calendar CSV (Monolith's own export, or one shaped like it) imports as-is: exact dates,
+// no AI, no cost. Needs at least Date, Platform and Title columns.
+const fromCalendarCsv = (text: string): ImportedPost[] | null => {
+  const head = text.replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0].toLowerCase();
+  if (!/\bdate\b/.test(head) || !/\bplatform\b/.test(head) || !/\btitle\b/.test(head)) return null;
+  const rows = parseCsv(text);
+  const posts = rows.map(r => {
+    const m = String(r.date || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+    const plat = String(r.platform || '').trim();
+    const platform = /^x$|twitter/i.test(plat) ? 'Twitter' : (VALID.find(v => v.toLowerCase() === plat.toLowerCase()) || 'Instagram');
+    const type = /video|reel/i.test(r.type || '') ? 'video' : /article/i.test(r.type || '') ? 'article' : 'post';
+    return {
+      date: new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])),
+      platform, type,
+      title: String(r.title || 'Post').slice(0, 160),
+      description: String(r.description || ''),
+      time: /\d{1,2}:\d{2}\s*(AM|PM)/i.test(r.time || '') ? r.time.toUpperCase() : '09:00 AM',
+      status: ['draft', 'ready', 'approved', 'scheduled', 'published'].includes(String(r.status || '').toLowerCase()) ? String(r.status).toLowerCase() : 'draft',
+    } as ImportedPost;
+  }).filter(Boolean) as ImportedPost[];
+  return posts.length ? posts.sort((a, b) => +a.date - +b.date) : null;
 };
 
 const PLATFORMS = [
@@ -46,6 +72,8 @@ export const ContentImport: React.FC<{
 
   const organise = async () => {
     if (!text.trim()) { toast.error('Paste your content first'); return; }
+    const direct = fromCalendarCsv(text);
+    if (direct) { setPreview(direct); toast.success(`Calendar file read: ${direct.length} posts on their own dates`); return; }
     setBusy(true);
     try {
       const posts = await parseContentImport(text, { days, keepDays, platforms });
