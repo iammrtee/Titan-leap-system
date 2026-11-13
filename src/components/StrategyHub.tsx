@@ -920,7 +920,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       id: `imp-${Math.random().toString(36).slice(2, 10)}`,
       day: p.date.getDate(), month: p.date.getMonth(), year: p.date.getFullYear(),
       platform: p.platform as CalendarItem['platform'], title: p.title, description: p.description,
-      status: 'draft', type: p.type, time: p.time, tags: ['imported'], brand, client: clientId,
+      status: (p.status as CalendarItem['status']) || 'draft', type: p.type, time: p.time, tags: ['imported'], brand, client: clientId,
     }));
     const before = calendarItems;
     setCalendarItems(prev => [
