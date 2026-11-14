@@ -2215,162 +2215,54 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                 {calView === 'board' && (
                   <CalendarBoard posts={filteredCalendarItems} onOpen={p => setViewItem(p as CalendarItem)} showBrand={personalEnabled && activeBrand === 'all'} />
                 )}
-                {calView === 'month' && (
-                <div className="bg-surface-container-lowest rounded-3xl md:rounded-[40px] overflow-hidden border border-outline-variant/10 shadow-xl shadow-black/5 overflow-x-auto">
-                  <div className="min-w-[700px]">
-                    <div className="grid grid-cols-7 border-b border-outline-variant/10">
-                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                        <div key={day} className="py-4 md:py-6 text-center text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-on-surface-variant/40">
-                          {day}
+                {calView === 'month' && (() => {
+                  const first = new Date(selectedDate.year, selectedDate.month, 1);
+                  const lead = (first.getDay() + 6) % 7; // weeks start on Monday, like the Week view
+                  const daysInMonth = new Date(selectedDate.year, selectedDate.month + 1, 0).getDate();
+                  const today = new Date();
+                  const cells: (number | null)[] = [...Array(lead).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+                  while (cells.length % 7) cells.push(null);
+                  return (
+                    <div className="bg-surface-container-lowest rounded-[18px] shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)] overflow-x-auto">
+                      <div className="min-w-[760px]">
+                        <div className="grid grid-cols-7 border-b border-outline-variant/10">
+                          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
+                            <div key={d} className="py-3 text-center text-[13px] font-medium text-on-surface-variant/70">{d}</div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-7 gap-px bg-outline-variant/10">
-                    {(() => {
-                      const daysInMonth = new Date(selectedDate.year, selectedDate.month + 1, 0).getDate();
-                      const firstDayOfMonth = new Date(selectedDate.year, selectedDate.month, 1).getDay();
-                      const today = new Date();
-                      const isCurrentMonth = today.getMonth() === selectedDate.month && today.getFullYear() === selectedDate.year;
-                      const todayDate = today.getDate();
-
-                      const cells = [];
-                      // Empty cells for padding
-                      for (let i = 0; i < firstDayOfMonth; i++) {
-                        cells.push(<div key={`empty-${i}`} className="bg-surface-container-lowest/50 min-h-[120px] md:min-h-[180px]" />);
-                      }
-
-                      // Actual days
-                      for (let day = 1; day <= daysInMonth; day++) {
-                        const items = filteredCalendarItems.filter(item => item.day === day && item.month === selectedDate.month && item.year === selectedDate.year);
-                        const isSelected = selectedDate.day === day && isSidePanelOpen;
-                        const isToday = isCurrentMonth && day === todayDate;
-
-                        cells.push(
-                          <div 
-                            key={`day-${day}`} 
-                            onClick={() => {
-                              setSelectedDate({ ...selectedDate, day });
-                              setIsSidePanelOpen(true);
-                            }}
-                            className={cn(
-                              "bg-surface-container-lowest min-h-[120px] md:min-h-[180px] p-2 md:p-4 group hover:bg-surface-container-low/50 transition-all relative cursor-pointer",
-                              isSelected && "ring-2 ring-inset ring-primary/20 bg-primary/5",
-                              isToday && "bg-primary/5"
-                            )}
-                          >
-                            <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-2 md:mb-3 gap-1 md:gap-0">
-                              <div className="flex items-center gap-2">
-                                <span className={cn(
-                                  "text-xs md:text-sm font-black transition-colors",
-                                  isSelected ? "text-primary" : "text-on-surface-variant/40 group-hover:text-on-surface"
-                                )}>{day}</span>
-                                {items.length > 0 && (
-                                  <div className="flex gap-1">
-                                    {Array.from(new Set(items.map(i => i.platform))).slice(0, 3).map((p, idx) => (
-                                      <div 
-                                        key={idx} 
-                                        className={cn(
-                                          "w-1.5 h-1.5 rounded-full shadow-[0_0_5px_rgba(0,0,0,0.1)]",
-                                          p === 'LinkedIn' && "bg-indigo-400",
-                                          p === 'Twitter' && "bg-sky-400",
-                                          p === 'Instagram' && "bg-amber-400",
-                                          p === 'YouTube' && "bg-emerald-400",
-                                          p === 'TikTok' && "bg-rose-400"
-                                        )} 
-                                      />
-                                    ))}
-                                    {items.length > 3 && <div className="w-1 h-1 rounded-full bg-on-surface-variant/20" />}
-                                  </div>
+                        <div className="grid grid-cols-7">
+                          {cells.map((day, i) => {
+                            if (!day) return <div key={`e${i}`} className="min-h-[128px] border-b border-r border-outline-variant/10 bg-surface-container-low/40" />;
+                            const date = new Date(selectedDate.year, selectedDate.month, day);
+                            const items = filteredCalendarItems.filter(it => it.day === day && it.month === selectedDate.month && it.year === selectedDate.year)
+                              .sort((x, y) => x.time.localeCompare(y.time));
+                            const isToday = date.toDateString() === today.toDateString();
+                            return (
+                              <div key={day} className="min-h-[128px] border-b border-r border-outline-variant/10 p-2 flex flex-col gap-1 group">
+                                <div className="flex items-center justify-between px-1">
+                                  <button onClick={() => { setWeekStart(weekStartOf(date)); setCalView('week'); }} title="Open this week"
+                                    className={cn("text-sm w-7 h-7 rounded-full flex items-center justify-center", isToday ? "bg-primary text-white font-semibold" : "text-on-surface font-medium hover:bg-surface-container-low")}>{day}</button>
+                                  <button onClick={() => addPostOn(date)} aria-label={`Add a post on ${day}`} className="w-6 h-6 rounded-full flex items-center justify-center text-on-surface-variant/40 opacity-0 group-hover:opacity-100 hover:text-primary hover:bg-primary/5"><Plus size={14} /></button>
+                                </div>
+                                {items.slice(0, 3).map(it => (
+                                  <button key={it.id} onClick={() => setViewItem(it)}
+                                    className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded-md text-left hover:bg-surface-container-low min-w-0">
+                                    <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", (STAGE_STYLE[it.status] || STAGE_STYLE.draft).dot)} />
+                                    <span className="text-[11px] font-semibold text-primary shrink-0">{it.platform === 'Twitter' ? 'X' : it.platform === 'Instagram' ? 'IG' : it.platform}</span>
+                                    <span className="text-[12px] text-on-surface truncate">{it.title}</span>
+                                  </button>
+                                ))}
+                                {items.length > 3 && (
+                                  <button onClick={() => { setWeekStart(weekStartOf(date)); setCalView('week'); }} className="text-[11px] font-medium text-on-surface-variant/70 hover:text-primary px-1.5 text-left">+{items.length - 3} more</button>
                                 )}
                               </div>
-                              {isToday && (
-                                <span className="text-[8px] font-black uppercase tracking-widest text-primary bg-primary/10 px-1.5 md:px-2 py-0.5 rounded-full">Today</span>
-                              )}
-                            </div>
-
-                            <div className="space-y-2 md:space-y-3">
-                              {items.map(item => (
-                                <div 
-                                  key={item.id}
-                                  onClick={(e) => { e.stopPropagation(); setViewItem(item); }}
-                                  className={cn(
-                                    "p-2 md:p-3 rounded-xl md:rounded-2xl border shadow-sm space-y-1 md:space-y-2 relative group/item cursor-pointer hover:shadow-md transition-shadow",
-                                    item.platform === 'LinkedIn' && "bg-indigo-50/50 border-indigo-200/50 text-indigo-900",
-                                    item.platform === 'Twitter' && "bg-sky-50/50 border-sky-200/50 text-sky-900",
-                                    item.platform === 'Instagram' && "bg-amber-50/50 border-amber-200/50 text-amber-900",
-                                    item.platform === 'YouTube' && "bg-emerald-50/50 border-emerald-200/50 text-emerald-900",
-                                    item.platform === 'TikTok' && "bg-rose-50/50 border-rose-200/50 text-rose-900"
-                                  )}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div className="w-6 h-6 rounded-lg bg-on-surface/80 flex items-center justify-center shadow-sm">
-                                      {item.type === 'video' ? <Play size={10} fill="currentColor" /> : <FileText size={10} />}
-                                    </div>
-                                    <div title={stageOf(item.status).label} className={cn("w-2 h-2 rounded-full", stageOf(item.status).dot)} />
-                                  </div>
-                                  <div className="space-y-1">
-                                    <p className="text-[10px] font-black leading-tight line-clamp-2">{item.title}</p>
-                                    <p className="text-[9px] font-medium opacity-60 line-clamp-1 italic">{item.description}</p>
-                                  </div>
-                                  {item.link && (
-                                    <div className="flex items-center gap-1 text-[8px] font-bold opacity-40">
-                                      <ExternalLink size={8} />
-                                      <span className="truncate">{item.link}</span>
-                                    </div>
-                                  )}
-                                  <div className="flex items-center justify-between pt-1 border-t border-black/5">
-                                    <span className="hidden md:inline text-[8px] font-black uppercase tracking-widest opacity-60">{item.platform}</span>
-                                    {personalEnabled && activeBrand === 'all' && (
-                                      <span className={cn("text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded", brandOf(item) === 'personal' ? "bg-fuchsia-500/15 text-fuchsia-700" : "bg-primary/10 text-primary")}>{brandOf(item) === 'personal' ? 'P' : 'C'}</span>
-                                    )}
-                                    <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
-                                      <button 
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleEditClick(item);
-                                        }}
-                                        className="text-[8px] font-black uppercase tracking-widest text-primary hover:underline"
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleSendToProduction(item);
-                                        }}
-                                        className="text-[8px] font-black uppercase tracking-widest text-emerald-600 hover:underline flex items-center gap-0.5"
-                                        title="Send to Production"
-                                      >
-                                        <Rocket size={9} />
-                                      </button>
-                                      <span className="text-[8px] font-black uppercase tracking-widest opacity-60">{stageOf(item.status).label}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                            
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedDate({ ...selectedDate, day });
-                                setShowAddModal(true);
-                              }}
-                              className="absolute bottom-4 right-4 w-10 h-10 rounded-2xl bg-surface-container-lowest border border-outline-variant/10 flex flex-col items-center justify-center text-on-surface-variant/40 opacity-0 group-hover:opacity-100 hover:text-primary hover:border-primary/40 hover:shadow-lg hover:scale-110 transition-all shadow-sm z-10"
-                              title="Quick Add Content"
-                            >
-                              <Plus size={18} />
-                              <span className="text-[7px] font-black uppercase tracking-tighter">Add</span>
-                            </button>
-                          </div>
-                        );
-                      }
-                      return cells;
-                    })()}
-                  </div>
-                </div>
-              </div>
-                )}
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
             </div>
 
             {/* Side Detail Panel */}

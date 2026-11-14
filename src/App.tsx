@@ -133,7 +133,7 @@ export default function App() {
       case 'audit':
         return { title: 'Audit', subtitle: 'Intake Assessment' };
       case 'strategy':
-        return { title: 'Strategy Hub', subtitle: 'Intelligent Framework' };
+        return { title: '' }; // the Strategy page has its own header
       case 'content':
         return { title: 'Content Production', subtitle: 'Content auto-routed from calendar → Video Editor & Designer queues' };
       case 'ads':
