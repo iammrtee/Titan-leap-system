@@ -118,16 +118,17 @@ export const generateClaudeContent = async (params: {
       ? `${params.prompt}\n\nRespond with ONLY the JSON, starting with ${params.prefillAssistant}. No prose, no markdown fences.`
       : params.prompt;
 
-    const send = (searchTool: string) => client.messages.create({
+    // Streamed so long answers (a full 30-day plan in final copy) aren't cut off or timed out.
+    const send = (searchTool: string) => client.messages.stream({
       model: modelId,
-      max_tokens: 20000,
+      max_tokens: 32000,
       ...(acceptsTemperature(modelId) ? { temperature: params.temperature ?? 0.7 } : { output_config: { effort: params.effort ?? 'medium' } as any }),
       system: params.systemPrompt,
       messages: [{ role: "user", content: [{ type: "text", text: promptText }] }],
       ...(params.useWebSearch ? {
         tools: [{ type: searchTool as any, name: "web_search", max_uses: params.webSearchMaxUses ?? 5 } as any]
       } : {})
-    } as any);
+    } as any).finalMessage();
 
     const started = Date.now();
     let response: any;
