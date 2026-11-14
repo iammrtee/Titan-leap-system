@@ -106,88 +106,108 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
   ].sort((a, b) => +new Date(b.at) - +new Date(a.at)).slice(0, 6);
 
   const tile = `bg-surface-container-lowest rounded-[18px] p-5 ${SHADOW} flex flex-col gap-1 min-w-0`;
+  const h = new Date().getHours();
+  const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+  const monthStartTs = +monthStart;
+  const monthSales = sales.filter(x => +new Date(x.created_at) >= monthStartTs);
+  const monthUsd = monthSales.reduce((a, x) => a + toUsd(Number(x.amount || 0), x.currency || 'USD'), 0);
+  const payers = Array.from(new Set(inPeriod.map(x => x.product_name).filter(Boolean)));
   return (
-    <div className="space-y-7">
-      {(() => {
-        const monthSales = sales.filter(x => +new Date(x.created_at) >= +monthStart);
-        const usd = monthSales.reduce((a, x) => a + toUsd(Number(x.amount || 0), x.currency || 'USD'), 0);
-        const local = monthSales.filter(x => (x.currency || 'USD') !== 'USD').reduce<Record<string, number>>((m, x) => { m[x.currency] = (m[x.currency] || 0) + Number(x.amount || 0); return m; }, {});
-        const h = new Date().getHours();
-        const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-        const glassTile = "rounded-[22px] p-5 bg-white/70 dark:bg-white/10 border border-white/80 dark:border-white/15 backdrop-blur-xl backdrop-saturate-150 shadow-[0_8px_30px_rgba(60,20,120,0.10)] flex flex-col gap-1 min-w-0";
-        return (
-          <>
-            {/* The branch, edge to edge with nothing on top of it except the greeting in its empty corner */}
-            <section className="relative -mx-4 md:-mx-8 lg:-mx-12 xl:-mx-16 -mt-4 md:-mt-8 lg:-mt-12 xl:-mt-16 overflow-hidden aspect-[100/46] min-h-[300px] max-h-[640px]">
-              <GrowingBranch className="absolute pointer-events-none select-none inset-x-0 top-[-4%] w-full max-w-none aspect-video" />
-              <div className="relative z-10 px-4 md:px-8 lg:px-12 xl:px-16 pt-[5%] max-w-[44%] min-w-[280px] space-y-2">
-                <p className="text-primary text-xl md:text-2xl" style={{ fontFamily: "'Kalam','Caveat','Segoe Print',cursive" }}>{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</p>
-                <h2 className="text-5xl md:text-6xl xl:text-7xl font-bold tracking-tight leading-[0.95] text-on-surface">{greeting}.</h2>
-                <p className="text-base text-on-surface-variant">{clients.length} client{clients.length > 1 ? 's' : ''} · {todo.length ? `${todo.length} thing${todo.length > 1 ? 's' : ''} need you today` : 'nothing urgent today'}</p>
-              </div>
-            </section>
+    <div className="space-y-6">
+      {/* Header: the growing branch runs edge to edge behind the greeting */}
+      <section className="relative -mx-4 md:-mx-8 lg:-mx-12 xl:-mx-16 -mt-4 md:-mt-8 lg:-mt-12 xl:-mt-16 overflow-hidden h-[clamp(300px,40vw,560px)]">
+        <GrowingBranch className="absolute pointer-events-none select-none left-0 top-[-10%] w-full max-w-none aspect-video" />
+        <div className="relative z-10 h-full px-4 md:px-8 lg:px-12 xl:px-16 pt-8 md:pt-12 flex items-start justify-between gap-4">
+          <div className="space-y-1.5">
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-on-surface">{greeting}</h2>
+            <p className="text-sm md:text-base text-on-surface-variant">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} · {clients.length} client{clients.length > 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={() => go('audit')} className="h-11 px-5 rounded-xl bg-primary text-white text-sm font-semibold hover:brightness-110 shadow-sm shrink-0">New audit</button>
+        </div>
+      </section>
 
-            {/* Below the branch: what needs you, and the numbers, side by side and aligned */}
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] gap-4 items-stretch -mt-2">
-              <div className={`bg-surface-container-lowest rounded-[22px] p-6 ${SHADOW} flex flex-col gap-4`}>
-                <h3 className="text-lg font-semibold tracking-tight text-on-surface">Needs you today</h3>
-                {todo.length ? (
-                  <div className="space-y-2 flex-1">
-                    {todo.map((t, i) => (
-                      <button key={i} onClick={t.onClick} className="w-full flex items-center gap-3 rounded-[14px] px-3.5 py-3 bg-surface-container-low hover:bg-surface-container text-left transition-colors">
-                        <span className={cn("w-2 h-2 rounded-full shrink-0", t.tone)} />
-                        <span className="flex-1 text-sm text-on-surface leading-snug">{t.text}</span>
-                        <span className="text-xs font-semibold text-primary shrink-0">{t.action}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : <p className="text-sm text-on-surface-variant flex-1">You're all caught up.</p>}
-                <button onClick={() => go('audit')} className="h-11 rounded-full bg-primary text-white text-sm font-semibold hover:brightness-110 transition-all">New audit</button>
-              </div>
+      <div className="relative z-10 space-y-6">
+        {todo.length > 0 && (
+          <section className={`bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-2`}>
+            <h3 className="text-xl font-semibold tracking-tight text-on-surface">Needs you today</h3>
+            <div className="divide-y divide-outline-variant/10">
+              {todo.map((t, i) => (
+                <div key={i} className="flex items-center gap-3.5 py-3">
+                  <span className={cn("w-2 h-2 rounded-full shrink-0", t.tone)} />
+                  <span className="flex-1 text-[15px] text-on-surface">{t.text}</span>
+                  <span className="text-[13px] text-on-surface-variant/60 hidden sm:inline">{t.where}</span>
+                  <button onClick={t.onClick} className="text-sm font-semibold text-primary hover:underline">{t.action}</button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
-              <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
-                <div className="col-span-2 xl:col-span-3 rounded-[22px] p-6 bg-primary text-white flex flex-wrap items-end justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="text-[13px] text-white/75">Revenue this month</p>
-                    <p className="text-4xl md:text-5xl font-bold tracking-tight tabular-nums">{money(usd, 'USD')}</p>
-                  </div>
-                  <p className="text-[13px] text-white/75">{Object.keys(local).length ? `from ${Object.entries(local).map(([c, a]) => money(a, c)).join(' + ')}` : monthSales.length ? `${monthSales.length} payment${monthSales.length > 1 ? 's' : ''}` : 'Record payments in Sales → Paid'}</p>
+        <div className="flex flex-wrap gap-4 items-stretch">
+          <section className={`flex-[999_1_520px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} flex flex-col gap-4`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1 min-w-0">
+                <p className="text-[13px] text-on-surface-variant/70">Revenue</p>
+                <div className="flex items-baseline gap-2.5 flex-wrap">
+                  <span className="text-4xl md:text-[44px] font-bold tracking-tight text-primary tabular-nums">{money(byCurrency[mainCurrency] || 0, mainCurrency)}</span>
+                  <span className="text-[13px] text-on-surface-variant/70">{period === '7D' ? 'this week' : period === '30D' ? 'this month' : 'this year'}</span>
                 </div>
-                <div className={tile}>
-                  <span className="text-[13px] text-on-surface-variant/70">Active clients</span>
-                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{clients.length}</span>
-                  <span className="text-[13px] text-on-surface-variant/70 truncate">{clients.map(clientLabel).join(' · ')}</span>
-                </div>
-                <div className={tile}>
-                  <span className="text-[13px] text-on-surface-variant/70">Leads</span>
-                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{leads.length}</span>
-                  <span className="text-[13px] text-on-surface-variant/70">{leadsThisWeek ? `+${leadsThisWeek} this week` : `${hot.length} hot`}</span>
-                </div>
-                <div className={tile}>
-                  <span className="text-[13px] text-on-surface-variant/70">Audits this month</span>
-                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{auditsThisMonth}<span className="text-base font-medium text-on-surface-variant/50"> / 100</span></span>
-                  <div className="h-1.5 rounded-full bg-surface-container-high mt-1"><div className="h-1.5 rounded-full bg-primary" style={{ width: `${Math.min(100, auditsThisMonth)}%` }} /></div>
-                </div>
-                <div className={tile}>
-                  <span className="text-[13px] text-on-surface-variant/70">Posts this week</span>
-                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{weekPosts.length}</span>
-                  <span className={cn("text-[13px] font-medium", needDesign.length ? "text-amber-600" : "text-on-surface-variant/70")}>{needDesign.length ? `${needDesign.length} need design` : 'All ready'}</span>
-                </div>
-                <div className={tile}>
-                  <span className="text-[13px] text-on-surface-variant/70">AI spend this month</span>
-                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{budget ? `$${budget.spent.toFixed(2)}` : '—'}<span className="text-base font-medium text-on-surface-variant/50">{budget ? ` / $${budget.budget}` : ''}</span></span>
-                  <span className="text-[13px] text-on-surface-variant/70">Audits not counted</span>
-                </div>
-                <div className={tile}>
-                  <span className="text-[13px] text-on-surface-variant/70">Hot leads</span>
-                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{hot.length}</span>
-                  <button onClick={() => go('sales')} className="text-[13px] font-semibold text-primary text-left hover:underline">Open Sales</button>
-                </div>
+                <p className="text-[13px] text-on-surface-variant/70">
+                  {inPeriod.length ? `${inPeriod.length} payment${inPeriod.length > 1 ? 's' : ''}${payers.length ? ` · ${payers.join(', ')}` : ''}` : 'No payments yet. In Sales, open a lead and mark it Paid.'}
+                  {mainCurrency !== 'USD' && (byCurrency[mainCurrency] || 0) > 0 ? ` · ≈ ${money(toUsd(byCurrency[mainCurrency], mainCurrency), 'USD')}` : ''}
+                </p>
+              </div>
+              <div role="group" aria-label="Period" className="flex gap-0.5 p-[3px] rounded-[10px] bg-surface-container-high shrink-0">
+                {(Object.keys(periodDays) as Period[]).map(p => (
+                  <button key={p} onClick={() => setPeriod(p)} className={cn("h-[30px] px-3 rounded-lg text-[13px] transition-all", period === p ? "bg-surface-container-lowest text-primary font-semibold shadow-sm" : "text-on-surface-variant/70 font-medium")}>{p}</button>
+                ))}
               </div>
             </div>
-          </>
-        );
-      })()}
+            <div className="space-y-1.5 mt-auto">
+              <div className="flex items-end gap-2 h-24">
+                {bars.map((v, i) => (
+                  <div key={i} title={money(v, mainCurrency)} className={cn("flex-1 rounded-md", v ? "bg-primary" : "bg-primary/10")} style={{ height: `${v ? Math.max(8, (v / maxBar) * 100) : 6}%` }} />
+                ))}
+              </div>
+              <div className="flex gap-2 text-[11px] text-on-surface-variant/60">{bars.map((_, i) => <span key={i} className="flex-1 truncate">{barLabel(i)}</span>)}</div>
+            </div>
+          </section>
+
+          <div className="flex-[1_1_300px] min-w-0 flex flex-col gap-4">
+            <div className={cn(tile, "flex-1")}>
+              <span className="text-[13px] text-on-surface-variant/70">Active clients</span>
+              <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface tabular-nums">{clients.length}</span>
+              <span className="text-[13px] text-on-surface-variant/70 truncate">{clients.map(clientLabel).join(' · ')}</span>
+            </div>
+            <div className={cn(tile, "flex-1")}>
+              <span className="text-[13px] text-on-surface-variant/70">Leads generated</span>
+              <div className="flex items-baseline gap-2.5">
+                <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface tabular-nums">{leads.length}</span>
+                {leadsThisWeek > 0 && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">+{leadsThisWeek} this week</span>}
+              </div>
+              <span className="text-[13px] text-on-surface-variant/70">{hot.length} hot · {leads.length - hot.length} new</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className={tile}>
+            <span className="text-[13px] text-on-surface-variant/70">Audits this month</span>
+            <span className="text-[28px] font-bold text-on-surface tabular-nums">{auditsThisMonth}<span className="text-base font-medium text-on-surface-variant/50"> / 100</span></span>
+            <div className="h-1.5 rounded-full bg-surface-container-high mt-1"><div className="h-1.5 rounded-full bg-primary" style={{ width: `${Math.min(100, auditsThisMonth)}%` }} /></div>
+          </div>
+          <div className={tile}>
+            <span className="text-[13px] text-on-surface-variant/70">Posts going out this week</span>
+            <span className="text-[28px] font-bold text-on-surface tabular-nums">{weekPosts.length}</span>
+            <span className={cn("text-[13px] font-medium", needDesign.length ? "text-amber-600" : "text-emerald-600")}>{needDesign.length ? `${needDesign.length} need design` : weekPosts.length ? 'All have designs' : 'Nothing scheduled'}</span>
+          </div>
+          <div className={tile}>
+            <span className="text-[13px] text-on-surface-variant/70">AI spend this month</span>
+            <span className="text-[28px] font-bold text-on-surface tabular-nums">{budget ? `$${budget.spent.toFixed(2)}` : '—'}<span className="text-base font-medium text-on-surface-variant/50">{budget ? ` / $${budget.budget}` : ''}</span></span>
+            <span className="text-[13px] text-on-surface-variant/70">Audits not counted</span>
+          </div>
+        </div>
+      </div>
 
       <section className="space-y-3">
         <h3 className="text-xl font-semibold tracking-tight text-on-surface">Clients</h3>
