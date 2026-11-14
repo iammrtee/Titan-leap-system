@@ -230,20 +230,137 @@ const H: React.FC<{ eyebrow: string; title: string; sub?: string }> = ({ eyebrow
 
 const firstSentence = (t?: string) => (String(t || '').match(/^.*?[.!?](\s|$)/)?.[0] || String(t || '')).trim();
 
-// The headline of the plan: the one idea, the CTA, and the why in one line.
-export const OneIdea: React.FC<{ plan: any }> = ({ plan }) => {
+const SHADOW = "shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]";
+const STAGE_UI: Record<string, { label: string; chip: string }> = {
+  draft: { label: 'Needs design', chip: 'bg-slate-100 text-slate-600' },
+  ready: { label: 'Ready', chip: 'bg-sky-50 text-sky-700' },
+  approved: { label: 'Approved', chip: 'bg-emerald-50 text-emerald-700' },
+  scheduled: { label: 'Scheduled', chip: 'bg-amber-50 text-amber-700' },
+  published: { label: 'Posted', chip: 'bg-violet-50 text-violet-700' },
+};
+
+// The headline of the plan: the one idea, the CTA, the why, and the two main actions.
+export const OneIdea: React.FC<{ plan: any; onRefine?: () => void; onNewPlan?: () => void }> = ({ plan, onRefine, onNewPlan }) => {
   const e = plan?.engine || {};
   const idea = e.bigIdea || firstSentence(plan?.strategicSyncSummary?.[0]);
   if (!idea) return null;
-  const why = firstSentence(plan?.strategicSyncSummary?.[2] || plan?.strategicSyncSummary?.[0]);
   return (
-    <div className="rounded-[22px] bg-primary text-white p-7 md:p-10 space-y-4">
-      <p className="text-xs font-medium text-amber-300">The one idea</p>
-      <p className="text-xl md:text-[28px] font-semibold leading-snug tracking-tight max-w-4xl">{idea}</p>
-      <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-6 text-sm font-medium text-white/85">
-        {e.cta && <span>Every post ends with: “{e.cta}”</span>}
-        {why && why !== idea && <span className="text-white/60 font-medium">{why}</span>}
+    <section className="rounded-[22px] bg-primary text-white p-7 md:p-10 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+      <div className="space-y-3 max-w-4xl">
+        <p className="text-[13px] font-semibold text-amber-300">The one idea</p>
+        <p className="text-xl md:text-[28px] font-semibold leading-snug tracking-tight">{idea}</p>
+        {e.cta && <p className="text-sm text-white/80">Every post ends with “{e.cta}”</p>}
       </div>
+      {(onRefine || onNewPlan) && (
+        <div className="flex gap-2 shrink-0">
+          {onRefine && <button onClick={onRefine} className="h-10 px-4 rounded-xl bg-white/15 hover:bg-white/25 text-sm font-semibold transition-colors">Refine</button>}
+          {onNewPlan && <button onClick={onNewPlan} className="h-10 px-4 rounded-xl bg-white text-primary text-sm font-semibold hover:bg-white/90 transition-colors">New plan</button>}
+        </div>
+      )}
+    </section>
+  );
+};
+
+type OverviewItem = { id: string; day: number; month: number; year: number; platform: string; title: string; status: string };
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// At-a-glance plan: numbers, this week's posts with their stage, the content mix and the arc.
+export const PlanOverview: React.FC<{
+  plan: any;
+  items: OverviewItem[];
+  onOpenCalendar: () => void;
+  onOpenItem: (id: string) => void;
+}> = ({ plan, items, onOpenCalendar, onOpenItem }) => {
+  const e = plan?.engine || {};
+  const cal: any[] = plan?.calendar || [];
+  const byPlatform = items.reduce<Record<string, number>>((m, it) => { m[it.platform] = (m[it.platform] || 0) + 1; return m; }, {});
+  const platformLine = Object.entries(byPlatform).map(([p, n]) => `${n} ${p === 'Twitter' ? 'X' : p}`).join(' · ') || `${cal.length} days planned`;
+  const ready = items.filter(it => it.status !== 'draft').length;
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const end = new Date(start); end.setDate(end.getDate() + 7);
+  const week = items
+    .filter(it => { const d = new Date(it.year, it.month, it.day); return d >= start && d < end; })
+    .sort((a, b) => +new Date(a.year, a.month, a.day) - +new Date(b.year, b.month, b.day));
+  const needDesign = week.filter(it => it.status === 'draft').length;
+  const pillars: { name: string; pct: number }[] = (e.pillars || []).slice(0, 5).map((p: any) => ({ name: p.name, pct: Math.max(0, Math.min(100, parseInt(String(p.share || ''), 10) || 0)) }));
+  const tile = `bg-surface-container-lowest rounded-[18px] p-5 ${SHADOW} flex flex-col gap-1 min-w-0`;
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={tile}>
+          <span className="text-[13px] text-on-surface-variant/70">Posts planned</span>
+          <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface tabular-nums">{items.length || cal.length}</span>
+          <span className="text-[13px] font-medium text-primary truncate">{platformLine}</span>
+        </div>
+        <div className={tile}>
+          <span className="text-[13px] text-on-surface-variant/70">Ready to post</span>
+          <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface tabular-nums">{ready}<span className="text-lg font-medium text-on-surface-variant/50"> / {items.length}</span></span>
+          <div className="h-1.5 rounded-full bg-surface-container-high mt-1.5"><div className="h-1.5 rounded-full bg-sky-600" style={{ width: `${items.length ? Math.round((ready / items.length) * 100) : 0}%` }} /></div>
+        </div>
+        <div className={tile}>
+          <span className="text-[13px] text-on-surface-variant/70">This week</span>
+          <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface tabular-nums">{week.length}</span>
+          <span className={cn("text-[13px] font-medium", needDesign ? "text-amber-600" : "text-emerald-600")}>{needDesign ? `${needDesign} need design` : week.length ? 'All have designs' : 'Nothing scheduled'}</span>
+        </div>
+        <div className={tile}>
+          <span className="text-[13px] text-on-surface-variant/70">{e.cta ? `${(e.cta.match(/\b[A-Z]{3,}\b/) || ['Lead'])[0]} replies` : 'Leads from posts'}</span>
+          <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface-variant/40">—</span>
+          <span className="text-[13px] text-on-surface-variant/60">Fills in once posts go live</span>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-5 items-start">
+        <section className={`flex-[999_1_520px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-3`}>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-xl font-semibold tracking-tight text-on-surface">This week</h3>
+            <button onClick={onOpenCalendar} className="text-sm font-semibold text-primary hover:underline">Open calendar →</button>
+          </div>
+          {week.length ? (
+            <div className="divide-y divide-outline-variant/10">
+              {week.map(it => (
+                <button key={it.id} onClick={() => onOpenItem(it.id)} className="w-full grid grid-cols-[64px_70px_minmax(0,1fr)_auto] gap-3 items-center py-3 text-left hover:bg-surface-container-low/60 rounded-lg px-1 transition-colors">
+                  <span className="text-[13px] text-on-surface-variant/70">{DOW[new Date(it.year, it.month, it.day).getDay()]} {it.day}</span>
+                  <span className="text-[13px] font-semibold text-primary truncate">{it.platform === 'Twitter' ? 'X' : it.platform}</span>
+                  <span className="text-sm font-medium text-on-surface truncate">{it.title}</span>
+                  <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap", (STAGE_UI[it.status] || STAGE_UI.draft).chip)}>● {(STAGE_UI[it.status] || STAGE_UI.draft).label}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-on-surface-variant/70 py-4">Nothing on the calendar for the next 7 days. Use “Sync to calendar” in Plan details, or import posts on the Calendar tab.</p>
+          )}
+        </section>
+
+        <section className={`flex-[1_1_320px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-4`}>
+          <h3 className="text-xl font-semibold tracking-tight text-on-surface">Content mix</h3>
+          <div className="space-y-3">
+            {pillars.map(p => (
+              <div key={p.name} className="space-y-1.5">
+                <div className="flex justify-between gap-3 text-sm"><span className="font-medium text-on-surface truncate">{p.name}</span><span className="text-on-surface-variant/70 tabular-nums">{p.pct ? `${p.pct}%` : ''}</span></div>
+                <div className="h-2 rounded-full bg-surface-container-high"><div className="h-2 rounded-full bg-primary" style={{ width: `${p.pct || 10}%` }} /></div>
+              </div>
+            ))}
+          </div>
+          {e.repurpose && (
+            <div className="pt-3 border-t border-outline-variant/10 space-y-1">
+              <p className="text-[13px] text-on-surface-variant/70">How each idea is reused</p>
+              <p className="text-sm text-on-surface">{e.repurpose}</p>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {e.arc?.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {e.arc.map((a: any, i: number) => (
+            <div key={i} className={`bg-surface-container-lowest rounded-[18px] p-5 ${SHADOW} space-y-1.5 min-w-0`}>
+              <p className="text-xs text-on-surface-variant/70">{a.days}</p>
+              <p className="text-base font-semibold tracking-tight text-on-surface">{a.title}</p>
+              <p className="text-[13px] text-on-surface-variant/80 leading-relaxed">{a.focus}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -318,7 +435,7 @@ export const WinningPosts: React.FC<{ intel: CompetitorIntel | null }> = ({ inte
 
 // The plan, arranged like Content Production: a stat row and tabs with equal spacing.
 type PlanTabId = 'plan' | 'pillars' | 'rhythm' | 'scripts';
-export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan, days }) => {
+export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode; hideStats?: boolean }> = ({ plan, days, hideStats }) => {
   const [tab, setTab] = useState<PlanTabId>('pillars');
   const e = plan?.engine || {};
   const cal: any[] = plan?.calendar || [];
@@ -339,7 +456,7 @@ export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan,
   const th = "text-left p-3 text-xs font-medium text-on-surface-variant/60";
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {!hideStats && <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {stats.map(t => (
           <div key={t.label} className="bg-surface-container-lowest rounded-[18px] shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.08)] p-5 min-w-0">
             <p className="text-xs font-medium text-on-surface-variant/60">{t.label}</p>
@@ -347,7 +464,7 @@ export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan,
             <p className={cn("text-xs font-medium truncate mt-0.5", t.sc)} title={t.sub}>{t.sub}</p>
           </div>
         ))}
-      </div>
+      </div>}
 
       <div className="flex items-center justify-between gap-4 border-b border-outline-variant/15 overflow-x-auto no-scrollbar">
         {tabs.map(t => {
@@ -367,7 +484,7 @@ export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode }> = ({ plan,
 
       {tab === 'plan' && (
         <div className="space-y-6">
-          {e.arc?.length > 0 && (
+          {!hideStats && e.arc?.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {e.arc.map((a: any, i: number) => (
                 <div key={i} className="rounded-[18px] bg-surface-container-lowest shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.08)] p-5 space-y-1.5 min-w-0">

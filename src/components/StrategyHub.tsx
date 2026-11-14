@@ -12,7 +12,7 @@ import localforage from 'localforage';
 import { ContentImport, type ImportedPost } from '@/src/components/ContentImport';
 import { ClientSwitcher } from '@/src/components/ClientSwitcher';
 import { useClientId, clientKey, clientLabel } from '@/src/lib/clientProfile';
-import { PlanStart, PlanCompetitors, OneIdea, PlanTabs, EMPTY_BRIEF, type PlanBrief } from '@/src/components/ClientEngine';
+import { PlanStart, PlanCompetitors, OneIdea, PlanTabs, PlanOverview, EMPTY_BRIEF, type PlanBrief } from '@/src/components/ClientEngine';
 
 type StrategyTab = 'competitor' | 'calendar' | 'plan';
 
@@ -1820,85 +1820,18 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
               </div>
             ) : thirtyDayPlan ? (
               <div className="space-y-8">
-                {/* Strategy Header & Refinement */}
-                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
-                  <h3 className="text-xl md:text-2xl font-semibold tracking-tight text-on-surface">For {thirtyDayPlan.builtFor || auditData?.businessName || 'your brand'}</h3>
-                  <div className="flex flex-wrap items-center gap-3 md:gap-4">
-                    <button 
-                      onClick={handleGeneratePlan}
-                      disabled={isGeneratingPlan}
-                      className={cn(
-                        "flex items-center justify-center rounded-full bg-surface-container-low border border-outline-variant/20 transition-all disabled:opacity-100 overflow-hidden group",
-                        isGeneratingPlan 
-                          ? "h-8 px-4 w-auto" 
-                          : "w-8 h-8 text-on-surface-variant hover:text-primary hover:bg-primary/5 hover:border-primary/30 hover:scale-110 hover:shadow-md hover:shadow-primary/10 active:scale-95"
-                      )}
-                      title="Regenerate Plan"
-                    >
-                      <AnimatePresence mode="wait">
-                        {isGeneratingPlan ? (
-                          <motion.div
-                            key="generating"
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.8 }}
-                            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary"
-                          >
-                            <Zap size={12} fill="currentColor" className="animate-pulse" />
-                            <motion.span
-                              key={generationState}
-                              initial={{ opacity: 0, y: 5 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -5 }}
-                              className="w-32 text-left"
-                            >
-                              {generationState === 'crafting' && (isResearching ? 'Studying competitors...' : 'Crafting Strategy...')}
-                              {generationState === 'building' && 'Building Content Plan...'}
-                              {generationState === 'completed' && 'Completed Boss 🫡'}
-                            </motion.span>
-                          </motion.div>
-                        ) : (
-                          <motion.div
-                            key="idle"
-                            initial={{ opacity: 0, rotate: -90 }}
-                            animate={{ opacity: 1, rotate: 0 }}
-                            exit={{ opacity: 0, rotate: 90 }}
-                          >
-                            <Zap size={16} className="transition-all duration-300 group-hover:scale-110 group-hover:rotate-12 group-hover:fill-primary/20" />
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </button>
-                    <button 
-                      onClick={() => setShowRefineInput(!showRefineInput)}
-                      className="flex items-center gap-2 text-secondary font-black text-[10px] md:text-xs uppercase tracking-widest hover:underline"
-                    >
-                      <Sparkles size={16} />
-                      Refine with Claude
-                    </button>
-                    <button 
-                      onClick={() => toast.success('PDF Export started...')}
-                      className="flex items-center gap-2 text-primary font-black text-[10px] md:text-xs uppercase tracking-widest hover:underline"
-                    >
-                      <Download size={16} />
-                      Export Full PDF
-                    </button>
-                    <button 
-                      onClick={() => handleDraftCalendarFromBlueprint()}
-                      disabled={isDraftingCalendar || !thirtyDayPlan}
-                      className="flex items-center gap-2 text-emerald-600 font-black text-[10px] md:text-xs uppercase tracking-widest hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      {isDraftingCalendar ? <Loader2 size={16} className="animate-spin" /> : <Calendar size={16} />}
-                      Draft 30-Day Calendar
-                    </button>
-                    <button
-                      onClick={() => setShowPlanStart(true)}
-                      className="flex items-center gap-2 text-on-surface-variant font-black text-[10px] md:text-xs uppercase tracking-widest hover:underline"
-                    >
-                      <Plus size={16} />
-                      New plan
-                    </button>
-                  </div>
+                {/* Secondary plan actions */}
+                <div className="flex flex-wrap items-center gap-2 -mb-2">
+                  <button onClick={handleGeneratePlan} disabled={isGeneratingPlan}
+                    className="h-9 px-3.5 rounded-full bg-surface-container-lowest border border-outline-variant/15 text-[13px] font-medium text-on-surface-variant hover:text-on-surface flex items-center gap-1.5 disabled:opacity-60">
+                    {isGeneratingPlan ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    {isGeneratingPlan ? (generationState === 'crafting' && isResearching ? 'Studying competitors…' : 'Regenerating…') : 'Regenerate'}
+                  </button>
+                  <button onClick={() => handleDraftCalendarFromBlueprint()} disabled={isDraftingCalendar}
+                    className="h-9 px-3.5 rounded-full bg-surface-container-lowest border border-outline-variant/15 text-[13px] font-medium text-on-surface-variant hover:text-on-surface flex items-center gap-1.5 disabled:opacity-60">
+                    {isDraftingCalendar ? <Loader2 size={14} className="animate-spin" /> : <Calendar size={14} />} Draft calendar
+                  </button>
+                  <span className="text-[13px] text-on-surface-variant/60 ml-1">For {thirtyDayPlan.builtFor || auditData?.businessName || clientLabel(clientId)}{thirtyDayPlan.platforms?.length ? ` · ${thirtyDayPlan.platforms.map((p: string) => p === 'Twitter' ? 'X' : p).join(', ')}` : ''}</span>
                 </div>
 
                 <AnimatePresence>
@@ -1942,8 +1875,11 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                   )}
                 </AnimatePresence>
 
-                <OneIdea plan={thirtyDayPlan} />
-                <PlanTabs plan={thirtyDayPlan} days={(
+                <OneIdea plan={thirtyDayPlan} onRefine={() => setShowRefineInput(v => !v)} onNewPlan={() => setShowPlanStart(true)} />
+                <PlanOverview plan={thirtyDayPlan} items={filteredCalendarItems} onOpenCalendar={() => setActiveTab('calendar')}
+                  onOpenItem={(id) => { const it = calendarItems.find(x => x.id === id); if (it) setViewItem(it); }} />
+                <h3 className="text-xl font-semibold tracking-tight text-on-surface pt-2">Plan details</h3>
+                <PlanTabs plan={thirtyDayPlan} hideStats days={(
                   <>
                 {/* Daily Content Grid Preview */}
                 <div className="bg-surface-container-lowest rounded-[18px] p-6 md:p-8 shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.08)] space-y-6">
@@ -2054,19 +1990,6 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                         <ChevronRight className="text-on-surface-variant" size={20} />
                       </button>
                     </div>
-                    {personalEnabled ? (
-                      <div className="flex items-center gap-1 p-1 rounded-full bg-surface-container-low border border-outline-variant/10">
-                        {(['all', 'company', 'personal'] as const).map(b => (
-                          <button key={b} onClick={() => setActiveBrand(b)}
-                            className={cn("text-sm font-semibold px-4 py-1.5 rounded-full transition-all whitespace-nowrap",
-                              activeBrand === b ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant/60 hover:text-on-surface")}>
-                            {b === 'all' ? `All (${calendarItems.length})` : `${BRAND_LABEL[b]} (${calendarItems.filter(it => brandOf(it) === b).length})`}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <button onClick={() => setPersonalEnabled(true)} className="text-xs font-semibold text-on-surface-variant/60 hover:text-primary whitespace-nowrap">+ Add personal brand</button>
-                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 relative w-full md:w-auto">
                     <button
@@ -2837,46 +2760,44 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
         document.body
       )}
 
-      {/* Header with Tabs */}
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 md:gap-6">
-        <div className="space-y-1 md:space-y-2">
-          <h2 className="text-3xl md:text-4xl font-black tracking-tight text-on-surface">Strategy Hub</h2>
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-xs md:text-sm font-medium text-on-surface-variant/60">Orchestrate your multi-channel growth engine.</p>
+      {/* Header: title, client, brand, then the section tabs */}
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <h2 className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface">Strategy</h2>
+            <p className="text-sm text-on-surface-variant/70">
+              {clientLabel(clientId)}
+              {activeTab === 'plan' ? (thirtyDayPlan ? ' · 30-day plan' : ' · New plan') : activeTab === 'calendar' ? ` · ${personalEnabled && activeBrand !== 'all' ? BRAND_LABEL[activeBrand] + ' calendar' : 'Calendar'}` : ' · Competitors'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5">
             <ClientSwitcher />
+            {personalEnabled ? (
+              <div role="group" aria-label="Brand" className="flex gap-0.5 p-[3px] rounded-xl bg-surface-container-high">
+                {(activeTab === 'calendar' ? (['all', 'company', 'personal'] as const) : (['company', 'personal'] as const)).map(b => (
+                  <button key={b} onClick={() => setActiveBrand(b)}
+                    className={cn("h-[34px] px-3.5 rounded-[10px] text-[13px] transition-all whitespace-nowrap",
+                      (activeBrand === b || (activeTab !== 'calendar' && activeBrand === 'all' && b === 'company'))
+                        ? "bg-surface-container-lowest text-on-surface font-semibold shadow-sm" : "text-on-surface-variant/70 font-medium hover:text-on-surface")}>
+                    {b === 'all' ? 'All' : BRAND_LABEL[b]}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button onClick={() => setPersonalEnabled(true)} className="h-10 px-3 rounded-xl text-[13px] font-medium text-on-surface-variant/70 hover:text-primary">+ Personal brand</button>
+            )}
           </div>
         </div>
 
-        <div className="bg-surface-container-low p-1 rounded-2xl border border-outline-variant/10 shadow-sm flex gap-1 overflow-x-auto no-scrollbar w-full lg:w-auto">
-          {auditData && (
-            <button
-              onClick={() => setActiveTab('plan')}
-              className={cn(
-                "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0",
-                activeTab === 'plan' 
-                  ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10" 
-                  : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container"
-              )}
-            >
-              <Sparkles size={16} />
-              30 Day Plan
-            </button>
-          )}
-          {[
-            { id: 'competitor', label: 'Competitor Analysis', icon: Network },
-            { id: 'calendar', label: 'Content Calendar', icon: Calendar },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as StrategyTab)}
-              className={cn(
-                "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0",
-                activeTab === tab.id 
-                  ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10" 
-                  : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container"
-              )}
-            >
-              <tab.icon size={16} />
+        <div role="tablist" aria-label="Strategy sections" className="inline-flex gap-1 p-1 rounded-[14px] bg-surface-container-high">
+          {([
+            { id: 'plan', label: 'Plan' },
+            { id: 'calendar', label: 'Calendar' },
+            { id: 'competitor', label: 'Competitors' },
+          ] as const).map(tab => (
+            <button key={tab.id} role="tab" aria-selected={activeTab === tab.id} onClick={() => setActiveTab(tab.id as StrategyTab)}
+              className={cn("h-[38px] px-5 rounded-[11px] text-sm transition-all whitespace-nowrap",
+                activeTab === tab.id ? "bg-surface-container-lowest text-on-surface font-semibold shadow-sm" : "text-on-surface-variant/70 font-medium hover:text-on-surface")}>
               {tab.label}
             </button>
           ))}
