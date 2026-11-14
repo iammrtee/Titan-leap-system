@@ -10,6 +10,7 @@ import { supabase, isSupabaseConfigured, getAuthHeader } from '@/src/lib/supabas
 import { safeStorageName, toPostableJpeg } from '@/src/lib/postMedia';
 import localforage from 'localforage';
 import { ContentImport, type ImportedPost } from '@/src/components/ContentImport';
+import { CalendarWeek, CalendarBoard, weekStartOf, STAGE_ORDER, STAGE_STYLE } from '@/src/components/CalendarViews';
 import { ClientSwitcher } from '@/src/components/ClientSwitcher';
 import { useClientId, clientKey, clientLabel } from '@/src/lib/clientProfile';
 import { PlanStart, PlanCompetitors, OneIdea, PlanTabs, PlanOverview, EMPTY_BRIEF, type PlanBrief } from '@/src/components/ClientEngine';
@@ -902,6 +903,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
   const [viewItem, setViewItemState] = useState<CalendarItem | null>(null);
   const [popupMax, setPopupMax] = useState(false);
   const setViewItem = (it: CalendarItem | null) => { setViewItemState(it); if (!it) setPopupMax(false); };
+  // (popupTab resets to Post whenever a different post opens; see the effect below)
   const [confirmClear, setConfirmClear] = useState(false);
   const handleClearCalendar = () => {
     if (!confirmClear) { setConfirmClear(true); setTimeout(() => setConfirmClear(false), 3500); return; }
@@ -932,6 +934,25 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     if (first) setSelectedDate({ day: first.getDate(), month: first.getMonth(), year: first.getFullYear() });
     toast.success(`Added ${fresh.length} posts${personalEnabled ? ` to ${BRAND_LABEL[brand]}` : ''}`, { action: { label: 'Undo', onClick: () => setCalendarItems(before) }, duration: 8000 });
   };
+
+  // Calendar views: Week (default), Month, Board (by stage).
+  const [calView, setCalViewState] = useState<'week' | 'month' | 'board'>(() => { try { const v = localStorage.getItem('titanleap_cal_view'); return v === 'month' || v === 'board' ? v : 'week'; } catch { return 'week'; } });
+  const setCalView = (v: 'week' | 'month' | 'board') => { setCalViewState(v); try { localStorage.setItem('titanleap_cal_view', v); } catch {} };
+  const [weekStart, setWeekStart] = useState<Date>(() => weekStartOf(new Date()));
+  const shiftWeek = (n: number) => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() + 7 * n); return d; });
+  const addPostOn = (d: Date) => {
+    setSelectedDate({ day: d.getDate(), month: d.getMonth(), year: d.getFullYear() });
+    setEditingItem(null);
+    setNewItem({ platform: 'Instagram', type: 'post', status: 'draft', time: '09:00 AM' });
+    setShowAddModal(true);
+  };
+  const weekLabel = (() => {
+    const end = new Date(weekStart); end.setDate(end.getDate() + 6);
+    const m = (d: Date) => d.toLocaleDateString(undefined, { month: 'short' });
+    return weekStart.getMonth() === end.getMonth()
+      ? `${m(weekStart)} ${weekStart.getDate()} – ${end.getDate()}, ${end.getFullYear()}`
+      : `${m(weekStart)} ${weekStart.getDate()} – ${m(end)} ${end.getDate()}, ${end.getFullYear()}`;
+  })();
 
   const handleEditClick = (item: CalendarItem) => {
     setEditingItem(item);
@@ -1457,6 +1478,18 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     }
   };
 
+  // Post detail: a panel from the right, so the calendar stays visible behind it.
+  const [popupTab, setPopupTab] = useState<'post' | 'media' | 'notes'>('post');
+  useEffect(() => {
+    if (!viewItem) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setViewItem(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [viewItem]);
+  useEffect(() => { setPopupTab('post'); }, [viewItem?.id]);
+  const highlightFills = (t: string) => t.split(/(⟦[^⟧]*⟧)/g).map((part, i) =>
+    part.startsWith('⟦') ? <mark key={i} className="bg-amber-100 text-amber-800 rounded px-1">{part.slice(1, -1)}</mark> : <React.Fragment key={i}>{part}</React.Fragment>);
+
   const renderViewPopup = () => {
     if (!viewItem) return null;
     const item = calendarItems.find(i => i.id === viewItem.id) || viewItem;
@@ -1466,92 +1499,120 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     const planFull = canWrite ? thirtyDayPlan.calendar[planIdx].full : null;
     const text = planFull ? fullPostToText(planFull) : String(item.description || '');
     const sections = text.split(/\n(?=(?:HOOK|BODY|CAPTION|CTA|SLIDE \d+|\[\d|OTHER PLATFORMS|NOTES|Modeled on)\b)/);
+    const parsed = sections.map(sec => {
+      const head = sec.match(/^(HOOK|BODY|CAPTION|CTA|OTHER PLATFORMS|NOTES|Modeled on|SLIDE \d+)\s*:?\s*/);
+      return { label: head ? head[1].charAt(0) + head[1].slice(1).toLowerCase() : '', body: head ? sec.slice(head[0].length) : sec };
+    });
+    const postParts = parsed.filter(p => !/^(Notes|Modeled on)$/.test(p.label));
+    const noteParts = parsed.filter(p => /^(Notes|Modeled on)$/.test(p.label));
+    const fills = (text.match(/⟦/g) || []).length;
+    const ordered = [...filteredCalendarItems].sort((a, b) => +new Date(a.year, a.month, a.day) - +new Date(b.year, b.month, b.day) || a.time.localeCompare(b.time));
+    const pos = ordered.findIndex(x => x.id === item.id);
+    const go = (d: number) => { const next = ordered[pos + d]; if (next) setViewItem(next); };
+    const busy = canWrite ? writingDay === planIdx : expandingId === item.id;
+    const done = canWrite ? !!thirtyDayPlan.calendar[planIdx].full : /^(SLIDE 1|\[0|1\/ )/m.test(item.description || '');
+    const pill = "h-[42px] px-4 rounded-full text-sm font-semibold transition-colors";
     return createPortal(
-      <div className={cn("fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm", popupMax ? "p-2 md:p-4" : "p-4")} onClick={() => setViewItem(null)}>
-        <div onClick={e => e.stopPropagation()} className={cn("w-full flex flex-col bg-surface-container-lowest shadow-[0_8px_20px_rgba(0,0,0,0.08),0_20px_60px_rgba(0,0,0,0.16)] overflow-hidden transition-all duration-300",
-          popupMax ? "h-full max-w-none rounded-[18px]" : "max-w-2xl max-h-[88vh] rounded-[22px]")}>
-          <div className="flex items-start justify-between gap-4 p-6 md:p-8 pb-4">
-            <div className="space-y-1.5 min-w-0">
-              <p className="text-xs font-medium text-on-surface-variant/60">
-                {personalEnabled ? `${BRAND_LABEL[brandOf(item)]} · ` : ''}{item.platform === 'Twitter' ? 'X' : item.platform} · {item.type} · {MONTH_NAMES[item.month]?.slice(0, 3)} {item.day} · {item.time}
+      <div className="fixed inset-0 z-[100] flex justify-end bg-black/30" onClick={() => setViewItem(null)}>
+        <aside aria-label="Post" onClick={e => e.stopPropagation()}
+          className="w-full max-w-[640px] h-full flex flex-col bg-surface-container-lowest shadow-[-8px_0_40px_rgba(0,0,0,0.12)]">
+          <div className="flex items-start justify-between gap-4 px-6 md:px-8 pt-7 pb-4 border-b border-outline-variant/10">
+            <div className="space-y-2 min-w-0">
+              <p className="text-[13px] text-on-surface-variant/70">
+                {personalEnabled ? `${BRAND_LABEL[brandOf(item)]} · ` : ''}{item.platform === 'Twitter' ? 'X' : item.platform} · {new Date(item.year, item.month, item.day).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · {item.time}
               </p>
-              <h3 className="text-xl md:text-2xl font-semibold tracking-tight text-on-surface leading-snug">{item.title}</h3>
+              <h3 className="text-xl md:text-2xl font-bold tracking-tight text-on-surface leading-snug">{item.title}</h3>
             </div>
-            <div className="shrink-0 flex items-center gap-2">
-              <button onClick={() => setPopupMax(m => !m)} title={popupMax ? 'Exit full screen' : 'Full screen'} aria-label={popupMax ? 'Exit full screen' : 'Full screen'}
-                className="w-9 h-9 rounded-full bg-surface-container-highest/60 flex items-center justify-center text-on-surface-variant hover:text-on-surface">
-                {popupMax ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-              </button>
-              <button onClick={() => setViewItem(null)} aria-label="Close" className="w-9 h-9 rounded-full bg-surface-container-highest/60 flex items-center justify-center text-on-surface-variant hover:text-on-surface"><X size={16} /></button>
+            <div className="flex gap-1.5 shrink-0">
+              <button onClick={() => go(-1)} disabled={pos <= 0} aria-label="Previous post" className="w-9 h-9 rounded-full bg-surface-container-high/70 flex items-center justify-center text-on-surface-variant disabled:opacity-30"><ChevronRight size={16} className="rotate-180" /></button>
+              <button onClick={() => go(1)} disabled={pos < 0 || pos >= ordered.length - 1} aria-label="Next post" className="w-9 h-9 rounded-full bg-surface-container-high/70 flex items-center justify-center text-on-surface-variant disabled:opacity-30"><ChevronRight size={16} /></button>
+              <button onClick={() => setViewItem(null)} aria-label="Close" className="w-9 h-9 rounded-full bg-surface-container-high/70 flex items-center justify-center text-on-surface-variant"><X size={16} /></button>
             </div>
           </div>
-          <div className={cn("px-6 md:px-8 pb-6 overflow-y-auto space-y-4 flex-1", popupMax && "md:px-16 lg:px-24 [&_p]:text-base")}>
-            {text ? sections.map((sec, i) => {
-              const head = sec.match(/^(HOOK|BODY|CAPTION|CTA|OTHER PLATFORMS|NOTES|Modeled on|SLIDE \d+)\s*:?\s*/);
-              return (
-                <div key={i} className="space-y-1">
-                  {head && <p className="text-[11px] font-semibold text-primary">{head[1].charAt(0) + head[1].slice(1).toLowerCase()}</p>}
-                  <p className="text-sm text-on-surface leading-relaxed whitespace-pre-line break-words">{head ? sec.slice(head[0].length) : sec}</p>
-                </div>
-              );
-            }) : <p className="text-sm text-on-surface-variant/60">No content yet.</p>}
 
-            <div className="pt-4 border-t border-outline-variant/10 space-y-3">
-              <p className="text-[11px] font-semibold text-primary">Stage</p>
-              <div className="flex flex-wrap gap-2">
-                {(['draft', 'ready', 'approved', 'scheduled', 'published'] as const).map(st => (
-                  <button key={st} onClick={() => updateItem(item.id, { status: st })}
-                    className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all",
-                      item.status === st ? STAGES[st].chip : "border-outline-variant/20 text-on-surface-variant/60 hover:text-on-surface")}>
-                    <span className={cn("w-1.5 h-1.5 rounded-full", STAGES[st].dot)} />{STAGES[st].label}
-                  </button>
-                ))}
-              </div>
+          <div className="px-6 md:px-8 py-4 border-b border-outline-variant/10 space-y-2.5">
+            <p className="text-xs font-semibold text-on-surface-variant/70">Stage</p>
+            <div className="flex rounded-[10px] overflow-hidden">
+              {STAGE_ORDER.map(st => (
+                <button key={st} onClick={() => updateItem(item.id, { status: st })}
+                  className={cn("flex-1 h-[34px] text-xs transition-colors border-r border-surface-container-lowest last:border-0",
+                    item.status === st ? "bg-primary text-white font-semibold" : "bg-surface-container-high/70 text-on-surface-variant/70 font-medium hover:text-on-surface")}>
+                  {STAGE_STYLE[st].label}
+                </button>
+              ))}
             </div>
+          </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[11px] font-semibold text-primary">Design / video</p>
-                <label className={cn("flex items-center gap-1.5 text-xs font-semibold text-primary cursor-pointer hover:underline", attaching && "opacity-50 pointer-events-none")}>
-                  {attaching ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}{attaching ? 'Uploading…' : 'Attach'}
+          <div role="tablist" aria-label="Post sections" className="px-6 md:px-8 pt-3 flex gap-6 border-b border-outline-variant/10">
+            {([['post', 'Post'], ['media', `Design & video${item.media?.length ? ` (${item.media.length})` : ''}`], ['notes', 'Notes']] as const).map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={popupTab === id} onClick={() => setPopupTab(id)}
+                className={cn("h-10 text-sm border-b-2 -mb-px transition-colors", popupTab === id ? "border-primary text-on-surface font-semibold" : "border-transparent text-on-surface-variant/70 font-medium hover:text-on-surface")}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-6 md:px-8 py-6 space-y-5">
+            {popupTab === 'post' && (
+              <>
+                {fills > 0 && (
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-[14px] bg-amber-50 text-amber-800">
+                    <span className="text-[13px] flex-1">{fills} spot{fills > 1 ? 's need' : ' needs'} real facts (highlighted). Edit the post to fill {fills > 1 ? 'them' : 'it'} in.</span>
+                    <button onClick={() => { setViewItem(null); handleEditClick(item); }} className="h-8 px-3 rounded-lg bg-amber-800 text-white text-xs font-semibold">Fill in</button>
+                  </div>
+                )}
+                {postParts.length && text ? postParts.map((p, i) => (
+                  <div key={i} className="space-y-1.5">
+                    {p.label && <p className="text-xs font-semibold text-primary">{p.label}</p>}
+                    <p className="text-[15px] text-on-surface leading-relaxed whitespace-pre-line break-words">{highlightFills(p.body)}</p>
+                  </div>
+                )) : <p className="text-sm text-on-surface-variant/60">No content yet. Write the full post, or Edit to add it.</p>}
+              </>
+            )}
+            {popupTab === 'media' && (
+              <div className="space-y-4">
+                <label className={cn("flex flex-col items-center justify-center gap-2 h-32 rounded-[14px] border-[1.5px] border-dashed border-outline-variant/30 text-sm font-medium text-on-surface-variant/70 cursor-pointer hover:border-primary/40 hover:text-primary transition-colors", attaching && "opacity-50 pointer-events-none")}>
+                  {attaching ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+                  {attaching ? 'Uploading…' : 'Attach the finished design or video'}
                   <input type="file" multiple accept="image/*,video/*" className="hidden" onChange={e => { attachMedia(item, e.target.files); e.target.value = ''; }} />
                 </label>
+                {item.media?.length ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    {item.media.map((u, i) => (
+                      <div key={u} className="relative group/m aspect-square rounded-xl overflow-hidden bg-surface-container-low">
+                        {/\.(mp4|mov|webm)(\?|$)/i.test(u)
+                          ? <video src={u} className="w-full h-full object-cover" muted playsInline controls />
+                          : <img src={u} alt={`Attachment ${i + 1}`} className="w-full h-full object-cover" />}
+                        <button onClick={() => updateItem(item.id, { media: item.media!.filter(x => x !== u) })} aria-label="Remove attachment"
+                          className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover/m:opacity-100 transition-opacity"><X size={13} /></button>
+                      </div>
+                    ))}
+                  </div>
+                ) : <p className="text-[13px] text-on-surface-variant/60">Nothing attached yet. Attaching moves the post to Ready.</p>}
               </div>
-              {item.media?.length ? (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {item.media.map((u, i) => (
-                    <div key={u} className="relative group/m aspect-square rounded-xl overflow-hidden bg-surface-container-low">
-                      {/\.(mp4|mov|webm)(\?|$)/i.test(u)
-                        ? <video src={u} className="w-full h-full object-cover" muted playsInline />
-                        : <img src={u} alt={`Attachment ${i + 1}`} className="w-full h-full object-cover" />}
-                      <button onClick={() => updateItem(item.id, { media: item.media!.filter(x => x !== u) })} aria-label="Remove attachment"
-                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover/m:opacity-100 transition-opacity"><X size={12} /></button>
-                    </div>
-                  ))}
+            )}
+            {popupTab === 'notes' && (
+              noteParts.length ? noteParts.map((p, i) => (
+                <div key={i} className="space-y-1.5">
+                  <p className="text-xs font-semibold text-primary">{p.label}</p>
+                  <p className="text-[15px] text-on-surface leading-relaxed whitespace-pre-line">{p.body}</p>
                 </div>
-              ) : <p className="text-xs text-on-surface-variant/60">Nothing attached yet. Attach the finished design or video and the post moves to Ready.</p>}
-            </div>
+              )) : <p className="text-sm text-on-surface-variant/60">No production notes for this post.</p>
+            )}
           </div>
-          <div className="flex flex-wrap items-center gap-2 p-4 md:px-8 border-t border-outline-variant/10 bg-surface-container-low/50">
-            {(() => {
-              const busy = canWrite ? writingDay === planIdx : expandingId === item.id;
-              const done = canWrite ? !!thirtyDayPlan.calendar[planIdx].full : /^(SLIDE 1|\[0|1\/ )/m.test(item.description || '');
-              return (
-                <button disabled={writingDay !== null || !!expandingId} onClick={() => canWrite ? handleWriteFull(planIdx) : handleExpandItem(item)}
-                  className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-full text-xs font-semibold disabled:opacity-50">
-                  {busy ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-                  {busy ? 'Writing…' : done ? 'Rewrite full post' : 'Write full post'}
-                </button>
-              );
-            })()}
-            <button onClick={() => { navigator.clipboard?.writeText(text).then(() => toast.success('Copied')).catch(() => {}); }}
-              className="px-4 py-2.5 rounded-full text-xs font-semibold bg-surface-container-highest/60 text-on-surface hover:bg-surface-container-highest">Copy</button>
-            <button onClick={() => { handleSendToProduction(item); }}
-              className="px-4 py-2.5 rounded-full text-xs font-semibold bg-surface-container-highest/60 text-on-surface hover:bg-surface-container-highest">Send to Production</button>
-            <button onClick={() => { setViewItem(null); handleEditClick(item); }}
-              className="ml-auto px-4 py-2.5 rounded-full text-xs font-semibold text-primary hover:bg-primary/5">Edit</button>
+
+          <div className="flex flex-wrap items-center gap-2 px-6 md:px-8 py-4 border-t border-outline-variant/10">
+            <button disabled={writingDay !== null || !!expandingId} onClick={() => canWrite ? handleWriteFull(planIdx) : handleExpandItem(item)}
+              className={cn(pill, "bg-primary text-white flex items-center gap-2 disabled:opacity-50")}>
+              {busy ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+              {busy ? 'Writing…' : done ? 'Rewrite full post' : 'Write full post'}
+            </button>
+            <button onClick={() => setPopupTab('media')} className={cn(pill, "bg-surface-container-high/70 text-on-surface hover:bg-surface-container-high")}>Attach design</button>
+            <button onClick={() => { navigator.clipboard?.writeText(text).then(() => toast.success('Copied')).catch(() => {}); }} className={cn(pill, "bg-surface-container-high/70 text-on-surface hover:bg-surface-container-high")}>Copy</button>
+            <button onClick={() => handleSendToProduction(item)} className={cn(pill, "bg-surface-container-high/70 text-on-surface hover:bg-surface-container-high")}>Send to Production</button>
+            <button onClick={() => { setViewItem(null); handleEditClick(item); }} className={cn(pill, "ml-auto text-primary hover:bg-primary/5")}>Edit</button>
           </div>
-        </div>
+        </aside>
       </div>,
       document.body
     );
@@ -1821,7 +1882,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
             ) : thirtyDayPlan ? (
               <div className="space-y-8">
                 {/* Secondary plan actions */}
-                <div className="flex flex-wrap items-center gap-2 -mb-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button onClick={handleGeneratePlan} disabled={isGeneratingPlan}
                     className="h-9 px-3.5 rounded-full bg-surface-container-lowest border border-outline-variant/15 text-[13px] font-medium text-on-surface-variant hover:text-on-surface flex items-center gap-1.5 disabled:opacity-60">
                     {isGeneratingPlan ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
@@ -1967,8 +2028,21 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
               )}>
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 w-full md:w-auto">
-                    <h3 className="text-2xl md:text-3xl font-black tracking-tight text-on-surface">{MONTH_NAMES[selectedDate.month]} {selectedDate.year}</h3>
-                    <div className="flex gap-2">
+                    <h3 className="text-xl md:text-[22px] font-semibold tracking-tight text-on-surface whitespace-nowrap">{calView === 'month' ? `${MONTH_NAMES[selectedDate.month]} ${selectedDate.year}` : calView === 'week' ? weekLabel : 'By stage'}</h3>
+                    {calView === 'week' && (
+                      <div className="flex gap-2">
+                        <button onClick={() => shiftWeek(-1)} aria-label="Previous week" className="w-9 h-9 flex items-center justify-center bg-surface-container-lowest hover:bg-surface-container-low rounded-[10px] border border-outline-variant/15"><ChevronRight className="rotate-180 text-on-surface-variant" size={18} /></button>
+                        <button onClick={() => shiftWeek(1)} aria-label="Next week" className="w-9 h-9 flex items-center justify-center bg-surface-container-lowest hover:bg-surface-container-low rounded-[10px] border border-outline-variant/15"><ChevronRight className="text-on-surface-variant" size={18} /></button>
+                        <button onClick={() => setWeekStart(weekStartOf(new Date()))} className="h-9 px-3 rounded-[10px] border border-outline-variant/15 bg-surface-container-lowest text-[13px] font-medium text-on-surface-variant hover:text-on-surface">Today</button>
+                      </div>
+                    )}
+                    <div role="group" aria-label="View" className="flex gap-0.5 p-[3px] rounded-[10px] bg-surface-container-high">
+                      {(['week', 'month', 'board'] as const).map(v => (
+                        <button key={v} onClick={() => setCalView(v)}
+                          className={cn("h-[30px] px-3 rounded-lg text-[13px] capitalize transition-all", calView === v ? "bg-surface-container-lowest text-on-surface font-semibold shadow-sm" : "text-on-surface-variant/70 font-medium hover:text-on-surface")}>{v}</button>
+                      ))}
+                    </div>
+                    <div className={cn("flex gap-2", calView !== 'month' && "hidden")}>
                       <button 
                         onClick={() => {
                           const newMonth = selectedDate.month === 0 ? 11 : selectedDate.month - 1;
@@ -2124,17 +2198,24 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                   if (!week.length) return null;
                   const count = (st: CalendarItem['status']) => week.filter(it => it.status === st).length;
                   return (
-                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-sm">
-                      <span className="font-semibold text-on-surface">Next 7 days · {clientLabel(clientId)}</span>
-                      {(['draft', 'ready', 'approved', 'scheduled', 'published'] as const).filter(st => count(st)).map(st => (
-                        <span key={st} className="flex items-center gap-1.5 text-on-surface-variant">
-                          <span className={cn("w-2 h-2 rounded-full", STAGES[st].dot)} />{count(st)} {STAGES[st].label.toLowerCase()}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[13px] text-on-surface-variant/70 mr-1">Next 7 days</span>
+                      {STAGE_ORDER.map(st => (
+                        <span key={st} className={cn("flex items-center gap-1.5 h-8 px-3 rounded-full bg-surface-container-lowest border border-outline-variant/15 text-[13px]", !count(st) && "text-on-surface-variant/50")}>
+                          <span className={cn("w-2 h-2 rounded-full", STAGE_STYLE[st].dot)} />{count(st)} {STAGE_STYLE[st].label.toLowerCase()}
                         </span>
                       ))}
                     </div>
                   );
                 })()}
 
+                {calView === 'week' && (
+                  <CalendarWeek posts={filteredCalendarItems} weekStart={weekStart} onOpen={p => setViewItem(p as CalendarItem)} onAdd={addPostOn} showBrand={personalEnabled && activeBrand === 'all'} />
+                )}
+                {calView === 'board' && (
+                  <CalendarBoard posts={filteredCalendarItems} onOpen={p => setViewItem(p as CalendarItem)} showBrand={personalEnabled && activeBrand === 'all'} />
+                )}
+                {calView === 'month' && (
                 <div className="bg-surface-container-lowest rounded-3xl md:rounded-[40px] overflow-hidden border border-outline-variant/10 shadow-xl shadow-black/5 overflow-x-auto">
                   <div className="min-w-[700px]">
                     <div className="grid grid-cols-7 border-b border-outline-variant/10">
@@ -2289,6 +2370,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
                   </div>
                 </div>
               </div>
+                )}
             </div>
 
             {/* Side Detail Panel */}

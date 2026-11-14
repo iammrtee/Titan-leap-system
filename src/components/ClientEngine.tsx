@@ -157,7 +157,7 @@ export const PlanStart: React.FC<{
   );
 };
 
-// Competitor Analysis tab: who the plan learns from, and what is winning for them.
+// Competitor Analysis tab: who the plan learns from, what's winning for them, and the playbook.
 export const PlanCompetitors: React.FC<{
   intel: CompetitorIntel | null;
   input: string;
@@ -166,52 +166,39 @@ export const PlanCompetitors: React.FC<{
   busy: boolean;
 }> = ({ intel, input, onInput, onResearch, busy }) => {
   const [editing, setEditing] = useState(false);
+  const posts = (intel?.competitors || []).reduce((n: number, c: any) => n + (c.postsAnalyzed || 0), 0);
   return (
     <div className="space-y-6">
-      <div className="bg-surface-container-low rounded-3xl border border-outline-variant/10 p-5 md:p-7 space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <h3 className="text-lg md:text-xl font-black tracking-tight text-on-surface">Competitors for your 30-day plan</h3>
-            <p className="text-xs md:text-sm text-on-surface-variant/70">Picked automatically when you generate a plan. Change them here any time.</p>
+      <section className="bg-surface-container-lowest rounded-[18px] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)] space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <h3 className="text-xl font-semibold tracking-tight text-on-surface">Who the plan learns from</h3>
+            <p className="text-sm text-on-surface-variant/70">
+              {busy ? 'Finding competitors and reading their best posts (1–2 min)…'
+                : intel ? `Researched ${new Date(intel.researchedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${posts} real posts read`
+                : 'Picked from your audit or brief when you generate a plan.'}
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setEditing(!editing)} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border border-outline-variant/20 text-on-surface-variant hover:text-primary">
-              <Pencil size={12} /> Choose my own
-            </button>
-            {intel && (
-              <button onClick={onResearch} disabled={busy} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border border-outline-variant/20 text-on-surface-variant hover:text-primary disabled:opacity-40">
-                {busy ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Refresh
-              </button>
-            )}
-          </div>
-        </div>
-        {busy ? (
-          <p className="flex items-center gap-2 text-sm font-bold text-primary"><Loader2 size={14} className="animate-spin" /> Finding competitors and reading their best posts (1–2 min)…</p>
-        ) : intel?.competitors?.length ? (
-          <div className="flex flex-wrap gap-2">
-            {intel.competitors.map((c: any, i: number) => (
-              <span key={i} className="text-xs font-bold px-3 py-1.5 rounded-xl bg-surface-container-lowest border border-outline-variant/10 text-on-surface">
-                {c.platform === 'web' ? c.handle : `@${c.handle}`}
-                <span className="font-medium text-on-surface-variant/60"> · {c.source === 'scraped' ? `${c.postsAnalyzed} posts read` : 'web research'}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {(intel?.competitors || []).map((c: any, i: number) => (
+              <span key={i} className="h-[34px] flex items-center px-3.5 rounded-full bg-surface-container-low text-[13px] font-semibold text-on-surface">
+                {c.platform === 'web' ? c.handle : `@${c.handle}`}<span className="font-normal text-on-surface-variant/60">&nbsp;· {c.source === 'scraped' ? `${c.postsAnalyzed} posts` : 'web'}</span>
               </span>
             ))}
-            <span className="text-[10px] text-on-surface-variant/50 self-center">Researched {new Date(intel.researchedAt).toLocaleDateString()}</span>
+            <button onClick={() => setEditing(!editing)} className="h-[34px] px-3.5 rounded-full border border-outline-variant/20 text-[13px] font-semibold text-primary hover:bg-primary/5">Change</button>
+            {intel && <button onClick={onResearch} disabled={busy} className="h-[34px] px-3.5 rounded-full border border-outline-variant/20 text-[13px] font-semibold text-on-surface hover:bg-surface-container-low disabled:opacity-40 flex items-center gap-1.5">{busy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Refresh</button>}
           </div>
-        ) : (
-          <p className="text-sm text-on-surface-variant/60">None yet. Generate a plan and we will pick them from your business details, or choose your own.</p>
-        )}
+        </div>
         {editing && (
           <div className="flex flex-col md:flex-row gap-2">
             <textarea value={input} onChange={e => onInput(e.target.value)} rows={3}
               placeholder={"One per line. Instagram or TikTok links give the best data.\nhttps://www.instagram.com/competitor"}
-              className="flex-1 bg-surface-container-lowest border border-outline-variant/20 rounded-xl p-3 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
+              className="flex-1 bg-surface-container-low border border-outline-variant/15 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
             <button onClick={() => { setEditing(false); onResearch(); }} disabled={!input.trim()}
-              className="md:w-40 bg-primary text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest disabled:opacity-40">
-              Research these
-            </button>
+              className="md:w-40 h-11 bg-primary text-white rounded-xl text-sm font-semibold disabled:opacity-40">Research these</button>
           </div>
         )}
-      </div>
+      </section>
       <WinningPosts intel={intel} />
     </div>
   );
@@ -286,7 +273,7 @@ export const PlanOverview: React.FC<{
   const tile = `bg-surface-container-lowest rounded-[18px] p-5 ${SHADOW} flex flex-col gap-1 min-w-0`;
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className={tile}>
           <span className="text-[13px] text-on-surface-variant/70">Posts planned</span>
           <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface tabular-nums">{items.length || cal.length}</span>
@@ -302,15 +289,10 @@ export const PlanOverview: React.FC<{
           <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface tabular-nums">{week.length}</span>
           <span className={cn("text-[13px] font-medium", needDesign ? "text-amber-600" : "text-emerald-600")}>{needDesign ? `${needDesign} need design` : week.length ? 'All have designs' : 'Nothing scheduled'}</span>
         </div>
-        <div className={tile}>
-          <span className="text-[13px] text-on-surface-variant/70">{e.cta ? `${(e.cta.match(/\b[A-Z]{3,}\b/) || ['Lead'])[0]} replies` : 'Leads from posts'}</span>
-          <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface-variant/40">—</span>
-          <span className="text-[13px] text-on-surface-variant/60">Fills in once posts go live</span>
-        </div>
       </div>
 
       <div className="flex flex-wrap gap-5 items-start">
-        <section className={`flex-[999_1_520px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-3`}>
+        <section className={`flex-1 min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-3`}>
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-xl font-semibold tracking-tight text-on-surface">This week</h3>
             <button onClick={onOpenCalendar} className="text-sm font-semibold text-primary hover:underline">Open calendar →</button>
@@ -331,41 +313,13 @@ export const PlanOverview: React.FC<{
           )}
         </section>
 
-        <section className={`flex-[1_1_320px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-4`}>
-          <h3 className="text-xl font-semibold tracking-tight text-on-surface">Content mix</h3>
-          <div className="space-y-3">
-            {pillars.map(p => (
-              <div key={p.name} className="space-y-1.5">
-                <div className="flex justify-between gap-3 text-sm"><span className="font-medium text-on-surface truncate">{p.name}</span><span className="text-on-surface-variant/70 tabular-nums">{p.pct ? `${p.pct}%` : ''}</span></div>
-                <div className="h-2 rounded-full bg-surface-container-high"><div className="h-2 rounded-full bg-primary" style={{ width: `${p.pct || 10}%` }} /></div>
-              </div>
-            ))}
-          </div>
-          {e.repurpose && (
-            <div className="pt-3 border-t border-outline-variant/10 space-y-1">
-              <p className="text-[13px] text-on-surface-variant/70">How each idea is reused</p>
-              <p className="text-sm text-on-surface">{e.repurpose}</p>
-            </div>
-          )}
-        </section>
       </div>
 
-      {e.arc?.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {e.arc.map((a: any, i: number) => (
-            <div key={i} className={`bg-surface-container-lowest rounded-[18px] p-5 ${SHADOW} space-y-1.5 min-w-0`}>
-              <p className="text-xs text-on-surface-variant/70">{a.days}</p>
-              <p className="text-base font-semibold tracking-tight text-on-surface">{a.title}</p>
-              <p className="text-[13px] text-on-surface-variant/80 leading-relaxed">{a.focus}</p>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 };
 
-// Real competitor posts that won, with numbers and links. This is the evidence the plan copies.
+// What's winning for the competitors (real posts, numbers, links) beside the playbook.
 export const WinningPosts: React.FC<{ intel: CompetitorIntel | null }> = ({ intel }) => {
   if (!intel?.competitors?.length) return null;
   const posts = intel.competitors
@@ -373,63 +327,57 @@ export const WinningPosts: React.FC<{ intel: CompetitorIntel | null }> = ({ inte
     .sort((a: any, b: any) => (b.timesMedian || 0) - (a.timesMedian || 0))
     .slice(0, 9);
   const pb = intel.playbook || {};
+  const block = (label: string, color: string, items: React.ReactNode) => (
+    <div className="space-y-1.5"><p className={cn("text-xs font-semibold", color)}>{label}</p>{items}</div>
+  );
   return (
-    <Card>
-      <H eyebrow="What is already winning" title="Competitors’ best posts"
-        sub={pb.summary || 'Real posts that beat each account’s usual numbers. The plan copies their structure, never their words.'} />
-      {posts.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {posts.map((p: any, i: number) => (
-            <div key={i} className="rounded-2xl bg-surface-container-lowest border border-outline-variant/10 p-4 flex flex-col gap-2 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-black text-on-surface truncate">@{p.handle}</span>
-                <span className="text-[9px] font-black uppercase tracking-wider text-primary/70 shrink-0">{p.platform} · {p.format}</span>
-              </div>
-              <p className="text-xs text-on-surface-variant/90 leading-snug line-clamp-4">{p.caption || '(no caption)'}</p>
-              <div className="flex items-center gap-3 text-[10px] font-bold text-on-surface-variant/60 mt-auto tabular-nums">
-                {p.views ? <span>{fmt(p.views)} views</span> : null}
-                {p.likes != null ? <span>{fmt(p.likes)} likes</span> : null}
-                {p.comments ? <span>{fmt(p.comments)} comments</span> : null}
-                {p.timesMedian ? <span className="text-emerald-600">{p.timesMedian}× their usual</span> : null}
-                {p.url && <a href={p.url} target="_blank" rel="noreferrer" className="ml-auto text-primary hover:underline flex items-center gap-0.5">Open <ExternalLink size={10} /></a>}
-              </div>
-            </div>
-          ))}
+    <div className="flex flex-wrap gap-5 items-start">
+      <section className="flex-[999_1_560px] min-w-0 space-y-4">
+        <div className="space-y-1">
+          <h3 className="text-xl font-semibold tracking-tight text-on-surface">What's winning for them</h3>
+          {pb.summary && <p className="text-sm text-on-surface-variant/70 max-w-3xl">{pb.summary}</p>}
         </div>
-      )}
-      {(pb.winningPatterns?.length > 0 || pb.provenHooks?.length > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-          {pb.winningPatterns?.length > 0 && (
-            <div className="space-y-2">
-              <Label>Patterns that win</Label>
-              {pb.winningPatterns.slice(0, 5).map((w: any, i: number) => (
-                <div key={i} className="text-xs">
-                  <p className="font-black text-on-surface">{w.pattern} <span className="font-bold text-primary/70">· {w.format}</span></p>
-                  <p className="text-on-surface-variant/70">{w.whyItWorks} <span className="text-emerald-600 font-bold">{w.evidence}</span></p>
+        {posts.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {posts.map((p: any, i: number) => (
+              <div key={i} className="bg-surface-container-lowest rounded-[16px] p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)] flex flex-col gap-2.5 min-w-0">
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="font-semibold text-on-surface truncate">@{p.handle}</span>
+                  <span className="text-on-surface-variant/60 shrink-0">{p.platform} · {p.format}</span>
                 </div>
-              ))}
-            </div>
-          )}
-          {pb.provenHooks?.length > 0 && (
-            <div className="space-y-2">
-              <Label>Their hook → our version</Label>
-              {pb.provenHooks.slice(0, 5).map((h: any, i: number) => (
-                <div key={i} className="text-xs">
-                  <p className="text-on-surface-variant/60 italic">“{h.original}”</p>
-                  <p className="font-bold text-on-surface">→ {h.ourVersion}</p>
+                <p className="text-sm font-medium text-on-surface leading-snug line-clamp-4">{p.caption || '(no caption)'}</p>
+                <div className="flex items-center gap-3 text-xs text-on-surface-variant/70 mt-auto tabular-nums">
+                  {p.views ? <span>{fmt(p.views)} views</span> : p.likes != null ? <span>{fmt(p.likes)} likes</span> : null}
+                  {p.timesMedian ? <span className="font-semibold text-emerald-700">{p.timesMedian}× their usual</span> : null}
+                  {p.url && <a href={p.url} target="_blank" rel="noreferrer" className="ml-auto font-semibold text-primary hover:underline flex items-center gap-0.5">Open <ExternalLink size={11} /></a>}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-      {(pb.gaps?.length > 0 || pb.avoid?.length > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          {pb.gaps?.length > 0 && <div className="space-y-1"><Label>Gaps we can own</Label>{pb.gaps.map((g: string, i: number) => <p key={i} className="text-on-surface-variant/80">• {g}</p>)}</div>}
-          {pb.avoid?.length > 0 && <div className="space-y-1"><Label>Avoid</Label>{pb.avoid.map((g: string, i: number) => <p key={i} className="text-on-surface-variant/80">• {g}</p>)}</div>}
-        </div>
-      )}
-    </Card>
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-sm text-on-surface-variant/60">No scraped posts for these accounts; the playbook is from web research.</p>}
+      </section>
+
+      <section className="flex-[1_1_340px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)] space-y-4">
+        <h3 className="text-xl font-semibold tracking-tight text-on-surface">Playbook</h3>
+        {pb.winningPatterns?.length > 0 && block('Do more of', 'text-emerald-700',
+          pb.winningPatterns.slice(0, 3).map((w: any, i: number) => <p key={i} className="text-sm text-on-surface leading-relaxed"><span className="font-semibold">{w.pattern}.</span> {w.whyItWorks}</p>))}
+        {pb.gaps?.length > 0 && block('Gaps you can own', 'text-primary',
+          pb.gaps.slice(0, 3).map((g: string, i: number) => <p key={i} className="text-sm text-on-surface leading-relaxed">{g}</p>))}
+        {pb.avoid?.length > 0 && block('Avoid', 'text-red-700',
+          pb.avoid.slice(0, 2).map((g: string, i: number) => <p key={i} className="text-sm text-on-surface leading-relaxed">{g}</p>))}
+        {pb.provenHooks?.length > 0 && (
+          <div className="pt-4 border-t border-outline-variant/10 space-y-3">
+            <p className="text-xs font-semibold text-on-surface-variant/70">Their hook → ours</p>
+            {pb.provenHooks.slice(0, 3).map((h: any, i: number) => (
+              <div key={i} className="space-y-0.5">
+                <p className="text-[13px] italic text-on-surface-variant/70">“{h.original}”</p>
+                <p className="text-sm font-semibold text-on-surface">→ {h.ourVersion}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
   );
 };
 
@@ -484,7 +432,7 @@ export const PlanTabs: React.FC<{ plan: any; days: React.ReactNode; hideStats?: 
 
       {tab === 'plan' && (
         <div className="space-y-6">
-          {!hideStats && e.arc?.length > 0 && (
+          {e.arc?.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {e.arc.map((a: any, i: number) => (
                 <div key={i} className="rounded-[18px] bg-surface-container-lowest shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.08)] p-5 space-y-1.5 min-w-0">
