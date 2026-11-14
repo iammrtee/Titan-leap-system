@@ -114,37 +114,37 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
         const local = monthSales.filter(x => (x.currency || 'USD') !== 'USD').reduce<Record<string, number>>((m, x) => { m[x.currency] = (m[x.currency] || 0) + Number(x.amount || 0); return m; }, {});
         const h = new Date().getHours();
         const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-        const glassTile = "rounded-[22px] p-5 bg-white/55 dark:bg-white/10 border border-white/60 dark:border-white/15 backdrop-blur-xl backdrop-saturate-150 shadow-[0_8px_30px_rgba(60,20,120,0.10)] flex flex-col gap-1 min-w-0";
+        const glassTile = "rounded-[22px] p-5 bg-white/70 dark:bg-white/10 border border-white/80 dark:border-white/15 backdrop-blur-xl backdrop-saturate-150 shadow-[0_8px_30px_rgba(60,20,120,0.10)] flex flex-col gap-1 min-w-0";
         return (
-          <section className="relative overflow-hidden rounded-[28px] min-h-[600px] bg-[radial-gradient(120%_90%_at_70%_10%,#efe6ff_0%,#f7f3ff_45%,#fbfaff_100%)] dark:bg-[radial-gradient(120%_90%_at_70%_10%,#2a1650_0%,#170d2e_55%,#110a22_100%)]">
+          <section className="relative -mx-4 md:-mx-8 lg:-mx-12 xl:-mx-16 -mt-4 md:-mt-8 lg:-mt-12 xl:-mt-16 overflow-hidden min-h-[640px]">
             {/* The branch grows across the whole hero, behind the glass */}
-            <GrowingBranch className="absolute pointer-events-none select-none z-0 left-[-6%] top-[-12%] w-[112%] max-w-none aspect-video" />
+            <GrowingBranch className="absolute pointer-events-none select-none z-0 left-[-4%] top-[-14%] w-[108%] max-w-none aspect-video" />
 
-            <div className="relative z-10 p-5 md:p-8 flex flex-col lg:flex-row gap-5 items-stretch min-h-[600px]">
+            <div className="relative z-10 px-4 md:px-8 lg:px-12 xl:px-16 pt-8 md:pt-12 pb-6 flex flex-col lg:flex-row gap-5 items-stretch min-h-[640px]">
               {/* Left: the glass greeting */}
-              <div className="lg:w-[420px] shrink-0 rounded-[32px] p-7 text-white bg-[rgba(30,16,66,0.42)] border border-white/25 backdrop-blur-[26px] backdrop-saturate-[1.7] shadow-[0_20px_60px_rgba(30,10,70,0.35)] flex flex-col gap-5 self-start">
+              <div className="lg:w-[420px] shrink-0 rounded-[32px] p-7 text-on-surface bg-white/60 dark:bg-white/10 border border-white/80 dark:border-white/15 backdrop-blur-[26px] backdrop-saturate-[1.7] shadow-[0_20px_60px_rgba(60,20,120,0.12)] flex flex-col gap-5 self-start">
                 <div className="space-y-1.5">
-                  <p className="font-['Caveat',cursive] text-amber-300 text-xl" style={{ fontFamily: "'Kalam','Caveat','Segoe Print',cursive" }}>{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+                  <p className="text-primary text-xl" style={{ fontFamily: "'Kalam','Caveat','Segoe Print',cursive" }}>{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</p>
                   <h2 className="text-4xl md:text-[44px] font-bold tracking-tight leading-[1.05]">{greeting}.</h2>
-                  <p className="text-sm text-white/75">{clients.length} client{clients.length > 1 ? 's' : ''} · {todo.length ? `${todo.length} thing${todo.length > 1 ? 's' : ''} need you today` : 'nothing urgent today'}</p>
+                  <p className="text-sm text-on-surface-variant">{clients.length} client{clients.length > 1 ? 's' : ''} · {todo.length ? `${todo.length} thing${todo.length > 1 ? 's' : ''} need you today` : 'nothing urgent today'}</p>
                 </div>
                 {todo.length > 0 && (
                   <div className="space-y-2">
                     {todo.map((t, i) => (
-                      <button key={i} onClick={t.onClick} className="w-full flex items-center gap-3 rounded-[16px] px-4 py-3 bg-[rgba(20,10,46,0.45)] border border-white/10 text-left hover:bg-[rgba(20,10,46,0.6)] transition-colors">
+                      <button key={i} onClick={t.onClick} className="w-full flex items-center gap-3 rounded-[16px] px-4 py-3 bg-white/70 dark:bg-white/10 border border-black/5 dark:border-white/10 text-left hover:bg-white transition-colors">
                         <span className={cn("w-2 h-2 rounded-full shrink-0", t.tone)} />
                         <span className="flex-1 text-[15px] leading-snug">{t.text}</span>
-                        <span className="text-xs font-semibold text-amber-300 shrink-0">{t.action}</span>
+                        <span className="text-xs font-semibold text-primary shrink-0">{t.action}</span>
                       </button>
                     ))}
                   </div>
                 )}
-                <button onClick={() => go('audit')} className="h-12 rounded-full bg-white text-[#1d1240] text-[15px] font-semibold hover:bg-white/90 transition-colors">New audit</button>
+                <button onClick={() => go('audit')} className="h-12 rounded-full bg-primary text-white text-[15px] font-semibold hover:brightness-110 transition-all">New audit</button>
               </div>
 
               {/* Right: the numbers on glass */}
-              <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-4 content-end">
-                <div className={cn(glassTile, "sm:col-span-2")}>
+              <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 content-end">
+                <div className={cn(glassTile, "sm:col-span-2 xl:col-span-3")}>
                   <span className="text-[13px] text-on-surface-variant">Revenue this month</span>
                   <span className="text-4xl md:text-[48px] font-bold tracking-tight text-primary tabular-nums">{money(usd, 'USD')}</span>
                   <span className="text-[13px] text-on-surface-variant">{Object.keys(local).length ? `from ${Object.entries(local).map(([c, a]) => money(a, c)).join(' + ')}` : monthSales.length ? `${monthSales.length} payment${monthSales.length > 1 ? 's' : ''}` : 'Record payments in Sales'}</span>
@@ -163,6 +163,11 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
                   <span className="text-[13px] text-on-surface-variant">Audits this month</span>
                   <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{auditsThisMonth}<span className="text-base font-medium text-on-surface-variant/70"> / 100</span></span>
                   <div className="h-1.5 rounded-full bg-black/10 dark:bg-white/15 mt-1"><div className="h-1.5 rounded-full bg-primary" style={{ width: `${Math.min(100, auditsThisMonth)}%` }} /></div>
+                </div>
+                <div className={glassTile}>
+                  <span className="text-[13px] text-on-surface-variant">AI spend this month</span>
+                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{budget ? `$${budget.spent.toFixed(2)}` : '—'}<span className="text-base font-medium text-on-surface-variant/70">{budget ? ` / $${budget.budget}` : ''}</span></span>
+                  <span className="text-[13px] text-on-surface-variant">Audits not counted</span>
                 </div>
                 <div className={glassTile}>
                   <span className="text-[13px] text-on-surface-variant">Posts this week</span>
