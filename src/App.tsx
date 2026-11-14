@@ -177,7 +177,7 @@ export default function App() {
   return (
     <ErrorBoundary>
     
-    <div className="min-h-screen bg-surface transition-colors duration-700 relative overflow-hidden">
+    <div className="min-h-screen bg-surface transition-colors duration-700 relative overflow-x-clip">
       {/* Atmospheric Background Effects for Dark Mode */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 blur-[120px] rounded-full dark:opacity-20 opacity-0 transition-opacity duration-1000" />

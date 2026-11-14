@@ -116,8 +116,8 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
   return (
     <div>
       {/* The tree and the greeting stay pinned under the top bar; every card scrolls over them, so the glass blurs the tree */}
-      <section className="sticky top-16 z-0 -mx-4 md:-mx-8 lg:-mx-12 xl:-mx-16 -mt-4 md:-mt-8 lg:-mt-12 xl:-mt-16 overflow-hidden h-[clamp(320px,40vw,600px)]">
-        <GrowingBranch className="absolute pointer-events-none select-none left-[-9%] top-[-13vw] w-[118%] max-w-none aspect-video" />
+      <section className="sticky top-16 z-0 -mx-4 md:-mx-8 lg:-mx-12 xl:-mx-16 -mt-4 md:-mt-8 lg:-mt-12 xl:-mt-16 overflow-hidden h-[calc(100svh_-_4rem)]">
+        <GrowingBranch className="absolute pointer-events-none select-none left-[-12%] top-[-6vw] w-[124%] max-w-none aspect-video" />
         <div className="relative px-4 md:px-8 lg:px-12 xl:px-16 pt-8 md:pt-12 flex items-start justify-between gap-4">
           <div className="space-y-1.5">
             <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-on-surface">{greeting}</h2>
@@ -128,7 +128,7 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
       </section>
 
       {/* Everything below starts right under the greeting, on top of the tree */}
-      <div className="relative z-10 mt-[calc(150px_-_clamp(320px,40vw,600px))] md:mt-[calc(170px_-_clamp(320px,40vw,600px))] space-y-6">
+      <div className="relative z-10 mt-[calc(214px_-_100svh)] md:mt-[calc(234px_-_100svh)] space-y-6">
         <section className={`max-w-[560px] ${GLASS} rounded-[28px] p-6 md:p-7 space-y-4`}>
             <div className="space-y-1">
               <p className="text-amber-300 text-lg" style={{ fontFamily: "'Kalam','Caveat','Segoe Print',cursive" }}>Start here</p>
