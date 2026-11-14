@@ -116,67 +116,76 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
         const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
         const glassTile = "rounded-[22px] p-5 bg-white/70 dark:bg-white/10 border border-white/80 dark:border-white/15 backdrop-blur-xl backdrop-saturate-150 shadow-[0_8px_30px_rgba(60,20,120,0.10)] flex flex-col gap-1 min-w-0";
         return (
-          <section className="relative -mx-4 md:-mx-8 lg:-mx-12 xl:-mx-16 -mt-4 md:-mt-8 lg:-mt-12 xl:-mt-16 overflow-hidden min-h-[640px]">
-            {/* The branch grows across the whole hero, behind the glass */}
-            <GrowingBranch className="absolute pointer-events-none select-none z-0 left-[-4%] top-[-14%] w-[108%] max-w-none aspect-video" />
+          <>
+            {/* The branch, edge to edge with nothing on top of it except the greeting in its empty corner */}
+            <section className="relative -mx-4 md:-mx-8 lg:-mx-12 xl:-mx-16 -mt-4 md:-mt-8 lg:-mt-12 xl:-mt-16 overflow-hidden aspect-[100/46] min-h-[300px] max-h-[640px]">
+              <GrowingBranch className="absolute pointer-events-none select-none inset-x-0 top-[-4%] w-full max-w-none aspect-video" />
+              <div className="relative z-10 px-4 md:px-8 lg:px-12 xl:px-16 pt-[5%] max-w-[44%] min-w-[280px] space-y-2">
+                <p className="text-primary text-xl md:text-2xl" style={{ fontFamily: "'Kalam','Caveat','Segoe Print',cursive" }}>{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+                <h2 className="text-5xl md:text-6xl xl:text-7xl font-bold tracking-tight leading-[0.95] text-on-surface">{greeting}.</h2>
+                <p className="text-base text-on-surface-variant">{clients.length} client{clients.length > 1 ? 's' : ''} · {todo.length ? `${todo.length} thing${todo.length > 1 ? 's' : ''} need you today` : 'nothing urgent today'}</p>
+              </div>
+            </section>
 
-            <div className="relative z-10 px-4 md:px-8 lg:px-12 xl:px-16 pt-8 md:pt-12 pb-6 flex flex-col lg:flex-row gap-5 items-stretch min-h-[640px]">
-              {/* Left: the glass greeting */}
-              <div className="lg:w-[420px] shrink-0 rounded-[32px] p-7 text-on-surface bg-white/60 dark:bg-white/10 border border-white/80 dark:border-white/15 backdrop-blur-[26px] backdrop-saturate-[1.7] shadow-[0_20px_60px_rgba(60,20,120,0.12)] flex flex-col gap-5 self-start">
-                <div className="space-y-1.5">
-                  <p className="text-primary text-xl" style={{ fontFamily: "'Kalam','Caveat','Segoe Print',cursive" }}>{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</p>
-                  <h2 className="text-4xl md:text-[44px] font-bold tracking-tight leading-[1.05]">{greeting}.</h2>
-                  <p className="text-sm text-on-surface-variant">{clients.length} client{clients.length > 1 ? 's' : ''} · {todo.length ? `${todo.length} thing${todo.length > 1 ? 's' : ''} need you today` : 'nothing urgent today'}</p>
-                </div>
-                {todo.length > 0 && (
-                  <div className="space-y-2">
+            {/* Below the branch: what needs you, and the numbers, side by side and aligned */}
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] gap-4 items-stretch -mt-2">
+              <div className={`bg-surface-container-lowest rounded-[22px] p-6 ${SHADOW} flex flex-col gap-4`}>
+                <h3 className="text-lg font-semibold tracking-tight text-on-surface">Needs you today</h3>
+                {todo.length ? (
+                  <div className="space-y-2 flex-1">
                     {todo.map((t, i) => (
-                      <button key={i} onClick={t.onClick} className="w-full flex items-center gap-3 rounded-[16px] px-4 py-3 bg-white/70 dark:bg-white/10 border border-black/5 dark:border-white/10 text-left hover:bg-white transition-colors">
+                      <button key={i} onClick={t.onClick} className="w-full flex items-center gap-3 rounded-[14px] px-3.5 py-3 bg-surface-container-low hover:bg-surface-container text-left transition-colors">
                         <span className={cn("w-2 h-2 rounded-full shrink-0", t.tone)} />
-                        <span className="flex-1 text-[15px] leading-snug">{t.text}</span>
+                        <span className="flex-1 text-sm text-on-surface leading-snug">{t.text}</span>
                         <span className="text-xs font-semibold text-primary shrink-0">{t.action}</span>
                       </button>
                     ))}
                   </div>
-                )}
-                <button onClick={() => go('audit')} className="h-12 rounded-full bg-primary text-white text-[15px] font-semibold hover:brightness-110 transition-all">New audit</button>
+                ) : <p className="text-sm text-on-surface-variant flex-1">You're all caught up.</p>}
+                <button onClick={() => go('audit')} className="h-11 rounded-full bg-primary text-white text-sm font-semibold hover:brightness-110 transition-all">New audit</button>
               </div>
 
-              {/* Right: the numbers on glass */}
-              <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 content-end">
-                <div className={cn(glassTile, "sm:col-span-2 xl:col-span-3")}>
-                  <span className="text-[13px] text-on-surface-variant">Revenue this month</span>
-                  <span className="text-4xl md:text-[48px] font-bold tracking-tight text-primary tabular-nums">{money(usd, 'USD')}</span>
-                  <span className="text-[13px] text-on-surface-variant">{Object.keys(local).length ? `from ${Object.entries(local).map(([c, a]) => money(a, c)).join(' + ')}` : monthSales.length ? `${monthSales.length} payment${monthSales.length > 1 ? 's' : ''}` : 'Record payments in Sales'}</span>
+              <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+                <div className="col-span-2 xl:col-span-3 rounded-[22px] p-6 bg-primary text-white flex flex-wrap items-end justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-[13px] text-white/75">Revenue this month</p>
+                    <p className="text-4xl md:text-5xl font-bold tracking-tight tabular-nums">{money(usd, 'USD')}</p>
+                  </div>
+                  <p className="text-[13px] text-white/75">{Object.keys(local).length ? `from ${Object.entries(local).map(([c, a]) => money(a, c)).join(' + ')}` : monthSales.length ? `${monthSales.length} payment${monthSales.length > 1 ? 's' : ''}` : 'Record payments in Sales → Paid'}</p>
                 </div>
-                <div className={glassTile}>
-                  <span className="text-[13px] text-on-surface-variant">Active clients</span>
+                <div className={tile}>
+                  <span className="text-[13px] text-on-surface-variant/70">Active clients</span>
                   <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{clients.length}</span>
-                  <span className="text-[13px] text-on-surface-variant truncate">{clients.map(clientLabel).join(' · ')}</span>
+                  <span className="text-[13px] text-on-surface-variant/70 truncate">{clients.map(clientLabel).join(' · ')}</span>
                 </div>
-                <div className={glassTile}>
-                  <span className="text-[13px] text-on-surface-variant">Leads</span>
+                <div className={tile}>
+                  <span className="text-[13px] text-on-surface-variant/70">Leads</span>
                   <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{leads.length}</span>
-                  <span className="text-[13px] text-on-surface-variant">{leadsThisWeek ? `+${leadsThisWeek} this week` : `${hot.length} hot`}</span>
+                  <span className="text-[13px] text-on-surface-variant/70">{leadsThisWeek ? `+${leadsThisWeek} this week` : `${hot.length} hot`}</span>
                 </div>
-                <div className={glassTile}>
-                  <span className="text-[13px] text-on-surface-variant">Audits this month</span>
-                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{auditsThisMonth}<span className="text-base font-medium text-on-surface-variant/70"> / 100</span></span>
-                  <div className="h-1.5 rounded-full bg-black/10 dark:bg-white/15 mt-1"><div className="h-1.5 rounded-full bg-primary" style={{ width: `${Math.min(100, auditsThisMonth)}%` }} /></div>
+                <div className={tile}>
+                  <span className="text-[13px] text-on-surface-variant/70">Audits this month</span>
+                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{auditsThisMonth}<span className="text-base font-medium text-on-surface-variant/50"> / 100</span></span>
+                  <div className="h-1.5 rounded-full bg-surface-container-high mt-1"><div className="h-1.5 rounded-full bg-primary" style={{ width: `${Math.min(100, auditsThisMonth)}%` }} /></div>
                 </div>
-                <div className={glassTile}>
-                  <span className="text-[13px] text-on-surface-variant">AI spend this month</span>
-                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{budget ? `$${budget.spent.toFixed(2)}` : '—'}<span className="text-base font-medium text-on-surface-variant/70">{budget ? ` / $${budget.budget}` : ''}</span></span>
-                  <span className="text-[13px] text-on-surface-variant">Audits not counted</span>
-                </div>
-                <div className={glassTile}>
-                  <span className="text-[13px] text-on-surface-variant">Posts this week</span>
+                <div className={tile}>
+                  <span className="text-[13px] text-on-surface-variant/70">Posts this week</span>
                   <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{weekPosts.length}</span>
-                  <span className={cn("text-[13px] font-medium", needDesign.length ? "text-amber-700 dark:text-amber-300" : "text-on-surface-variant")}>{needDesign.length ? `${needDesign.length} need design` : 'All ready'}</span>
+                  <span className={cn("text-[13px] font-medium", needDesign.length ? "text-amber-600" : "text-on-surface-variant/70")}>{needDesign.length ? `${needDesign.length} need design` : 'All ready'}</span>
+                </div>
+                <div className={tile}>
+                  <span className="text-[13px] text-on-surface-variant/70">AI spend this month</span>
+                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{budget ? `$${budget.spent.toFixed(2)}` : '—'}<span className="text-base font-medium text-on-surface-variant/50">{budget ? ` / $${budget.budget}` : ''}</span></span>
+                  <span className="text-[13px] text-on-surface-variant/70">Audits not counted</span>
+                </div>
+                <div className={tile}>
+                  <span className="text-[13px] text-on-surface-variant/70">Hot leads</span>
+                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{hot.length}</span>
+                  <button onClick={() => go('sales')} className="text-[13px] font-semibold text-primary text-left hover:underline">Open Sales</button>
                 </div>
               </div>
             </div>
-          </section>
+          </>
         );
       })()}
 
