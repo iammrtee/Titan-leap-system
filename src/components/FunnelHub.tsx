@@ -488,81 +488,35 @@ const CurrentFunnelView = ({
         </div>
       </div>
 
-      {/* Middle Section: Funnel Architecture Map */}
-      <div className="bg-surface-container-lowest p-6 md:p-10 rounded-[32px] md:rounded-[48px] border border-outline-variant/10 shadow-xl relative overflow-hidden">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0 mb-8 md:mb-12">
+      {/* Middle Section: the funnel as step cards (approved design) */}
+      <div className="bg-surface-container-lowest p-6 md:p-7 rounded-[18px] shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)] relative">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
           <div className="space-y-1">
-            <h3 className="text-xl font-black text-on-surface tracking-tight">Funnel Architecture Map</h3>
-            <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-[0.2em]">
+            <h3 className="text-xl font-semibold tracking-tight text-on-surface">Your funnel</h3>
+            <p className="text-[13px] text-on-surface-variant/70">
               {planFunnel.length ? `From your 30-day plan${plan?.builtFor ? ` for ${plan.builtFor}` : ''} · click a step to edit it` : 'Example funnel · generate a 30-day plan in Strategy to build yours'}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3 md:gap-4">
-            {planFunnel.length > 0 && (
-              <button onClick={addStage} className="flex items-center gap-2 px-4 py-2 bg-surface-container-low rounded-xl border border-outline-variant/5 text-[9px] font-black uppercase tracking-widest text-on-surface-variant/60 hover:text-primary">
-                <Plus size={12} /> Add step
-              </button>
-            )}
-            <button 
-              onClick={() => toast.info("Full map view coming soon!")}
-              className="px-6 py-2.5 bg-surface-container-low border border-outline-variant/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 hover:text-primary hover:border-primary/40 transition-all"
-            >
-              View Full Map
+          {planFunnel.length > 0 && (
+            <button onClick={addStage} className="h-9 px-3.5 rounded-xl border border-outline-variant/20 text-[13px] font-semibold text-on-surface hover:bg-surface-container-low flex items-center gap-1.5">
+              <Plus size={14} /> Add step
             </button>
-          </div>
+          )}
         </div>
-
-        <div className="relative py-12 overflow-x-auto no-scrollbar">
-          {/* Connecting Line */}
-          <div className="absolute top-1/2 left-12 right-12 h-[2px] bg-outline-variant/10 -translate-y-1/2 min-w-[800px]" />
-          
-          <div className="flex justify-between items-center gap-4 relative z-10 px-4" style={{ minWidth: Math.max(800, layers.length * 150) }}>
-            {layers.map((layer, idx) => (
-              <React.Fragment key={layer.id}>
-                <motion.div 
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.1 }}
-                  onClick={() => { setSelectedStageId(layer.id); setEditingStage(null); }}
-                  className="flex flex-col items-center gap-6 group cursor-pointer"
-                >
-                  <div className={cn(
-                    "w-24 h-24 rounded-[32px] flex items-center justify-center shrink-0 shadow-lg border border-outline-variant/5 transition-all relative",
-                    selectedStageId === layer.id ? "scale-110 -translate-y-2 ring-4 ring-primary/20" : "group-hover:scale-110 group-hover:-translate-y-1",
-                    layer.bg, layer.color
-                  )}>
-                    <layer.icon size={32} />
-                    {/* Pulse Effect */}
-                    {selectedStageId === layer.id && (
-                      <div className={cn("absolute inset-0 rounded-[32px] animate-ping opacity-20", layer.bg)} style={{ animationDuration: '3s' }} />
-                    )}
-                  </div>
-                  <div className="text-center space-y-1">
-                    <h4 className={cn(
-                      "text-[10px] font-black tracking-widest uppercase transition-colors",
-                      selectedStageId === layer.id ? "text-primary" : "text-on-surface"
-                    )}>{layer.name}</h4>
-                    <p className="text-[8px] font-bold text-on-surface-variant/30 uppercase tracking-widest">Stage {String(layer.id).padStart(2, '0')}</p>
-                  </div>
-                </motion.div>
-                {idx < layers.length - 1 && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: idx * 0.1 + 0.05 }}
-                    className="hidden md:flex flex-col items-center justify-center -mt-12"
-                  >
-                    {layers[idx+1].conversion && (
-                      <div className="px-3 py-1 bg-surface-container-low border border-outline-variant/10 rounded-full mb-2">
-                        <span className="text-[8px] font-black text-primary uppercase tracking-widest">{layers[idx+1].conversion}</span>
-                      </div>
-                    )}
-                    <ArrowRight size={20} className="text-outline-variant/30 animate-pulse" />
-                  </motion.div>
-                )}
-              </React.Fragment>
-            ))}
-          </div>
+        <div className="flex items-stretch gap-2 overflow-x-auto pb-1">
+          {layers.map((layer, idx) => {
+            const selected = selectedStageId === layer.id;
+            const paid = idx >= layers.length - 2;
+            return (
+              <button key={layer.id} onClick={() => { setSelectedStageId(layer.id); setEditingStage(null); }}
+                className={cn("flex-[1_0_150px] text-left rounded-[14px] p-4 flex flex-col gap-1.5 transition-all",
+                  selected ? "bg-primary/10 ring-2 ring-primary" : paid ? "bg-amber-50 hover:bg-amber-100/60" : "bg-surface-container-low hover:bg-surface-container")}>
+                <span className={cn("text-xs", selected ? "text-primary font-semibold" : paid ? "text-amber-800" : "text-on-surface-variant/70")}>Step {idx + 1}{selected ? ' · selected' : ''}</span>
+                <span className="text-[15px] font-semibold text-on-surface capitalize leading-snug">{layer.name.toLowerCase()}</span>
+                <span className="text-[13px] text-on-surface-variant/70 leading-snug line-clamp-2">{layer.detail}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Selected Stage Breakdown */}
@@ -573,7 +527,7 @@ const CurrentFunnelView = ({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="mt-12 p-8 bg-surface-container-low/50 rounded-[32px] border border-outline-variant/10 grid grid-cols-1 md:grid-cols-3 gap-8"
+              className="mt-5 p-6 bg-surface-container-low/60 rounded-[14px] grid grid-cols-1 md:grid-cols-3 gap-6"
             >
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
