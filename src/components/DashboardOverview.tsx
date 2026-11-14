@@ -115,8 +115,8 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
   return (
     <div className="space-y-6">
       {/* Header: the growing branch runs edge to edge behind the greeting */}
-      <section className="relative -mx-4 md:-mx-8 lg:-mx-12 xl:-mx-16 -mt-4 md:-mt-8 lg:-mt-12 xl:-mt-16 overflow-hidden h-[clamp(300px,40vw,560px)]">
-        <GrowingBranch className="absolute pointer-events-none select-none left-0 top-[-10%] w-full max-w-none aspect-video" />
+      <section className="relative -mx-4 md:-mx-8 lg:-mx-12 xl:-mx-16 -mt-4 md:-mt-8 lg:-mt-12 xl:-mt-16 overflow-hidden h-[clamp(280px,34vw,520px)]">
+        <GrowingBranch className="absolute pointer-events-none select-none left-[-9%] top-[-38%] w-[118%] max-w-none aspect-video" />
         <div className="relative z-10 h-full px-4 md:px-8 lg:px-12 xl:px-16 pt-8 md:pt-12 flex items-start justify-between gap-4">
           <div className="space-y-1.5">
             <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-on-surface">{greeting}</h2>
