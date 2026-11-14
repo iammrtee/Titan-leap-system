@@ -141,7 +141,7 @@ export default function App() {
       case 'sales':
         return { title: '' };
       case 'funnel':
-        return { title: 'Funnels', subtitle: 'Conversion Optimization' };
+        return { title: '' };
       case 'emails':
         return { title: 'Email Campaigns', subtitle: 'Lifecycle Marketing' };
       case 'ai':
