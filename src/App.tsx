@@ -131,7 +131,7 @@ export default function App() {
       case 'dashboard':
         return { title: '' }; // the Dashboard has its own header
       case 'audit':
-        return { title: 'Audit', subtitle: 'Intake Assessment' };
+        return { title: '' };
       case 'strategy':
         return { title: '' }; // the Strategy page has its own header
       case 'content':

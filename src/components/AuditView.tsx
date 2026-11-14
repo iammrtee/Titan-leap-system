@@ -171,6 +171,8 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
   const [isExporting, setIsExporting] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'intake' | 'leak' | 'result' | 'strategy'>('intake');
+  // Audits always run on Claude (the engine switch was removed; an old Gemini choice is reset).
+  useEffect(() => { setAIEngine('claude'); }, []);
   const [leakReport, setLeakReport] = useState<LeakAuditReport | null>(null);
   const [contentAudit, setContentAudit] = useState<ContentAuditResult | null>(null);
   const [strategyTimestamp, setStrategyTimestamp] = useState(0);
@@ -676,14 +678,13 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
   };
 
   return (
-    <div className="w-full flex flex-col gap-3">
-      {/* ── Compact Control Bar ── */}
+    <div className="w-full flex flex-col gap-5">
+      {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        {/* Left: label + progress */}
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 rounded-full border border-primary/10 shrink-0">
-            <Sparkles size={12} className="text-primary" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-primary">Audit</span>
+        <div className="flex items-center gap-4 min-w-0 flex-wrap">
+          <div className="space-y-1.5">
+            <h2 className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface">Audit</h2>
+            <p className="text-sm text-on-surface-variant/70">Find where a business leaks customers.</p>
           </div>
           {progress > 0 && (
             <div className="flex items-center gap-2 min-w-0">
@@ -704,23 +705,6 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
 
         {/* Right: engine toggle + smart fill */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Engine toggle */}
-          <div className="flex items-center gap-1 p-1 bg-surface-container-highest/50 rounded-xl border border-outline-variant/10">
-            <button
-              onClick={() => { setAIEngine('gemini'); setEngine('gemini'); toast.success("Switched to Gemini", { icon: <Wand2 size={12} /> }); }}
-              className={cn("w-7 h-7 rounded-lg flex items-center justify-center transition-all", engine === 'gemini' ? "bg-primary text-white shadow-lg shadow-primary/20 scale-105" : "text-on-surface-variant/40 hover:text-on-surface-variant hover:bg-surface-container-highest")}
-              title="Gemini Flash (Fast)"
-            >
-              <Zap size={12} fill={engine === 'gemini' ? 'currentColor' : 'none'} />
-            </button>
-            <button
-              onClick={() => { setAIEngine('claude'); setEngine('claude'); toast.success("Switched to Claude", { icon: <Sparkles size={12} /> }); }}
-              className={cn("w-7 h-7 rounded-lg flex items-center justify-center transition-all", engine === 'claude' ? "bg-secondary text-white shadow-lg shadow-secondary/20 scale-105" : "text-on-surface-variant/40 hover:text-on-surface-variant hover:bg-surface-container-highest")}
-              title="Claude (Elite)"
-            >
-              <Sparkles size={12} fill={engine === 'claude' ? 'currentColor' : 'none'} />
-            </button>
-          </div>
           {/* Smart Fill button */}
           <button
             onClick={() => {
@@ -761,61 +745,20 @@ export const AuditView: React.FC<{ onStartStrategy?: (data: any) => void; onView
       )}
 
       {/* ── Tab Navigation ── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 p-1.5 bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-x-auto no-scrollbar w-full lg:w-auto">
-          <button
-            onClick={() => setActiveTab('intake')}
-            className={cn(
-              "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0",
-              activeTab === 'intake' 
-                ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10" 
-                : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container"
-            )}
-          >
-            <FileText size={16} />
-            Business Assessment
+      <div role="tablist" aria-label="Audit sections" className="inline-flex self-start gap-1 p-1 rounded-[14px] bg-surface-container-high overflow-x-auto max-w-full">
+        {([
+          { id: 'intake', label: 'Business', needs: false },
+          { id: 'result', label: 'Result', needs: true },
+          { id: 'leak', label: 'Leak Report · $297', needs: false },
+          { id: 'strategy', label: 'Blueprint', needs: true },
+        ] as const).map(t => (
+          <button key={t.id} role="tab" aria-selected={activeTab === t.id} onClick={() => setActiveTab(t.id)} disabled={t.needs && !auditReport}
+            title={t.needs && !auditReport ? 'Run the audit first' : undefined}
+            className={cn("h-[38px] px-5 rounded-[11px] text-sm transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed",
+              activeTab === t.id ? "bg-surface-container-lowest text-on-surface font-semibold shadow-sm" : "text-on-surface-variant/70 font-medium hover:text-on-surface")}>
+            {t.label}
           </button>
-          <button
-            onClick={() => setActiveTab('leak')}
-            className={cn(
-              "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0",
-              activeTab === 'leak'
-                ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10"
-                : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container"
-            )}
-          >
-            <FileText size={16} />
-            Leak Report ($297)
-          </button>
-          <button
-            onClick={() => setActiveTab('result')}
-            disabled={!auditReport}
-            className={cn(
-              "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0",
-              activeTab === 'result'
-                ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10"
-                : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container",
-              !auditReport && "opacity-50 cursor-not-allowed"
-            )}
-          >
-            <FileText size={16} />
-            Audit Result
-          </button>
-          <button
-            onClick={() => setActiveTab('strategy')}
-            disabled={!auditReport}
-            className={cn(
-              "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0",
-              activeTab === 'strategy'
-                ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5 border border-outline-variant/10"
-                : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container",
-              !auditReport && "opacity-50 cursor-not-allowed"
-            )}
-          >
-            <Rocket size={16} />
-            Growth Blueprint
-          </button>
-        </div>
+        ))}
       </div>
 
       {/* ── Scrollable Tab Content ── */}
