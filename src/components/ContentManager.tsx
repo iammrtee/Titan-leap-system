@@ -128,6 +128,14 @@ function getPlatformBadgeColor(platform: Platform) {
   }
 }
 
+// Days from today until a task's due date ('Apr 02' style, this year). null if unknown.
+function dueIn(t: { due?: string }): number | null {
+  if (!t.due || /tbd/i.test(t.due)) return null;
+  const d = new Date(`${t.due} ${new Date().getFullYear()}`);
+  if (isNaN(+d)) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((+d - +today) / 86_400_000);
+}
 function getChecklist(type: TaskType) { return type === 'video' ? VIDEO_CHECKLIST : DESIGN_CHECKLIST; }
 function getTotalChecks(type: TaskType) { return getChecklist(type).reduce((s, p) => s + p.items.length, 0); }
 function getCountChecked(card: Task) { return Object.values(card.checks).filter(Boolean).length; }
@@ -149,48 +157,35 @@ export const ContentManager: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
-        <div>
-          <h1 className="text-3xl md:text-5xl font-black tracking-tighter text-on-surface mb-2 md:mb-4">Content Production</h1>
-          <p className="text-sm md:text-base text-on-surface-variant font-medium max-w-2xl">Manage your content pipeline and distribute across platforms.</p>
-        </div>
-            <button onClick={() => setSendToProductionSignal(Date.now())} disabled={managerTab !== 'production'} title="Send to Production" aria-label="Send to Production"
-              className={cn("shrink-0 self-start w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center transition-all",
-                managerTab === 'production'
-                  ? "bg-primary text-white shadow-lg hover:bg-primary/90 hover:scale-105"
-                  : "bg-surface-container-highest text-on-surface-variant/40 cursor-not-allowed")}>
-              <Plus size={26} strokeWidth={3} />
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <h2 className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface">Creatives</h2>
+            <p className="text-sm text-on-surface-variant/70">Designs, videos and posting</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <ClientSwitcher onCreated={() => setShowAccounts(true)} />
+            <button onClick={() => setShowAccounts(true)}
+              className="h-10 bg-surface-container-lowest border border-outline-variant/20 text-on-surface px-4 rounded-xl font-semibold text-sm flex items-center gap-2 hover:bg-surface-container-low transition-all whitespace-nowrap">
+              <LinkIcon size={16} /> Connected accounts
             </button>
-      </div>
-
-      {/* Top-Level Tabs */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex gap-2 p-1 bg-surface-container-highest/30 rounded-2xl w-fit">
+            <button onClick={() => setSendToProductionSignal(Date.now())} disabled={managerTab !== 'production'} title="New task"
+              className="h-10 px-4 rounded-xl bg-primary text-white text-sm font-semibold flex items-center gap-1.5 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed">
+              <Plus size={16} /> New task
+            </button>
+          </div>
+        </div>
+        <div role="tablist" aria-label="Creatives sections" className="inline-flex gap-1 p-1 rounded-[14px] bg-surface-container-high">
           {([
-            { id: 'production' as const, label: 'Production Queue', icon: <Play size={14} /> },
-            { id: 'autopost' as const, label: 'Auto Post', icon: <Send size={14} /> },
+            { id: 'production' as const, label: 'Production' },
+            { id: 'autopost' as const, label: 'Post now' },
           ]).map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setManagerTab(tab.id)}
-              className={cn(
-                "flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all",
-                managerTab === tab.id
-                  ? "bg-primary text-white shadow-md"
-                  : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container-low"
-              )}
-            >
-              {tab.icon}
+            <button key={tab.id} role="tab" aria-selected={managerTab === tab.id} onClick={() => setManagerTab(tab.id)}
+              className={cn("h-[38px] px-5 rounded-[11px] text-sm transition-all whitespace-nowrap",
+                managerTab === tab.id ? "bg-surface-container-lowest text-on-surface font-semibold shadow-sm" : "text-on-surface-variant/70 font-medium hover:text-on-surface")}>
               {tab.label}
             </button>
           ))}
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <ClientSwitcher onCreated={() => setShowAccounts(true)} />
-          <button onClick={() => setShowAccounts(true)}
-            className="h-10 bg-surface-container-low border border-outline-variant/20 text-on-surface px-4 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:bg-surface-container transition-all whitespace-nowrap shrink-0">
-            <LinkIcon size={16} /> Connected Accounts
-          </button>
         </div>
       </div>
 
@@ -384,7 +379,7 @@ const ProductionQueue: React.FC<{ externalOpenSignal?: number }> = ({ externalOp
   const renderCard = (card: Task) => {
     const isExpanded = expandedCardId === card.id;
     const pct = getProgressPct(card);
-    const isOverdue = card.due === 'Mar 28' && card.status !== 'done';
+    const isOverdue = card.status !== 'done' && (dueIn(card) ?? 0) < 0;
     return (
       <motion.div layout key={card.id} onClick={() => setExpandedCardId(isExpanded ? null : card.id)}
         className={cn("bg-surface-container-low border rounded-2xl mb-4 transition-all cursor-pointer overflow-hidden",
@@ -508,15 +503,15 @@ const ProductionQueue: React.FC<{ externalOpenSignal?: number }> = ({ externalOp
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Tasks', value: tasks.length, sub: '↑ 2 from last week', sc: 'text-green-500' },
-          { label: 'In Progress', value: tasks.filter(t => t.status === 'inprogress').length, sub: 'Active now', sc: 'text-amber-500' },
-          { label: 'In Review', value: tasks.filter(t => t.status === 'review').length, sub: 'Awaiting feedback', sc: 'text-cyan-500' },
-          { label: 'Done', value: tasks.filter(t => t.status === 'done').length, sub: '↑ On track', sc: 'text-green-500' },
+          { label: 'Due in 48 hours', value: tasks.filter(t => t.status !== 'done' && dueIn(t) !== null && dueIn(t)! >= 0 && dueIn(t)! <= 2).length, sub: 'Not done yet', sc: 'text-amber-600' },
+          { label: 'Late', value: tasks.filter(t => t.status !== 'done' && dueIn(t) !== null && dueIn(t)! < 0).length, sub: 'Past the deadline', sc: 'text-red-600' },
+          { label: 'Waiting for review', value: tasks.filter(t => t.status === 'review').length, sub: 'Approve or ask for changes', sc: 'text-sky-700' },
+          { label: 'Done', value: tasks.filter(t => t.status === 'done').length, sub: `${tasks.length} tasks in total`, sc: 'text-emerald-700' },
         ].map(s => (
-          <div key={s.label} className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-4">
-            <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60 mb-2">{s.label}</div>
-            <div className="text-3xl font-mono font-bold text-on-surface">{s.value}</div>
-            <div className={cn("text-[10px] font-bold mt-1", s.sc)}>{s.sub}</div>
+          <div key={s.label} className="bg-surface-container-lowest rounded-[18px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]">
+            <div className="text-[13px] text-on-surface-variant/70 mb-1">{s.label}</div>
+            <div className={cn("text-3xl font-bold tabular-nums", s.label === 'Late' && s.value ? "text-red-600" : "text-on-surface")}>{s.value}</div>
+            <div className={cn("text-[13px] font-medium mt-0.5", s.sc)}>{s.sub}</div>
           </div>
         ))}
       </div>

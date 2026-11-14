@@ -135,7 +135,7 @@ export default function App() {
       case 'strategy':
         return { title: '' }; // the Strategy page has its own header
       case 'content':
-        return { title: 'Content Production', subtitle: 'Content auto-routed from calendar → Video Editor & Designer queues' };
+        return { title: '' };
       case 'ads':
         return { title: 'Ads Manager', subtitle: 'Campaign Scaling' };
       case 'sales':
