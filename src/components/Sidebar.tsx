@@ -35,17 +35,24 @@ interface SidebarProps {
   onLogout?: () => void;
 }
 
-const navItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'audit', label: 'Audit', icon: Search },
-  { id: 'strategy', label: 'Strategy', icon: TrendingUp },
-  { id: 'content', label: 'Creatives', icon: ImagePlay },
-  { id: 'ads', label: 'Ads', icon: Megaphone },
-  { id: 'funnel', label: 'Funnels', icon: Filter },
-  { id: 'sales', label: 'Sales', icon: DollarSign },
-  { id: 'emails', label: 'Emails', icon: Mail },
-  { id: 'ai', label: 'AI Automation', icon: Cpu },
-  { id: 'teams', label: 'Teams', icon: Users },
+// Grouped by job: run the work, win clients, keep it running.
+const navGroups = [
+  { label: 'Work', items: [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'audit', label: 'Audit', icon: Search },
+    { id: 'strategy', label: 'Strategy', icon: TrendingUp },
+    { id: 'content', label: 'Creatives', icon: ImagePlay },
+  ] },
+  { label: 'Grow', items: [
+    { id: 'funnel', label: 'Funnels', icon: Filter },
+    { id: 'sales', label: 'Sales', icon: DollarSign },
+    { id: 'emails', label: 'Emails', icon: Mail },
+    { id: 'ads', label: 'Ads', icon: Megaphone },
+  ] },
+  { label: 'System', items: [
+    { id: 'ai', label: 'AI Automation', icon: Cpu },
+    { id: 'teams', label: 'Teams', icon: Users },
+  ] },
 ] as const;
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, darkMode, onToggleDarkMode, isOpen, onClose, isCollapsed, onToggleCollapse, onLogout }) => {
@@ -60,117 +67,68 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, dark
       )}
 
       <aside className={cn(
-        "h-screen fixed left-0 top-0 flex flex-col bg-surface-container-low border-r-0 z-50 overflow-y-auto no-scrollbar transition-all duration-300 ease-in-out md:translate-x-0",
+        "h-screen fixed left-0 top-0 flex flex-col bg-surface-container-lowest border-r border-outline-variant/15 z-50 overflow-y-auto no-scrollbar transition-all duration-300 ease-in-out md:translate-x-0",
         isOpen ? "translate-x-0" : "-translate-x-full",
         isCollapsed ? "w-20" : "w-64"
       )}>
         <div className="flex flex-col h-full py-6">
           {/* Brand */}
-          <div className={cn("mb-10 flex items-center", isCollapsed ? "px-0 justify-center" : "px-8 justify-between")}>
-            <div 
-              className={cn("flex items-center gap-3 cursor-pointer", isCollapsed && "justify-center")}
-              onClick={onToggleCollapse}
-              title="Toggle Sidebar"
-            >
-              <Logo className="w-10 h-10 shadow-lg shadow-primary/20 rounded-full shrink-0" />
+          <div className={cn("mb-7 flex items-center", isCollapsed ? "justify-center" : "px-5 justify-between")}>
+            <button onClick={onToggleCollapse} title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} className={cn("flex items-center gap-3 text-left", isCollapsed && "justify-center")}>
+              <Logo className="w-9 h-9 rounded-[11px] shrink-0" />
               {!isCollapsed && (
-                <div>
-                  <h1 className="text-xl font-black text-primary tracking-tighter leading-none">TitanLeap</h1>
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-on-surface-variant/60 font-bold mt-1">Growth System</p>
+                <div className="leading-tight">
+                  <p className="text-[17px] font-bold tracking-tight text-on-surface">TitanLeap</p>
+                  <p className="text-xs text-on-surface-variant/60">Growth system</p>
                 </div>
               )}
-            </div>
+            </button>
             {!isCollapsed && (
-              <button onClick={onClose} className="md:hidden text-on-surface-variant hover:text-on-surface shrink-0">
-                <X size={20} />
-              </button>
+              <button onClick={onClose} aria-label="Close menu" className="md:hidden text-on-surface-variant hover:text-on-surface shrink-0"><X size={20} /></button>
             )}
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 space-y-1">
-            {navItems.map((item) => {
-              const isActive = activeView === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    onViewChange(item.id);
-                    onClose();
-                  }}
-                  title={isCollapsed ? item.label : undefined}
-                className={cn(
-                  "w-full flex items-center transition-all duration-300 ease-in-out group",
-                  isCollapsed ? "justify-center px-0 py-4" : "gap-4 px-8 py-3",
-                  isActive 
-                    ? "text-primary font-bold border-r-2 border-primary bg-surface-container-lowest shadow-sm" 
-                    : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
-                )}
-              >
-                <item.icon 
-                  size={20} 
-                  className={cn(
-                    "transition-colors shrink-0",
-                    isActive ? "text-primary" : "text-on-surface-variant group-hover:text-on-surface"
-                  )} 
-                />
-                {!isCollapsed && <span className="text-sm font-medium tracking-tight truncate">{item.label}</span>}
-              </button>
-            );
-          })}
-        </nav>
+          <nav aria-label="Main" className={cn("flex-1 space-y-5", isCollapsed ? "px-3" : "px-3")}>
+            {navGroups.map(group => (
+              <div key={group.label} className="space-y-0.5">
+                {!isCollapsed ? <p className="px-3 pb-1 text-[11px] font-medium text-on-surface-variant/50">{group.label}</p> : <div className="mx-3 mb-2 border-t border-outline-variant/15" />}
+                {group.items.map(item => {
+                  const isActive = activeView === item.id;
+                  return (
+                    <button key={item.id} onClick={() => { onViewChange(item.id as ViewType); onClose(); }}
+                      title={isCollapsed ? item.label : undefined} aria-current={isActive ? 'page' : undefined}
+                      className={cn("w-full flex items-center rounded-[10px] transition-colors",
+                        isCollapsed ? "justify-center h-11" : "gap-3 px-3 h-10",
+                        isActive ? "bg-primary/10 text-primary font-semibold" : "text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface")}>
+                      <item.icon size={18} className="shrink-0" />
+                      {!isCollapsed && <span className="text-sm truncate">{item.label}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
 
-        {/* Footer */}
-        <div className={cn("mt-auto space-y-4", isCollapsed ? "px-2" : "px-6")}>
-          <button 
-            onClick={onToggleDarkMode}
-            title={darkMode ? 'Light Mode' : 'Dark Mode'}
-            className={cn(
-              "w-full bg-surface-container-highest text-on-surface-variant font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-sm hover:bg-surface-container transition-all active:scale-95",
-              isCollapsed ? "py-4" : "py-3 px-4"
-            )}
-          >
-            {darkMode ? <Sun size={16} className="shrink-0" /> : <Moon size={16} className="shrink-0" />}
-            {!isCollapsed && (darkMode ? 'Light Mode' : 'Dark Mode')}
-          </button>
-
-          <button 
-            title={isCollapsed ? "Upgrade Plan" : undefined}
-            className={cn(
-              "w-full bg-secondary-container text-on-secondary-container font-black rounded-2xl text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl shadow-secondary/20 hover:brightness-105 transition-all active:scale-95",
-              isCollapsed ? "py-4 px-0" : "py-4 px-4"
-            )}
-          >
-            <Bolt size={18} fill="currentColor" className="shrink-0" />
-            {!isCollapsed && "Upgrade Plan"}
-          </button>
-          
-          <div className={cn("pt-4 border-t border-outline-variant/20 space-y-1", isCollapsed ? "px-2" : "px-0")}>
-            <button 
-              onClick={() => { window.location.href = 'mailto:info@titanleap.co?subject=TitanLeap%20Monolith%20support'; }}
-              title={isCollapsed ? "Support" : "Email info@titanleap.co"}
-              className={cn(
-                "w-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors text-sm font-medium",
-                isCollapsed ? "justify-center py-3 px-0" : "gap-4 py-2 px-2"
-              )}
-            >
-              <HelpCircle size={18} className="shrink-0" />
-              {!isCollapsed && "Support"}
+          {/* Footer */}
+          <div className={cn("mt-6 pt-4 border-t border-outline-variant/15", isCollapsed ? "px-3 space-y-1" : "px-3 space-y-0.5")}>
+            <button onClick={onToggleDarkMode} title={darkMode ? 'Light mode' : 'Dark mode'}
+              className={cn("w-full flex items-center rounded-[10px] text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors", isCollapsed ? "justify-center h-11" : "gap-3 px-3 h-10")}>
+              {darkMode ? <Sun size={18} className="shrink-0" /> : <Moon size={18} className="shrink-0" />}
+              {!isCollapsed && <span className="text-sm">{darkMode ? 'Light mode' : 'Dark mode'}</span>}
             </button>
-            <button 
-              onClick={onLogout}
-              title={isCollapsed ? "Logout" : undefined}
-              className={cn(
-                "w-full flex items-center text-on-surface-variant hover:text-error transition-colors text-sm font-medium",
-                isCollapsed ? "justify-center py-3 px-0" : "gap-4 py-2 px-2"
-              )}
-            >
+            <button onClick={() => { window.location.href = 'mailto:info@titanleap.co?subject=TitanLeap%20Monolith%20support'; }} title={isCollapsed ? 'Support' : 'Email info@titanleap.co'}
+              className={cn("w-full flex items-center rounded-[10px] text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors", isCollapsed ? "justify-center h-11" : "gap-3 px-3 h-10")}>
+              <HelpCircle size={18} className="shrink-0" />
+              {!isCollapsed && <span className="text-sm">Support</span>}
+            </button>
+            <button onClick={onLogout} title={isCollapsed ? 'Log out' : undefined}
+              className={cn("w-full flex items-center rounded-[10px] text-on-surface-variant hover:bg-red-50 hover:text-red-600 transition-colors", isCollapsed ? "justify-center h-11" : "gap-3 px-3 h-10")}>
               <LogOut size={18} className="shrink-0" />
-              {!isCollapsed && "Logout"}
+              {!isCollapsed && <span className="text-sm">Log out</span>}
             </button>
           </div>
         </div>
-      </div>
     </aside>
     </>
   );
