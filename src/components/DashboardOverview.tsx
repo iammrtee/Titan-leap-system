@@ -114,35 +114,39 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
   const payers = Array.from(new Set(inPeriod.map(x => x.product_name).filter(Boolean)));
   return (
     <div className="space-y-6">
-      {/* Header: the growing branch runs edge to edge behind the greeting */}
-      <section className="relative -mx-4 md:-mx-8 lg:-mx-12 xl:-mx-16 -mt-4 md:-mt-8 lg:-mt-12 xl:-mt-16 overflow-hidden h-[clamp(280px,34vw,520px)]">
-        <GrowingBranch className="absolute pointer-events-none select-none left-[-9%] top-[-38%] w-[118%] max-w-none aspect-video" />
-        <div className="relative z-10 h-full px-4 md:px-8 lg:px-12 xl:px-16 pt-8 md:pt-12 flex items-start justify-between gap-4">
-          <div className="space-y-1.5">
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-on-surface">{greeting}</h2>
-            <p className="text-sm md:text-base text-on-surface-variant">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} · {clients.length} client{clients.length > 1 ? 's' : ''}</p>
+      {/* Header: the growing branch runs edge to edge; the greeting and today's tasks sit on it in frosted glass */}
+      <section className="relative -mx-4 md:-mx-8 lg:-mx-12 xl:-mx-16 -mt-4 md:-mt-8 lg:-mt-12 xl:-mt-16 overflow-hidden min-h-[clamp(320px,40vw,600px)]">
+        <GrowingBranch className="absolute pointer-events-none select-none left-[-9%] top-[-13vw] w-[118%] max-w-none aspect-video" />
+        <div className="relative z-10 px-4 md:px-8 lg:px-12 xl:px-16 pt-8 md:pt-12 pb-8 space-y-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1.5">
+              <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-on-surface">{greeting}</h2>
+              <p className="text-sm md:text-base text-on-surface-variant">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} · {clients.length} client{clients.length > 1 ? 's' : ''}</p>
+            </div>
+            <button onClick={() => go('audit')} className="h-11 px-5 rounded-xl bg-primary text-white text-sm font-semibold hover:brightness-110 shadow-sm shrink-0">New audit</button>
           </div>
-          <button onClick={() => go('audit')} className="h-11 px-5 rounded-xl bg-primary text-white text-sm font-semibold hover:brightness-110 shadow-sm shrink-0">New audit</button>
+
+          <section className="max-w-[560px] rounded-[28px] p-6 md:p-7 text-white bg-[linear-gradient(165deg,rgba(110,40,170,0.62)_0%,rgba(70,30,120,0.5)_55%,rgba(120,100,170,0.42)_100%)] border border-white/25 backdrop-blur-xl backdrop-saturate-150 shadow-[0_20px_60px_rgba(60,20,120,0.25)] space-y-4">
+            <div className="space-y-1">
+              <p className="text-amber-300 text-lg" style={{ fontFamily: "'Kalam','Caveat','Segoe Print',cursive" }}>Start here</p>
+              <h3 className="text-2xl md:text-[28px] font-bold tracking-tight leading-tight">Needs you today</h3>
+            </div>
+            {todo.length ? (
+              <div className="space-y-2.5">
+                {todo.map((t, i) => (
+                  <button key={i} onClick={t.onClick} className="w-full flex items-center gap-3 rounded-[16px] px-4 py-3.5 bg-[rgba(25,10,50,0.5)] border border-white/10 hover:bg-[rgba(25,10,50,0.65)] text-left transition-colors">
+                    <span className={cn("w-2 h-2 rounded-full shrink-0", t.tone)} />
+                    <span className="flex-1 text-[15px] leading-snug text-white">{t.text}</span>
+                    <span className="text-[13px] font-semibold text-amber-300 shrink-0">{t.action}</span>
+                  </button>
+                ))}
+              </div>
+            ) : <p className="text-[15px] text-white/80">You're all caught up.</p>}
+          </section>
         </div>
       </section>
 
       <div className="relative z-10 space-y-6">
-        {todo.length > 0 && (
-          <section className={`bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-2`}>
-            <h3 className="text-xl font-semibold tracking-tight text-on-surface">Needs you today</h3>
-            <div className="divide-y divide-outline-variant/10">
-              {todo.map((t, i) => (
-                <div key={i} className="flex items-center gap-3.5 py-3">
-                  <span className={cn("w-2 h-2 rounded-full shrink-0", t.tone)} />
-                  <span className="flex-1 text-[15px] text-on-surface">{t.text}</span>
-                  <span className="text-[13px] text-on-surface-variant/60 hidden sm:inline">{t.where}</span>
-                  <button onClick={t.onClick} className="text-sm font-semibold text-primary hover:underline">{t.action}</button>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
         <div className="flex flex-wrap gap-4 items-stretch">
           <section className={`flex-[999_1_520px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} flex flex-col gap-4`}>
             <div className="flex items-start justify-between gap-3">
