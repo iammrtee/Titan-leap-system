@@ -1000,7 +1000,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     if (!day || writingDay !== null) return null;
     setWritingDay(idx);
     try {
-      const full = await writeFullPost(day, thirtyDayPlan, businessContext());
+      const full = await writeFullPost(day, thirtyDayPlan, { ...businessContext(), voice: personalEnabled && activeBrand === 'personal' ? 'personal' : 'company' });
       setThirtyDayPlan((p: any) => { const cal = [...(p?.calendar || [])]; cal[idx] = { ...cal[idx], full }; return { ...p, calendar: cal }; });
       const text = fullPostToText(full);
       setCalendarItems(prev => prev.map(it => it.id.startsWith(`ai-${idx}-`) ? { ...it, description: text } : it));
@@ -1029,7 +1029,7 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     };
     setExpandingId(item.id);
     try {
-      const full = await writeFullPost(day, { engine: { cta: day.cta || thirtyDayPlan?.engine?.cta } }, businessContext());
+      const full = await writeFullPost(day, { engine: { cta: day.cta || thirtyDayPlan?.engine?.cta } }, { ...businessContext(), voice: brandOf(item) });
       const text = fullPostToText(full);
       setCalendarItems(prev => prev.map(it => it.id === item.id ? { ...it, description: text } : it));
       toast.success('Full post written');
@@ -1142,12 +1142,12 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
       if (!intel || !sameBusiness) intel = await handleResearchCompetitors(true, !sameBusiness && !!intel);
       setGenerationState('building');
 
-      const plan = await generate30DayPlan(ctx, intel, planPlatforms);
+      const plan = await generate30DayPlan(ctx, intel, planPlatforms, personalEnabled && activeBrand === 'personal' ? 'personal' : 'company');
       refreshBudget();
       
       if (plan && plan.strategicSyncSummary) {
         setGenerationState('completed');
-        setThirtyDayPlan({ ...plan, builtOnEvidence: !!intel, evidenceDate: intel?.researchedAt || null, builtFor: ctx.businessName || '', source: planSource, platforms: planPlatforms });
+        setThirtyDayPlan({ ...plan, builtOnEvidence: !!intel, evidenceDate: intel?.researchedAt || null, builtFor: ctx.businessName || '', source: planSource, platforms: planPlatforms, voice: personalEnabled && activeBrand === 'personal' ? 'personal' : 'company' });
         // Keep the completed state visible for a moment before resetting
         setTimeout(() => {
           setGenerationState('idle');
@@ -1215,40 +1215,47 @@ export const StrategyHub: React.FC<{ auditData?: any; forceRegenerateTimestamp?:
     if (personalEnabled && !brandArg) { setBrandPick('sync'); return; }
     const syncBrand: Brand = brandArg || 'company';
 
-    const newItems: CalendarItem[] = thirtyDayPlan.calendar.map((content: any, index: number) => {
-      const date = new Date(); // Start from today
+    // One calendar post per platform version: the day's main post, plus the native version
+    // for the plan's second platform when it wrote one.
+    const VALID = ['TikTok', 'LinkedIn', 'Instagram', 'YouTube', 'Twitter'];
+    const planPlatformsUsed: string[] = (thirtyDayPlan.platforms || planPlatforms || []).filter((p: string) => VALID.includes(p));
+    const typeOf = (f?: string) => (f || '').toLowerCase().match(/video|reel|short/) ? 'video' : (f || '').toLowerCase().includes('article') ? 'article' : 'post';
+    const newItems: CalendarItem[] = thirtyDayPlan.calendar.flatMap((content: any, index: number) => {
+      const date = new Date();
       date.setDate(date.getDate() + index);
-      
-      // Sanitize platform
-      const platforms: any[] = ['TikTok', 'LinkedIn', 'Instagram', 'YouTube', 'Twitter'];
-      let platform = content.platform || 'LinkedIn';
-      if (!platforms.includes(platform)) {
-        platform = 'LinkedIn';
-      }
-
-      return {
-        id: `ai-${index}-${Math.random().toString(36).substr(2, 5)}`,
-        day: date.getDate(),
-        month: date.getMonth(),
-        year: date.getFullYear(),
+      const platform = VALID.includes(content.platform) ? content.platform : (planPlatformsUsed[0] || 'Instagram');
+      const base = {
+        day: date.getDate(), month: date.getMonth(), year: date.getFullYear(),
+        title: content.hook || content.message?.substring(0, 80) || 'Post',
+        status: 'draft' as const,
+        tags: ['ai-generated', content.pillar || ''].filter(Boolean),
+        brand: syncBrand, client: clientId,
+      };
+      const main: CalendarItem = {
+        ...base,
+        id: `ai-${index}-${Math.random().toString(36).slice(2, 7)}`,
         platform: platform as any,
-        title: content.hook || content.message?.substring(0, 50) || 'AI Generated Post',
         description: content.full ? fullPostToText(content.full) : [
           content.hook && `HOOK: ${content.hook}`,
           content.body && `BODY: ${content.body}`,
           content.caption && `CAPTION: ${content.caption}`,
-          content.cta && `CTA: ${content.cta}`,
           content.hashtags && content.hashtags,
+          content.notes && `NOTES: ${content.notes}`,
           content.modeledOn && `Modeled on: ${content.modeledOn}`,
-        ].filter(Boolean).join('\n') || content.message || 'Content strategy post',
-        status: 'draft',
-        type: content.format?.toLowerCase().includes('video') ? 'video' : 
-              content.format?.toLowerCase().includes('article') ? 'article' : 'post',
+        ].filter(Boolean).join('\n') || content.message || '',
+        type: typeOf(content.format) as any,
         time: content.postTime || '09:00 AM',
-        tags: ['ai-generated', 'strategy', content.pillar || ''],
-        brand: syncBrand,
-        client: clientId,
       };
+      const second = planPlatformsUsed.find(p => p !== platform);
+      if (!content.crossPost || !second) return [main];
+      return [main, {
+        ...base,
+        id: `ai-${index}x-${Math.random().toString(36).slice(2, 7)}`,
+        platform: second as any,
+        description: [`HOOK: ${content.hook || ''}`, `BODY: ${content.crossPost}`].join('\n'),
+        type: (second === 'Twitter' ? 'post' : typeOf(content.format)) as any,
+        time: main.time,
+      }];
     });
 
     setCalendarItems(prev => {

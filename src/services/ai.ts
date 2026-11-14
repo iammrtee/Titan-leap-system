@@ -415,6 +415,31 @@ const intelBlock = (intel?: CompetitorIntel | null) => {
     For every post set "modeledOn" to the exact evidence it copies the structure of (e.g. "@handle carousel '5 mistakes…' 4.1x median"), or "gap test: <gap>".`;
 };
 
+// The rules that make a plan publishable: voice, final copy, honest facts, one offer,
+// native formats. Shared by the 30-day plan and the full-post writer.
+export const writingRules = (voice: 'company' | 'personal', postOn: string) => `
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    WRITING RULES — FOLLOW ALL OF THEM
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    VOICE: ${voice === 'personal'
+      ? 'This is the FOUNDER\'S PERSONAL account. Write in first person ("I", "my"), with their opinions and what they are building. The business is something they run, not the speaker.'
+      : 'This is the COMPANY account. Write as the business: "we", "our", "us". Never "I" or "my", no founder backstory or personal milestones, no "building in public" diary posts.'}
+
+    FINAL COPY, NOT BRIEFS: every post must be ready to publish as written. Never write notes-to-self in the post ("Expect pushback", "Same format as last week", "Pick a launch from Product Hunt"); production notes go only in "notes". Never use vague stand-ins like [SaaS], [Company], "X teardowns, Y replies".
+
+    HONEST FACTS: only state facts found in the brand profile, brief, audit or competitor evidence. Never invent numbers, clients, results, testimonials, case studies, follower counts or company milestones (e.g. "zero clients", "100 customers"). When a post genuinely needs a fact we don't have (this week's real numbers, a real audit finding, a client's result), write everything else in full and put ⟦fill: exactly what goes here⟧ only where that fact goes. At most 1 in 3 posts may contain a ⟦fill⟧.
+
+    ONE OFFER: one entry offer and one CTA, used word for word as the last line of every post and caption. Never contradict it across days (free one week, paid the next, "5 spots" then "2 left"). Only use prices from the brand profile.
+
+    FORMATS (platforms: ${postOn}):
+    - X/Twitter: one post under 270 characters, or a thread of 4-8 tweets, each on its own line starting "1/", "2/"…
+    - Instagram carousel: 5-8 lines "SLIDE 1: …", each slide max 25 words, last slide is the CTA. Reel/video: beats "[0-3s] SAY: … SHOW: …", 20-45 seconds.
+    - LinkedIn: 80-150 words, short paragraphs, a strong first line.
+    - TikTok / YouTube Shorts: video beats as above.
+    - When a post goes to two platforms, write a genuinely different native version for each. Never the same text twice.
+
+    SCHEDULE: choose "postTime" per platform for when this audience is online (consider their likely timezone); keep it consistent per platform.`;
+
 // Extra answers from the Quick brief (no audit). Only lines with an answer are sent.
 const briefBlock = (b: any) => {
   const lines = [
@@ -438,7 +463,7 @@ const briefBlock = (b: any) => {
     ${lines.join('\n    ')}`;
 };
 
-export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel | null, platforms?: string[]) => {
+export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel | null, platforms?: string[], voice: 'company' | 'personal' = 'company') => {
   const postOn = (platforms && platforms.length ? platforms : [auditData?.primaryPlatform || 'Instagram']).join(', ');
   const prompt = `
     You are a world-class content strategist who builds content systems that bring in CLIENTS, not just views.
@@ -485,38 +510,19 @@ export const generate30DayPlan = async (auditData: any, intel?: CompetitorIntel 
 ${briefBlock(auditData)}
 ${intelBlock(intel)}
 
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    VIRAL MECHANICS — ENGINEER INTO EVERY WEEK
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    The following viral mechanics must be deliberately baked into the calendar.
-    Each week must include at least 3–4 of these tactics:
-
-      1. Pattern-interrupt hooks (stop-the-scroll first lines)
-      2. Controversy / hot-take posts (safe but bold opinions)
-      3. Comment-bait CTAs (designed to trigger replies)
-      4. Save-worthy value posts (checklists, frameworks)
-      5. Share-bait (relatable frustrations, identity content)
-      6. Cliffhanger / series content (come back tomorrow)
-
-    Label each post in the calendar with the viral mechanic it uses.
+${writingRules(voice, postOn)}
 
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    PLATFORM SYNC RULES
+    MIX AND SERIES
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    Sync strategy: repurpose with native adaptation
-    IMPORTANT: Never copy-paste the same caption to every platform. Each version must feel native.
-
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    RECURRING SERIES (MANDATORY)
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    Create at least TWO recurring weekly content series to build audience habit.
-    Examples: "Monday Myth Busting," "Wednesday Wins," "Friday Behind-the-Scenes."
-    Make them brand-specific and relevant.
+    - At least TWO recurring weekly series with a fixed day (e.g. "Leak of the week" every Monday, a Friday numbers recap). Brand-specific names.
+    - Each week mixes: proof/teardown, a save-worthy framework or checklist, a bold opinion, and one offer post. Label each post's "viralMechanic".
+    - Rotate pillars; no pillar more than 2 days in a row. No two posts in the 30 days with the same hook or the same idea.
 
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     OUTPUT FORMAT
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    BE CONCISE. This is a planning calendar, not full scripts — every field below has a hard length limit. Do not write multi-paragraph messages or slide-by-slide breakdowns.
+    Write FINAL COPY. Length limits are maximums, not targets.
 
     The output MUST be a JSON object with the following structure exactly:
     {
@@ -524,19 +530,19 @@ ${intelBlock(intel)}
         {
           "date": "Day 1",
           "platform": "one of the selected platforms: Instagram | TikTok | LinkedIn | Twitter | YouTube | Facebook",
-          "crossPost": "string (max 35 words): the native version for the other selected platform(s), or omit if only one platform",
+          "crossPost": "the complete native version for the second selected platform, in that platform's format (max 100 words); omit if only one platform",
           "pillar": "string (2-4 words)",
           "format": "string (2-4 words)",
           "viralMechanic": "string (2-4 words)",
           "hook": "string (max 15 words) — the exact first line / first 3 seconds",
           "message": "string (1 sentence: what the post is about)",
-          "body": "string (max 60 words): the outline in order — number every slide or beat separately (Slide 1: …, Slide 2: …), never ranges like 'Slides 2-4'",
-          "caption": "string (max 40 words): ready-to-post caption, ends with the CTA",
+          "body": "the complete post in this platform's format (see FORMATS), final copy, max 130 words",
+          "caption": "ready-to-post caption, max 45 words, its last line is the engine's exact CTA (for an X post the body already is the post: repeat its last line)",
           "modeledOn": "string (max 15 words): the proven competitor post/pattern this copies the structure of",
           "cta": "string (max 10 words)",
           "hashtags": "string (3-5 tags max)",
           "postTime": "string",
-          "notes": "string (max 8 words, or omit)"
+          "notes": "production note for the designer/editor, max 15 words, or omit"
         }
       ],
       "engine": {
@@ -570,7 +576,7 @@ ${intelBlock(intel)}
     Engine sizes: 5-7 funnel steps ending in the paid offers, 3-4 pillars, 7 weeklyRhythm rows (Mon-Sun; rest days allowed), 4 arc items, 3 scripts (reply to the CTA, delivering the free offer, the sales call), 6 scoreboard rows (posts, reach-to-DM numbers, leads, calls, sales).
     Every caption ends with the engine's exact CTA.
     PRICES: only use a price that appears in the brand profile above. Never guess or invent a price; if none is given, name the offer without a price.
-    Ensure exactly 30 items in the "calendar" array, exactly 4 items in "weeklyKPIs" (one per week), and exactly 3 items in "abTestPlan". Stay within every length limit above — brevity is required, not optional.
+    Ensure exactly 30 items in the "calendar" array (Day 1 to Day 30 in order, one per day), exactly 4 items in "weeklyKPIs" (one per week), and exactly 3 items in "abTestPlan".
   `;
 
   try {
@@ -906,6 +912,8 @@ export const refinePlan = async (currentPlan: any, feedback: string) => {
     Refine the following 30-day growth plan: ${JSON.stringify(currentPlan)}.
     User feedback: "${feedback}".
     Adjust the plan to better align with the feedback while maintaining high-impact growth strategies.
+    Follow these rules for every post you change:
+    ${writingRules(currentPlan?.voice === 'personal' ? 'personal' : 'company', (currentPlan?.platforms || []).join(', ') || 'the plan\'s platforms')}
     Keep every "modeledOn" link to competitor evidence unless the feedback asks to change that post; keep exactly 30 calendar items. Keep the "engine" object (bigIdea, offer, cta, bio, funnel, pillars, repurpose, rhythmColumns, weeklyRhythm, arc, scripts, scoreboard, scoreboardNote) and update it only where the feedback requires.
     
     The output MUST follow the same JSON structure as the original plan:
@@ -1258,7 +1266,8 @@ export const getAIBudget = async (): Promise<{ spent: number; budget: number; mo
 // script with what to show, or the full thread. Counts toward the monthly AI budget (~2–3¢).
 export const writeFullPost = async (day: any, plan: any, ctx: any) => {
   const e = plan?.engine || {};
-  const prompt = `You are the copywriter for ${ctx?.businessName || 'this brand'}. Write this post out IN FULL, ready to make and publish. No abbreviations, no placeholders, no ranges like "Slides 2-4" — every slide, beat or tweet written out word for word.
+  const prompt = `You are the copywriter for ${ctx?.businessName || 'this brand'}. Write this post out IN FULL, ready to make and publish. No abbreviations, no ranges like "Slides 2-4" — every slide, beat or tweet written out word for word.
+${writingRules(ctx?.voice === 'personal' ? 'personal' : 'company', day.platform || 'Instagram')}
 
 BRAND: ${ctx?.businessName || ''} — sells ${ctx?.mainOffer || ctx?.mainProduct || ''} to ${ctx?.audience || ctx?.targetAudience || 'their buyers'}.
 ${ctx?.tone ? `TONE: ${ctx.tone}` : ''}
