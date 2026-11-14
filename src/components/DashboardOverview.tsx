@@ -11,6 +11,9 @@ const DAY = 86_400_000;
 const periodDays = { '7D': 7, '30D': 30, '1Y': 365 } as const;
 type Period = keyof typeof periodDays;
 
+// Rough rates to show everything in dollars. Override NGN with VITE_NGN_PER_USD at build time.
+const PER_USD: Record<string, number> = { USD: 1, NGN: Number((import.meta as any).env?.VITE_NGN_PER_USD) || 1600, GBP: 0.79, EUR: 0.92, GHS: 15, KES: 129, ZAR: 18 };
+const toUsd = (amount: number, currency: string) => amount / (PER_USD[(currency || 'USD').toUpperCase()] || 1);
 const money = (amount: number, currency: string) => {
   try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 }).format(amount); }
   catch { return `${currency} ${Math.round(amount).toLocaleString()}`; }
@@ -128,98 +131,35 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
         </section>
       )}
 
-      <div className="flex flex-wrap gap-4 items-stretch">
-        <section className={`flex-[999_1_520px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} flex flex-col gap-4`}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1 min-w-0">
-              <p className="text-[13px] text-on-surface-variant/70">Revenue</p>
-              <p className="text-4xl md:text-[44px] font-bold tracking-tight text-primary tabular-nums">{money(byCurrency[mainCurrency] || 0, mainCurrency)}</p>
-              <p className="text-[13px] text-on-surface-variant/70">
-                {inPeriod.length ? `${inPeriod.length} payment${inPeriod.length > 1 ? 's' : ''} in the last ${period === '1Y' ? 'year' : `${days} days`}` : 'No payments recorded yet. Mark a lead as Paid in Sales.'}
-                {currencies.length > 1 && ` · plus ${currencies.slice(1).map(([c, a]) => money(a, c)).join(', ')}`}
-              </p>
+      {(() => {
+        const monthSales = sales.filter(x => +new Date(x.created_at) >= +monthStart);
+        const usd = monthSales.reduce((a, x) => a + toUsd(Number(x.amount || 0), x.currency || 'USD'), 0);
+        const local = monthSales.filter(x => (x.currency || 'USD') !== 'USD').reduce<Record<string, number>>((m, x) => { m[x.currency] = (m[x.currency] || 0) + Number(x.amount || 0); return m; }, {});
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))] gap-4">
+            <div className={`bg-primary text-white rounded-[18px] p-6 flex flex-col gap-1`}>
+              <span className="text-[13px] text-white/75">Revenue this month</span>
+              <span className="text-4xl md:text-[44px] font-bold tracking-tight tabular-nums">{money(usd, 'USD')}</span>
+              <span className="text-[13px] text-white/75">{Object.keys(local).length ? `from ${Object.entries(local).map(([c, a]) => money(a, c)).join(' + ')}` : monthSales.length ? `${monthSales.length} payment${monthSales.length > 1 ? 's' : ''}` : 'Record payments in Sales'}</span>
             </div>
-            <div role="group" aria-label="Period" className="flex gap-0.5 p-[3px] rounded-[10px] bg-surface-container-high shrink-0">
-              {(Object.keys(periodDays) as Period[]).map(p => (
-                <button key={p} onClick={() => setPeriod(p)} className={cn("h-[30px] px-3 rounded-lg text-[13px] transition-all", period === p ? "bg-surface-container-lowest text-primary font-semibold shadow-sm" : "text-on-surface-variant/70 font-medium")}>{p}</button>
-              ))}
+            <div className={tile}>
+              <span className="text-[13px] text-on-surface-variant/70">Active clients</span>
+              <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{clients.length}</span>
+              <span className="text-[13px] text-on-surface-variant/70 truncate">{clients.map(clientLabel).join(' · ')}</span>
+            </div>
+            <div className={tile}>
+              <span className="text-[13px] text-on-surface-variant/70">Leads</span>
+              <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{leads.length}</span>
+              <span className="text-[13px] text-on-surface-variant/70">{leadsThisWeek ? `+${leadsThisWeek} this week` : `${hot.length} hot`}</span>
+            </div>
+            <div className={tile}>
+              <span className="text-[13px] text-on-surface-variant/70">Posts this week</span>
+              <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{weekPosts.length}</span>
+              <span className={cn("text-[13px] font-medium", needDesign.length ? "text-amber-600" : "text-on-surface-variant/70")}>{needDesign.length ? `${needDesign.length} need design` : 'All ready'}</span>
             </div>
           </div>
-          <div className="space-y-1.5 mt-auto">
-            <div className="flex items-end gap-2 h-24">
-              {bars.map((v, i) => (
-                <div key={i} title={money(v, mainCurrency)} className={cn("flex-1 rounded-md", v ? "bg-primary" : "bg-primary/10")} style={{ height: `${v ? Math.max(8, (v / maxBar) * 100) : 6}%` }} />
-              ))}
-            </div>
-            <div className="flex gap-2 text-[11px] text-on-surface-variant/60">{bars.map((_, i) => <span key={i} className="flex-1 truncate">{barLabel(i)}</span>)}</div>
-          </div>
-        </section>
-
-        <div className="flex-[1_1_300px] min-w-0 flex flex-col gap-4">
-          <div className={cn(tile, "flex-1")}>
-            <span className="text-[13px] text-on-surface-variant/70">Active clients</span>
-            <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface tabular-nums">{clients.length}</span>
-            <span className="text-[13px] text-on-surface-variant/70 truncate">{clients.map(clientLabel).join(' · ')}</span>
-          </div>
-          <div className={cn(tile, "flex-1")}>
-            <span className="text-[13px] text-on-surface-variant/70">Leads generated</span>
-            <div className="flex items-baseline gap-2.5">
-              <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface tabular-nums">{leads.length}</span>
-              {leadsThisWeek > 0 && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">+{leadsThisWeek} this week</span>}
-            </div>
-            <span className="text-[13px] text-on-surface-variant/70">{hot.length} hot · {leads.length - hot.length} others</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className={tile}>
-          <span className="text-[13px] text-on-surface-variant/70">Audits this month</span>
-          <span className="text-[28px] font-bold text-on-surface tabular-nums">{auditsThisMonth}<span className="text-base font-medium text-on-surface-variant/50"> / 100</span></span>
-          <div className="h-1.5 rounded-full bg-surface-container-high mt-1"><div className="h-1.5 rounded-full bg-primary" style={{ width: `${Math.min(100, auditsThisMonth)}%` }} /></div>
-        </div>
-        <div className={tile}>
-          <span className="text-[13px] text-on-surface-variant/70">Posts going out this week</span>
-          <span className="text-[28px] font-bold text-on-surface tabular-nums">{weekPosts.length}</span>
-          <span className={cn("text-[13px] font-medium", needDesign.length ? "text-amber-600" : "text-emerald-600")}>{needDesign.length ? `${needDesign.length} need design` : weekPosts.length ? 'All have designs' : 'Nothing scheduled'}</span>
-        </div>
-        <div className={tile}>
-          <span className="text-[13px] text-on-surface-variant/70">AI spend this month</span>
-          <span className="text-[28px] font-bold text-on-surface tabular-nums">{budget ? `$${budget.spent.toFixed(2)}` : '—'}<span className="text-base font-medium text-on-surface-variant/50">{budget ? ` / $${budget.budget}` : ''}</span></span>
-          <span className="text-[13px] text-on-surface-variant/70">Audits not counted</span>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-4 items-start">
-        <section className={`flex-[999_1_480px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-2`}>
-          <div className="flex items-center justify-between"><h3 className="text-xl font-semibold tracking-tight text-on-surface">Upcoming content</h3><button onClick={() => go('strategy')} className="text-sm font-semibold text-primary hover:underline flex items-center gap-0.5">Calendar <ChevronRight size={14} /></button></div>
-          {upcoming.length ? (
-            <div className="divide-y divide-outline-variant/10">
-              {upcoming.map((p, i) => (
-                <div key={p.id || i} className="grid grid-cols-[70px_80px_minmax(0,1fr)] gap-3 items-center py-3">
-                  <span className="text-[13px] text-on-surface-variant/70">{+dateOf(p) === +today0 ? 'Today' : dateOf(p).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                  <span className="text-[13px] font-semibold text-primary truncate">{p.platform === 'Twitter' ? 'X' : p.platform} · {String(p.time || '').replace(/^0/, '')}</span>
-                  <span className="text-sm text-on-surface truncate">{p.title}{(p.client || 'default') !== 'default' ? <span className="text-on-surface-variant/60"> · {clientLabel(p.client)}</span> : null}</span>
-                </div>
-              ))}
-            </div>
-          ) : <p className="text-sm text-on-surface-variant/60 py-3">No posts scheduled. Generate a plan or import content in Strategy.</p>}
-        </section>
-
-        <section className={`flex-[1_1_320px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-2`}>
-          <h3 className="text-xl font-semibold tracking-tight text-on-surface">Activity</h3>
-          {activity.length ? activity.map((a, i) => (
-            <div key={i} className="flex gap-3 py-2">
-              <span className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0", a.dot)} />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-on-surface">{a.title}</p>
-                <p className="text-[13px] text-on-surface-variant/70 truncate">{a.desc}</p>
-              </div>
-              <span className="text-xs text-on-surface-variant/50 shrink-0">{ago(a.at)}</span>
-            </div>
-          )) : <p className="text-sm text-on-surface-variant/60 py-3">New leads and payments show up here.</p>}
-        </section>
-      </div>
+        );
+      })()}
 
       <section className="space-y-3">
         <h3 className="text-xl font-semibold tracking-tight text-on-surface">Clients</h3>
@@ -257,13 +197,6 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
         </div>
       </section>
 
-      <section className={`bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} flex flex-wrap items-center justify-between gap-3`}>
-        <div className="space-y-1">
-          <h3 className="text-lg font-semibold tracking-tight text-on-surface">Ad campaigns</h3>
-          <p className="text-sm text-on-surface-variant/70">Spend, cost per click, conversions and ROAS appear here once an ad account is connected.</p>
-        </div>
-        <button onClick={() => go('ads')} className="h-9 px-3.5 rounded-[10px] text-[13px] font-semibold bg-surface-container-low text-on-surface">Open Ads</button>
-      </section>
     </div>
   );
 };
