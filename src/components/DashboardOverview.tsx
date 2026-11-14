@@ -4,6 +4,7 @@ import { cn } from '@/src/lib/utils';
 import { supabase } from '@/src/services/supabase';
 import { getAuthHeader } from '@/src/lib/supabase';
 import { clientLabel, clientKey, setClientId } from '@/src/lib/clientProfile';
+import { GrowingBranch } from './GrowingBranch';
 
 type View = 'audit' | 'strategy' | 'content' | 'sales' | 'funnel' | 'ads';
 const SHADOW = 'shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]';
@@ -107,57 +108,70 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
   const tile = `bg-surface-container-lowest rounded-[18px] p-5 ${SHADOW} flex flex-col gap-1 min-w-0`;
   return (
     <div className="space-y-7">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-1.5">
-          <h2 className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface">{new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}</h2>
-          <p className="text-sm text-on-surface-variant/70">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} · {clients.length} client{clients.length > 1 ? 's' : ''}</p>
-        </div>
-        <button onClick={() => go('audit')} className="h-10 px-4 rounded-xl bg-primary text-white text-sm font-semibold flex items-center gap-1.5 hover:brightness-110"><Plus size={16} /> New audit</button>
-      </header>
-
-      {todo.length > 0 && (
-        <section className={`bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-2`}>
-          <h3 className="text-xl font-semibold tracking-tight text-on-surface">Needs you today</h3>
-          <div className="divide-y divide-outline-variant/10">
-            {todo.map((t, i) => (
-              <div key={i} className="flex items-center gap-3.5 py-3">
-                <span className={cn("w-2 h-2 rounded-full shrink-0", t.tone)} />
-                <span className="flex-1 text-[15px] text-on-surface">{t.text}</span>
-                <span className="text-[13px] text-on-surface-variant/60 hidden sm:inline">{t.where}</span>
-                <button onClick={t.onClick} className="text-sm font-semibold text-primary hover:underline">{t.action}</button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       {(() => {
         const monthSales = sales.filter(x => +new Date(x.created_at) >= +monthStart);
         const usd = monthSales.reduce((a, x) => a + toUsd(Number(x.amount || 0), x.currency || 'USD'), 0);
         const local = monthSales.filter(x => (x.currency || 'USD') !== 'USD').reduce<Record<string, number>>((m, x) => { m[x.currency] = (m[x.currency] || 0) + Number(x.amount || 0); return m; }, {});
+        const h = new Date().getHours();
+        const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+        const glassTile = "rounded-[22px] p-5 bg-white/55 dark:bg-white/10 border border-white/60 dark:border-white/15 backdrop-blur-xl backdrop-saturate-150 shadow-[0_8px_30px_rgba(60,20,120,0.10)] flex flex-col gap-1 min-w-0";
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))] gap-4">
-            <div className={`bg-primary text-white rounded-[18px] p-6 flex flex-col gap-1`}>
-              <span className="text-[13px] text-white/75">Revenue this month</span>
-              <span className="text-4xl md:text-[44px] font-bold tracking-tight tabular-nums">{money(usd, 'USD')}</span>
-              <span className="text-[13px] text-white/75">{Object.keys(local).length ? `from ${Object.entries(local).map(([c, a]) => money(a, c)).join(' + ')}` : monthSales.length ? `${monthSales.length} payment${monthSales.length > 1 ? 's' : ''}` : 'Record payments in Sales'}</span>
+          <section className="relative overflow-hidden rounded-[28px] min-h-[600px] bg-[radial-gradient(120%_90%_at_70%_10%,#efe6ff_0%,#f7f3ff_45%,#fbfaff_100%)] dark:bg-[radial-gradient(120%_90%_at_70%_10%,#2a1650_0%,#170d2e_55%,#110a22_100%)]">
+            {/* The branch grows across the whole hero, behind the glass */}
+            <GrowingBranch className="absolute pointer-events-none select-none z-0 left-[-6%] top-[-12%] w-[112%] max-w-none aspect-video" />
+
+            <div className="relative z-10 p-5 md:p-8 flex flex-col lg:flex-row gap-5 items-stretch min-h-[600px]">
+              {/* Left: the glass greeting */}
+              <div className="lg:w-[420px] shrink-0 rounded-[32px] p-7 text-white bg-[rgba(30,16,66,0.42)] border border-white/25 backdrop-blur-[26px] backdrop-saturate-[1.7] shadow-[0_20px_60px_rgba(30,10,70,0.35)] flex flex-col gap-5 self-start">
+                <div className="space-y-1.5">
+                  <p className="font-['Caveat',cursive] text-amber-300 text-xl" style={{ fontFamily: "'Kalam','Caveat','Segoe Print',cursive" }}>{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+                  <h2 className="text-4xl md:text-[44px] font-bold tracking-tight leading-[1.05]">{greeting}.</h2>
+                  <p className="text-sm text-white/75">{clients.length} client{clients.length > 1 ? 's' : ''} · {todo.length ? `${todo.length} thing${todo.length > 1 ? 's' : ''} need you today` : 'nothing urgent today'}</p>
+                </div>
+                {todo.length > 0 && (
+                  <div className="space-y-2">
+                    {todo.map((t, i) => (
+                      <button key={i} onClick={t.onClick} className="w-full flex items-center gap-3 rounded-[16px] px-4 py-3 bg-[rgba(20,10,46,0.45)] border border-white/10 text-left hover:bg-[rgba(20,10,46,0.6)] transition-colors">
+                        <span className={cn("w-2 h-2 rounded-full shrink-0", t.tone)} />
+                        <span className="flex-1 text-[15px] leading-snug">{t.text}</span>
+                        <span className="text-xs font-semibold text-amber-300 shrink-0">{t.action}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button onClick={() => go('audit')} className="h-12 rounded-full bg-white text-[#1d1240] text-[15px] font-semibold hover:bg-white/90 transition-colors">New audit</button>
+              </div>
+
+              {/* Right: the numbers on glass */}
+              <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-4 content-end">
+                <div className={cn(glassTile, "sm:col-span-2")}>
+                  <span className="text-[13px] text-on-surface-variant">Revenue this month</span>
+                  <span className="text-4xl md:text-[48px] font-bold tracking-tight text-primary tabular-nums">{money(usd, 'USD')}</span>
+                  <span className="text-[13px] text-on-surface-variant">{Object.keys(local).length ? `from ${Object.entries(local).map(([c, a]) => money(a, c)).join(' + ')}` : monthSales.length ? `${monthSales.length} payment${monthSales.length > 1 ? 's' : ''}` : 'Record payments in Sales'}</span>
+                </div>
+                <div className={glassTile}>
+                  <span className="text-[13px] text-on-surface-variant">Active clients</span>
+                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{clients.length}</span>
+                  <span className="text-[13px] text-on-surface-variant truncate">{clients.map(clientLabel).join(' · ')}</span>
+                </div>
+                <div className={glassTile}>
+                  <span className="text-[13px] text-on-surface-variant">Leads</span>
+                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{leads.length}</span>
+                  <span className="text-[13px] text-on-surface-variant">{leadsThisWeek ? `+${leadsThisWeek} this week` : `${hot.length} hot`}</span>
+                </div>
+                <div className={glassTile}>
+                  <span className="text-[13px] text-on-surface-variant">Audits this month</span>
+                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{auditsThisMonth}<span className="text-base font-medium text-on-surface-variant/70"> / 100</span></span>
+                  <div className="h-1.5 rounded-full bg-black/10 dark:bg-white/15 mt-1"><div className="h-1.5 rounded-full bg-primary" style={{ width: `${Math.min(100, auditsThisMonth)}%` }} /></div>
+                </div>
+                <div className={glassTile}>
+                  <span className="text-[13px] text-on-surface-variant">Posts this week</span>
+                  <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{weekPosts.length}</span>
+                  <span className={cn("text-[13px] font-medium", needDesign.length ? "text-amber-700 dark:text-amber-300" : "text-on-surface-variant")}>{needDesign.length ? `${needDesign.length} need design` : 'All ready'}</span>
+                </div>
+              </div>
             </div>
-            <div className={tile}>
-              <span className="text-[13px] text-on-surface-variant/70">Active clients</span>
-              <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{clients.length}</span>
-              <span className="text-[13px] text-on-surface-variant/70 truncate">{clients.map(clientLabel).join(' · ')}</span>
-            </div>
-            <div className={tile}>
-              <span className="text-[13px] text-on-surface-variant/70">Leads</span>
-              <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{leads.length}</span>
-              <span className="text-[13px] text-on-surface-variant/70">{leadsThisWeek ? `+${leadsThisWeek} this week` : `${hot.length} hot`}</span>
-            </div>
-            <div className={tile}>
-              <span className="text-[13px] text-on-surface-variant/70">Posts this week</span>
-              <span className="text-3xl font-bold tracking-tight text-on-surface tabular-nums">{weekPosts.length}</span>
-              <span className={cn("text-[13px] font-medium", needDesign.length ? "text-amber-600" : "text-on-surface-variant/70")}>{needDesign.length ? `${needDesign.length} need design` : 'All ready'}</span>
-            </div>
-          </div>
+          </section>
         );
       })()}
 
