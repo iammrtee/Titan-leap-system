@@ -7,6 +7,7 @@ import { clientLabel, clientKey, setClientId } from '@/src/lib/clientProfile';
 import { GrowingBranch } from './GrowingBranch';
 
 type View = 'audit' | 'strategy' | 'content' | 'sales' | 'funnel' | 'ads';
+const GLASS = 'rounded-[24px] text-white bg-[linear-gradient(165deg,rgba(110,40,170,0.62)_0%,rgba(70,30,120,0.5)_55%,rgba(120,100,170,0.42)_100%)] border border-white/25 backdrop-blur-xl backdrop-saturate-150 shadow-[0_20px_60px_rgba(60,20,120,0.25)]';
 const SHADOW = 'shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]';
 const DAY = 86_400_000;
 const periodDays = { '7D': 7, '30D': 30, '1Y': 365 } as const;
@@ -105,7 +106,7 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
     ...sales.slice(0, 8).map(s => ({ at: s.created_at, title: 'Payment received', desc: `${money(Number(s.amount), s.currency || 'USD')}${s.product_name ? ` · ${s.product_name}` : ''}`, dot: 'bg-emerald-600' })),
   ].sort((a, b) => +new Date(b.at) - +new Date(a.at)).slice(0, 6);
 
-  const tile = `bg-surface-container-lowest rounded-[18px] p-5 ${SHADOW} flex flex-col gap-1 min-w-0`;
+  const tile = `${GLASS} p-5 flex flex-col gap-1 min-w-0`;
   const h = new Date().getHours();
   const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
   const monthStartTs = +monthStart;
@@ -126,7 +127,7 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
             <button onClick={() => go('audit')} className="h-11 px-5 rounded-xl bg-primary text-white text-sm font-semibold hover:brightness-110 shadow-sm shrink-0">New audit</button>
           </div>
 
-          <section className="max-w-[560px] rounded-[28px] p-6 md:p-7 text-white bg-[linear-gradient(165deg,rgba(110,40,170,0.62)_0%,rgba(70,30,120,0.5)_55%,rgba(120,100,170,0.42)_100%)] border border-white/25 backdrop-blur-xl backdrop-saturate-150 shadow-[0_20px_60px_rgba(60,20,120,0.25)] space-y-4">
+          <section className={`max-w-[560px] ${GLASS} rounded-[28px] p-6 md:p-7 space-y-4`}>
             <div className="space-y-1">
               <p className="text-amber-300 text-lg" style={{ fontFamily: "'Kalam','Caveat','Segoe Print',cursive" }}>Start here</p>
               <h3 className="text-2xl md:text-[28px] font-bold tracking-tight leading-tight">Needs you today</h3>
@@ -146,74 +147,76 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
         </div>
       </section>
 
-      <div className="relative z-10 space-y-6">
+      <div className="relative space-y-6">
+        <div aria-hidden className="pointer-events-none absolute -inset-x-8 -inset-y-10 blur-2xl bg-[radial-gradient(40%_45%_at_12%_25%,rgba(168,85,247,0.35),transparent_70%),radial-gradient(35%_40%_at_88%_40%,rgba(250,204,21,0.22),transparent_70%),radial-gradient(45%_40%_at_45%_90%,rgba(124,58,237,0.3),transparent_70%)]" />
+      <div className="relative space-y-6">
         <div className="flex flex-wrap gap-4 items-stretch">
-          <section className={`flex-[999_1_520px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} flex flex-col gap-4`}>
+          <section className={`flex-[999_1_520px] min-w-0 ${GLASS} p-6 flex flex-col gap-4`}>
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1 min-w-0">
-                <p className="text-[13px] text-on-surface-variant/70">Revenue</p>
+                <p className="text-[13px] text-white/70">Revenue</p>
                 <div className="flex items-baseline gap-2.5 flex-wrap">
-                  <span className="text-4xl md:text-[44px] font-bold tracking-tight text-primary tabular-nums">{money(byCurrency[mainCurrency] || 0, mainCurrency)}</span>
-                  <span className="text-[13px] text-on-surface-variant/70">{period === '7D' ? 'this week' : period === '30D' ? 'this month' : 'this year'}</span>
+                  <span className="text-4xl md:text-[44px] font-bold tracking-tight text-amber-300 tabular-nums">{money(byCurrency[mainCurrency] || 0, mainCurrency)}</span>
+                  <span className="text-[13px] text-white/70">{period === '7D' ? 'this week' : period === '30D' ? 'this month' : 'this year'}</span>
                 </div>
-                <p className="text-[13px] text-on-surface-variant/70">
+                <p className="text-[13px] text-white/70">
                   {inPeriod.length ? `${inPeriod.length} payment${inPeriod.length > 1 ? 's' : ''}${payers.length ? ` · ${payers.join(', ')}` : ''}` : 'No payments yet. In Sales, open a lead and mark it Paid.'}
                   {mainCurrency !== 'USD' && (byCurrency[mainCurrency] || 0) > 0 ? ` · ≈ ${money(toUsd(byCurrency[mainCurrency], mainCurrency), 'USD')}` : ''}
                 </p>
               </div>
-              <div role="group" aria-label="Period" className="flex gap-0.5 p-[3px] rounded-[10px] bg-surface-container-high shrink-0">
+              <div role="group" aria-label="Period" className="flex gap-0.5 p-[3px] rounded-[10px] bg-white/10 shrink-0">
                 {(Object.keys(periodDays) as Period[]).map(p => (
-                  <button key={p} onClick={() => setPeriod(p)} className={cn("h-[30px] px-3 rounded-lg text-[13px] transition-all", period === p ? "bg-surface-container-lowest text-primary font-semibold shadow-sm" : "text-on-surface-variant/70 font-medium")}>{p}</button>
+                  <button key={p} onClick={() => setPeriod(p)} className={cn("h-[30px] px-3 rounded-lg text-[13px] transition-all", period === p ? "bg-white text-[#3b1a6e] font-semibold shadow-sm" : "text-white/70 font-medium")}>{p}</button>
                 ))}
               </div>
             </div>
             <div className="space-y-1.5 mt-auto">
               <div className="flex items-end gap-2 h-24">
                 {bars.map((v, i) => (
-                  <div key={i} title={money(v, mainCurrency)} className={cn("flex-1 rounded-md", v ? "bg-primary" : "bg-primary/10")} style={{ height: `${v ? Math.max(8, (v / maxBar) * 100) : 6}%` }} />
+                  <div key={i} title={money(v, mainCurrency)} className={cn("flex-1 rounded-md", v ? "bg-amber-300" : "bg-white/15")} style={{ height: `${v ? Math.max(8, (v / maxBar) * 100) : 6}%` }} />
                 ))}
               </div>
-              <div className="flex gap-2 text-[11px] text-on-surface-variant/60">{bars.map((_, i) => <span key={i} className="flex-1 truncate">{barLabel(i)}</span>)}</div>
+              <div className="flex gap-2 text-[11px] text-white/60">{bars.map((_, i) => <span key={i} className="flex-1 truncate">{barLabel(i)}</span>)}</div>
             </div>
           </section>
 
           <div className="flex-[1_1_300px] min-w-0 flex flex-col gap-4">
             <div className={cn(tile, "flex-1")}>
-              <span className="text-[13px] text-on-surface-variant/70">Active clients</span>
-              <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface tabular-nums">{clients.length}</span>
-              <span className="text-[13px] text-on-surface-variant/70 truncate">{clients.map(clientLabel).join(' · ')}</span>
+              <span className="text-[13px] text-white/70">Active clients</span>
+              <span className="text-3xl md:text-[34px] font-bold tracking-tight text-white tabular-nums">{clients.length}</span>
+              <span className="text-[13px] text-white/70 truncate">{clients.map(clientLabel).join(' · ')}</span>
             </div>
             <div className={cn(tile, "flex-1")}>
-              <span className="text-[13px] text-on-surface-variant/70">Leads generated</span>
+              <span className="text-[13px] text-white/70">Leads generated</span>
               <div className="flex items-baseline gap-2.5">
-                <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface tabular-nums">{leads.length}</span>
-                {leadsThisWeek > 0 && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">+{leadsThisWeek} this week</span>}
+                <span className="text-3xl md:text-[34px] font-bold tracking-tight text-white tabular-nums">{leads.length}</span>
+                {leadsThisWeek > 0 && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200">+{leadsThisWeek} this week</span>}
               </div>
-              <span className="text-[13px] text-on-surface-variant/70">{hot.length} hot · {leads.length - hot.length} new</span>
+              <span className="text-[13px] text-white/70">{hot.length} hot · {leads.length - hot.length} new</span>
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className={tile}>
-            <span className="text-[13px] text-on-surface-variant/70">Audits this month</span>
-            <span className="text-[28px] font-bold text-on-surface tabular-nums">{auditsThisMonth}<span className="text-base font-medium text-on-surface-variant/50"> / 100</span></span>
-            <div className="h-1.5 rounded-full bg-surface-container-high mt-1"><div className="h-1.5 rounded-full bg-primary" style={{ width: `${Math.min(100, auditsThisMonth)}%` }} /></div>
+            <span className="text-[13px] text-white/70">Audits this month</span>
+            <span className="text-[28px] font-bold text-white tabular-nums">{auditsThisMonth}<span className="text-base font-medium text-white/50"> / 100</span></span>
+            <div className="h-1.5 rounded-full bg-white/15 mt-1"><div className="h-1.5 rounded-full bg-amber-300" style={{ width: `${Math.min(100, auditsThisMonth)}%` }} /></div>
           </div>
           <div className={tile}>
-            <span className="text-[13px] text-on-surface-variant/70">Posts going out this week</span>
-            <span className="text-[28px] font-bold text-on-surface tabular-nums">{weekPosts.length}</span>
-            <span className={cn("text-[13px] font-medium", needDesign.length ? "text-amber-600" : "text-emerald-600")}>{needDesign.length ? `${needDesign.length} need design` : weekPosts.length ? 'All have designs' : 'Nothing scheduled'}</span>
+            <span className="text-[13px] text-white/70">Posts going out this week</span>
+            <span className="text-[28px] font-bold text-white tabular-nums">{weekPosts.length}</span>
+            <span className={cn("text-[13px] font-medium", needDesign.length ? "text-amber-300" : "text-emerald-300")}>{needDesign.length ? `${needDesign.length} need design` : weekPosts.length ? 'All have designs' : 'Nothing scheduled'}</span>
           </div>
           <div className={tile}>
-            <span className="text-[13px] text-on-surface-variant/70">AI spend this month</span>
-            <span className="text-[28px] font-bold text-on-surface tabular-nums">{budget ? `$${budget.spent.toFixed(2)}` : '—'}<span className="text-base font-medium text-on-surface-variant/50">{budget ? ` / $${budget.budget}` : ''}</span></span>
-            <span className="text-[13px] text-on-surface-variant/70">Audits not counted</span>
+            <span className="text-[13px] text-white/70">AI spend this month</span>
+            <span className="text-[28px] font-bold text-white tabular-nums">{budget ? `$${budget.spent.toFixed(2)}` : '—'}<span className="text-base font-medium text-white/50">{budget ? ` / $${budget.budget}` : ''}</span></span>
+            <span className="text-[13px] text-white/70">Audits not counted</span>
           </div>
         </div>
       </div>
 
-      <section className="space-y-3">
+      <section className="relative space-y-3">
         <h3 className="text-xl font-semibold tracking-tight text-on-surface">Clients</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {clients.map(c => {
@@ -221,33 +224,34 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
             const ready = posts.filter(p => (p.status || 'draft') !== 'draft').length;
             const planned = hasPlan(c);
             return (
-              <div key={c} className={`bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-4`}>
+              <div key={c} className={`${GLASS} p-6 space-y-4`}>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-lg font-semibold text-on-surface">{clientLabel(c)}</span>
-                  <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full", planned ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>{planned ? 'Plan active' : 'Set up'}</span>
+                  <span className="text-lg font-semibold text-white">{clientLabel(c)}</span>
+                  <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full", planned ? "bg-emerald-400/20 text-emerald-200" : "bg-amber-300/20 text-amber-200")}>{planned ? 'Plan active' : 'Set up'}</span>
                 </div>
                 {planned ? (
                   <div className="grid grid-cols-2 gap-3">
-                    <div><p className="text-xs text-on-surface-variant/70">This week</p><p className="text-xl font-semibold text-on-surface">{posts.length} posts</p></div>
-                    <div><p className="text-xs text-on-surface-variant/70">Ready</p><p className="text-xl font-semibold text-on-surface">{ready}</p></div>
+                    <div><p className="text-xs text-white/70">This week</p><p className="text-xl font-semibold text-white">{posts.length} posts</p></div>
+                    <div><p className="text-xs text-white/70">Ready</p><p className="text-xl font-semibold text-white">{ready}</p></div>
                   </div>
                 ) : (
                   <div className="space-y-1.5 text-sm">
-                    <p className="text-on-surface">✓ Client created</p>
-                    <p className="text-on-surface-variant/70">○ Connect accounts (Creatives)</p>
-                    <p className="text-on-surface-variant/70">○ Audit or quick brief</p>
-                    <p className="text-on-surface-variant/70">○ 30-day plan</p>
+                    <p className="text-white">✓ Client created</p>
+                    <p className="text-white/70">○ Connect accounts (Creatives)</p>
+                    <p className="text-white/70">○ Audit or quick brief</p>
+                    <p className="text-white/70">○ 30-day plan</p>
                   </div>
                 )}
                 <div className="flex gap-2">
-                  <button onClick={() => { setClientId(c); go('strategy'); }} className={cn("h-9 px-3.5 rounded-[10px] text-[13px] font-semibold", planned ? "bg-surface-container-low text-on-surface" : "bg-primary text-white")}>{planned ? 'Strategy' : 'Make a plan'}</button>
-                  <button onClick={() => { setClientId(c); go('content'); }} className="h-9 px-3.5 rounded-[10px] text-[13px] font-semibold bg-surface-container-low text-on-surface">Creatives</button>
+                  <button onClick={() => { setClientId(c); go('strategy'); }} className={cn("h-9 px-3.5 rounded-[10px] text-[13px] font-semibold", planned ? "bg-white/10 text-white hover:bg-white/20" : "bg-white text-[#3b1a6e]")}>{planned ? 'Strategy' : 'Make a plan'}</button>
+                  <button onClick={() => { setClientId(c); go('content'); }} className="h-9 px-3.5 rounded-[10px] text-[13px] font-semibold bg-white/10 text-white hover:bg-white/20">Creatives</button>
                 </div>
               </div>
             );
           })}
         </div>
       </section>
+      </div>
 
     </div>
   );
