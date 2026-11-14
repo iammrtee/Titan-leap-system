@@ -7,7 +7,7 @@ import { clientLabel, clientKey, setClientId } from '@/src/lib/clientProfile';
 import { GrowingBranch } from './GrowingBranch';
 
 type View = 'audit' | 'strategy' | 'content' | 'sales' | 'funnel' | 'ads';
-const GLASS = 'rounded-[24px] text-white bg-[linear-gradient(165deg,rgba(110,40,170,0.62)_0%,rgba(70,30,120,0.5)_55%,rgba(120,100,170,0.42)_100%)] border border-white/25 backdrop-blur-xl backdrop-saturate-150 shadow-[0_20px_60px_rgba(60,20,120,0.25)]';
+const GLASS = 'rounded-[24px] text-white bg-[linear-gradient(165deg,rgba(104,36,168,0.56)_0%,rgba(72,30,124,0.46)_55%,rgba(116,92,170,0.4)_100%)] border border-white/30 backdrop-blur-[30px] backdrop-saturate-[1.8] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_20px_60px_rgba(60,20,120,0.22)]';
 const SHADOW = 'shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]';
 const DAY = 86_400_000;
 const periodDays = { '7D': 7, '30D': 30, '1Y': 365 } as const;
@@ -114,20 +114,22 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
   const monthUsd = monthSales.reduce((a, x) => a + toUsd(Number(x.amount || 0), x.currency || 'USD'), 0);
   const payers = Array.from(new Set(inPeriod.map(x => x.product_name).filter(Boolean)));
   return (
-    <div className="space-y-6">
-      {/* Header: the growing branch runs edge to edge; the greeting and today's tasks sit on it in frosted glass */}
-      <section className="relative -mx-4 md:-mx-8 lg:-mx-12 xl:-mx-16 -mt-4 md:-mt-8 lg:-mt-12 xl:-mt-16 overflow-hidden min-h-[clamp(320px,40vw,600px)]">
+    <div>
+      {/* The tree and the greeting stay pinned under the top bar; every card scrolls over them, so the glass blurs the tree */}
+      <section className="sticky top-16 z-0 -mx-4 md:-mx-8 lg:-mx-12 xl:-mx-16 -mt-4 md:-mt-8 lg:-mt-12 xl:-mt-16 overflow-hidden h-[clamp(320px,40vw,600px)]">
         <GrowingBranch className="absolute pointer-events-none select-none left-[-9%] top-[-13vw] w-[118%] max-w-none aspect-video" />
-        <div className="relative z-10 px-4 md:px-8 lg:px-12 xl:px-16 pt-8 md:pt-12 pb-8 space-y-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1.5">
-              <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-on-surface">{greeting}</h2>
-              <p className="text-sm md:text-base text-on-surface-variant">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} · {clients.length} client{clients.length > 1 ? 's' : ''}</p>
-            </div>
-            <button onClick={() => go('audit')} className="h-11 px-5 rounded-xl bg-primary text-white text-sm font-semibold hover:brightness-110 shadow-sm shrink-0">New audit</button>
+        <div className="relative px-4 md:px-8 lg:px-12 xl:px-16 pt-8 md:pt-12 flex items-start justify-between gap-4">
+          <div className="space-y-1.5">
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-on-surface">{greeting}</h2>
+            <p className="text-sm md:text-base text-on-surface-variant">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} · {clients.length} client{clients.length > 1 ? 's' : ''}</p>
           </div>
+          <button onClick={() => go('audit')} className="h-11 px-5 rounded-xl bg-primary text-white text-sm font-semibold hover:brightness-110 shadow-sm shrink-0">New audit</button>
+        </div>
+      </section>
 
-          <section className={`max-w-[560px] ${GLASS} rounded-[28px] p-6 md:p-7 space-y-4`}>
+      {/* Everything below starts right under the greeting, on top of the tree */}
+      <div className="relative z-10 mt-[calc(150px_-_clamp(320px,40vw,600px))] md:mt-[calc(170px_-_clamp(320px,40vw,600px))] space-y-6">
+        <section className={`max-w-[560px] ${GLASS} rounded-[28px] p-6 md:p-7 space-y-4`}>
             <div className="space-y-1">
               <p className="text-amber-300 text-lg" style={{ fontFamily: "'Kalam','Caveat','Segoe Print',cursive" }}>Start here</p>
               <h3 className="text-2xl md:text-[28px] font-bold tracking-tight leading-tight">Needs you today</h3>
@@ -144,12 +146,7 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
               </div>
             ) : <p className="text-[15px] text-white/80">You're all caught up.</p>}
           </section>
-        </div>
-      </section>
 
-      <div className="relative space-y-6">
-        <div aria-hidden className="pointer-events-none absolute -inset-x-8 -inset-y-10 blur-2xl bg-[radial-gradient(40%_45%_at_12%_25%,rgba(168,85,247,0.35),transparent_70%),radial-gradient(35%_40%_at_88%_40%,rgba(250,204,21,0.22),transparent_70%),radial-gradient(45%_40%_at_45%_90%,rgba(124,58,237,0.3),transparent_70%)]" />
-      <div className="relative space-y-6">
         <div className="flex flex-wrap gap-4 items-stretch">
           <section className={`flex-[999_1_520px] min-w-0 ${GLASS} p-6 flex flex-col gap-4`}>
             <div className="flex items-start justify-between gap-3">
@@ -214,7 +211,6 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
             <span className="text-[13px] text-white/70">Audits not counted</span>
           </div>
         </div>
-      </div>
 
       <section className="relative space-y-3">
         <h3 className="text-xl font-semibold tracking-tight text-on-surface">Clients</h3>
@@ -252,7 +248,6 @@ export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> 
         </div>
       </section>
       </div>
-
     </div>
   );
 };
