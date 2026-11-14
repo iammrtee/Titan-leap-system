@@ -139,7 +139,7 @@ export default function App() {
       case 'ads':
         return { title: 'Ads Manager', subtitle: 'Campaign Scaling' };
       case 'sales':
-        return { title: 'Sales Dashboard', subtitle: 'Revenue Velocity' };
+        return { title: '' };
       case 'funnel':
         return { title: 'Funnels', subtitle: 'Conversion Optimization' };
       case 'emails':

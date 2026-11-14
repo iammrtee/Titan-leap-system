@@ -51,6 +51,47 @@ export const SalesDashboard: React.FC = () => {
     return `•••• ••• ${digits.slice(-2) ? '••' + digits.slice(-2) : '••••'}`;
   };
   const [importing, setImporting] = useState(false);
+  const [sales, setSales] = useState<any[]>([]);
+  const [stageFilter, setStageFilter] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [payForm, setPayForm] = useState<{ amount: string; currency: string; product: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Pipeline: where each lead is between first contact and paying. Old HOT/WARM/COLD leads
+  // count as 'New lead' (their temperature still shows as a tag).
+  const PIPELINE = [
+    { id: 'NEW', label: 'New lead' },
+    { id: 'AUDIT SENT', label: 'Audit sent' },
+    { id: 'REPLIED', label: 'Replied' },
+    { id: 'CALL BOOKED', label: 'Call booked' },
+    { id: 'CONVERTED', label: 'Paid' },
+  ];
+  const stageOfLead = (l: Lead) => {
+    const s = String(l.status || '').toUpperCase();
+    return PIPELINE.some(p => p.id === s && p.id !== 'NEW') ? s : 'NEW';
+  };
+  const temperature = (l: Lead) => { const s = String(l.status || '').toUpperCase(); return ['HOT', 'WARM', 'COLD'].includes(s) ? s : null; };
+  const setStage = async (lead: Lead, stage: string) => {
+    if (stage === 'CONVERTED') { setPayForm({ amount: '', currency: 'NGN', product: lead.product || '' }); return; }
+    const { error } = await supabase.from('leads').update({ status: stage === 'NEW' ? (temperature(lead) || 'NEW') : stage }).eq('id', lead.id);
+    if (error) { toast.error(error.message); return; }
+    setSelectedLead({ ...lead, status: stage === 'NEW' ? (temperature(lead) || 'NEW') : stage });
+    toast.success(`Moved to ${PIPELINE.find(p => p.id === stage)?.label}`);
+  };
+  const recordPayment = async (lead: Lead) => {
+    const amount = Number(String(payForm?.amount || '').replace(/[^\d.]/g, ''));
+    if (!amount) { toast.error('Enter the amount paid'); return; }
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('sales_transactions').insert({ lead_id: lead.id, amount, currency: payForm!.currency, product_name: payForm!.product || null, status: 'COMPLETED' });
+      if (error) throw error;
+      await supabase.from('leads').update({ status: 'CONVERTED' }).eq('id', lead.id);
+      setSelectedLead({ ...lead, status: 'CONVERTED' });
+      setPayForm(null);
+      toast.success('Payment recorded. It now shows in Revenue on the Dashboard.');
+    } catch (e: any) { toast.error(e?.message || 'Could not record the payment'); }
+    finally { setSaving(false); }
+  };
 
   // Import a prospect CSV into the leads table. Existing emails are skipped, so re-importing is safe.
   const importLeadsCsv = async (file: File) => {
@@ -92,12 +133,13 @@ export const SalesDashboard: React.FC = () => {
       // 2. Fetch Sales Transactions
       const { data: salesData, error: salesError } = await supabase
         .from('sales_transactions')
-        .select('amount')
+        .select('amount,currency,product_name,created_at,lead_id')
         .eq('status', 'COMPLETED');
 
       if (salesError) {
         console.error('Error fetching sales:', salesError);
       } else {
+        setSales(salesData || []);
         const revenue = (salesData || []).reduce((acc, curr) => acc + Number(curr.amount), 0);
         setTotalRevenue(revenue);
       }
@@ -133,74 +175,73 @@ export const SalesDashboard: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      {/* Top Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <MetricPanel 
-          label="Total Leads" 
-          value={totalLeads.toLocaleString()} 
-          trend="+18%" 
-          icon={Users} 
-          color="bg-primary/10 text-primary" 
-        />
-        <MetricPanel 
-          label="Converts" 
-          value={totalConverted.toLocaleString()} 
-          trend="+22%" 
-          icon={CheckCircle2} 
-          color="bg-secondary/10 text-secondary" 
-        />
-        <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Product Breakdown</p>
-            <PieChart size={16} className="text-on-surface-variant/40" />
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-on-surface-variant">Growth OS</span>
-              <span className="text-xs font-black text-primary">68%</span>
-            </div>
-            <div className="w-full bg-surface-container-highest h-1.5 rounded-full overflow-hidden">
-              <div className="bg-primary h-full w-[68%]" />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-on-surface-variant">Audit VSL</span>
-              <span className="text-xs font-black text-secondary">32%</span>
-            </div>
-          </div>
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <h2 className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface">Sales</h2>
+          <p className="text-sm text-on-surface-variant/70">From first contact to paying client.</p>
         </div>
-        <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Total Revenue</p>
-            <div className="flex bg-surface-container-highest p-0.5 rounded-lg border border-outline-variant/10">
-              {['7d', '30d', '1y'].map(f => (
-                <button 
-                  key={f}
-                  onClick={() => setTimeFilter(f)}
-                  className={cn(
-                    "px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-widest transition-all",
-                    timeFilter === f ? "bg-white text-primary shadow-sm" : "text-on-surface-variant/40 hover:text-on-surface"
-                  )}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
+      </header>
+
+      {(() => {
+        const days = timeFilter === '7d' ? 7 : timeFilter === '30d' ? 30 : 365;
+        const inPeriod = sales.filter(x => Date.now() - +new Date(x.created_at) <= days * 86_400_000);
+        const byCur = inPeriod.reduce<Record<string, number>>((m, x) => { const c = x.currency || 'USD'; m[c] = (m[c] || 0) + Number(x.amount || 0); return m; }, {});
+        const fmt = (a: number, c: string) => { try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(a); } catch { return `${c} ${a}`; } };
+        const byProduct = inPeriod.reduce<Record<string, number>>((m, x) => { const k = x.product_name || 'Other'; m[k] = (m[k] || 0) + 1; return m; }, {});
+        const productTotal = Object.values(byProduct).reduce((a, b) => a + b, 0);
+        return (
+          <div className="flex flex-wrap gap-4 items-stretch">
+            <section className="flex-[999_1_560px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)] space-y-4">
+              <h3 className="text-xl font-semibold tracking-tight text-on-surface">Pipeline</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                {PIPELINE.map(p => {
+                  const n = leads.filter(l => stageOfLead(l) === p.id).length;
+                  const active = stageFilter === p.id;
+                  return (
+                    <button key={p.id} onClick={() => setStageFilter(active ? null : p.id)}
+                      className={cn("rounded-[14px] p-4 text-left transition-all", active ? "bg-primary text-white" : p.id === 'CONVERTED' ? "bg-primary/10 text-primary" : "bg-surface-container-low text-on-surface hover:bg-surface-container")}>
+                      <p className={cn("text-[13px]", active ? "text-white/80" : "text-on-surface-variant/70")}>{p.label}</p>
+                      <p className="text-[28px] font-bold tabular-nums">{n}</p>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[13px] text-on-surface-variant/60">Tap a stage to filter the list. Open a lead to move it along; marking it Paid records the payment.</p>
+            </section>
+            <section className="flex-[1_1_300px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)] flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[13px] text-on-surface-variant/70">Revenue</p>
+                <div className="flex gap-0.5 p-[3px] rounded-[10px] bg-surface-container-high">
+                  {['7d', '30d', '1y'].map(f => (
+                    <button key={f} onClick={() => setTimeFilter(f)} className={cn("h-7 px-2.5 rounded-lg text-xs uppercase", timeFilter === f ? "bg-surface-container-lowest text-primary font-semibold shadow-sm" : "text-on-surface-variant/70 font-medium")}>{f}</button>
+                  ))}
+                </div>
+              </div>
+              {Object.keys(byCur).length ? Object.entries(byCur).map(([c, a]) => (
+                <p key={c} className="text-3xl font-bold tracking-tight text-primary tabular-nums">{fmt(a, c)}</p>
+              )) : <p className="text-3xl font-bold tracking-tight text-on-surface-variant/40">—</p>}
+              <p className="text-[13px] text-on-surface-variant/70">{inPeriod.length ? `${inPeriod.length} payment${inPeriod.length > 1 ? 's' : ''}` : 'No payments in this period'}</p>
+              {productTotal > 0 && (
+                <div className="space-y-2 pt-2 border-t border-outline-variant/10">
+                  <p className="text-xs text-on-surface-variant/70">By product</p>
+                  {Object.entries(byProduct).map(([k, n]) => (
+                    <div key={k} className="space-y-1">
+                      <div className="flex justify-between text-[13px]"><span className="text-on-surface truncate">{k}</span><span className="text-on-surface-variant/70">{Math.round((n / productTotal) * 100)}%</span></div>
+                      <div className="h-1.5 rounded-full bg-surface-container-high"><div className="h-1.5 rounded-full bg-primary" style={{ width: `${(n / productTotal) * 100}%` }} /></div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
-          <p className="text-2xl font-black text-on-surface tracking-tight">
-            ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          <div className="flex items-center gap-1 text-success mt-1">
-            <TrendingUp size={12} />
-            <span className="text-[10px] font-black">+14.2% vs prev period</span>
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Leads Table */}
       <div className="bg-surface-container-low rounded-3xl overflow-hidden border border-outline-variant/10 shadow-sm">
         <div className="px-8 py-6 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-highest/20">
           <div className="flex items-center gap-4">
-            <h3 className="text-lg font-black tracking-tight text-on-surface">Recent Leads</h3>
+            <h3 className="text-xl font-semibold tracking-tight text-on-surface">{stageFilter ? PIPELINE.find(p => p.id === stageFilter)?.label : 'Leads'}</h3>
             <div className="flex items-center gap-2 px-3 py-1 bg-success-container/10 rounded-full border border-success/10">
               <RefreshCw size={12} className="text-success animate-spin-slow" />
               <span className="text-[9px] font-black uppercase tracking-widest text-success">Auto-Synced via Bot</span>
@@ -252,6 +293,8 @@ export const SalesDashboard: React.FC = () => {
               <input 
                 type="text" 
                 placeholder="Search leads..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
                 className="bg-surface-container-lowest border border-outline-variant/20 rounded-xl pl-9 pr-4 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 w-64"
               />
             </div>
@@ -273,7 +316,7 @@ export const SalesDashboard: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant/10">
-            {leads.map((lead) => (
+            {leads.filter(l => (!stageFilter || stageOfLead(l) === stageFilter) && (!search.trim() || `${l.name} ${l.email} ${l.company} ${l.source}`.toLowerCase().includes(search.trim().toLowerCase()))).map((lead) => (
               <tr key={lead.id} onClick={() => setSelectedLead(lead)} className="hover:bg-surface-container-lowest transition-colors group cursor-pointer">
                 <td className="px-8 py-4">
                   <div className="flex items-center gap-3">
@@ -308,7 +351,7 @@ export const SalesDashboard: React.FC = () => {
                     "px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest",
                     getStatusColor(lead.status)
                   )}>
-                    {lead.status}
+                    {stageOfLead(lead) === 'NEW' ? (temperature(lead) || 'New') : PIPELINE.find(p => p.id === stageOfLead(lead))?.label}
                   </span>
                 </td>
                 <td className="px-8 py-4">
@@ -352,7 +395,7 @@ export const SalesDashboard: React.FC = () => {
             >
               <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant/10 bg-surface-container-low">
                 <h3 className="text-lg font-black tracking-tight text-on-surface">Lead Details</h3>
-                <button onClick={() => setSelectedLead(null)} className="p-2 hover:bg-surface-container-highest rounded-full transition-colors">
+                <button onClick={() => { setSelectedLead(null); setPayForm(null); }} className="p-2 hover:bg-surface-container-highest rounded-full transition-colors">
                   <X size={20} className="text-on-surface-variant" />
                 </button>
               </div>
@@ -442,6 +485,33 @@ export const SalesDashboard: React.FC = () => {
                     </>
                   );
                 })()}
+
+                <div className="pt-4 border-t border-outline-variant/10 space-y-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">Stage</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PIPELINE.map(p => (
+                      <button key={p.id} onClick={() => setStage(selectedLead, p.id)}
+                        className={cn("h-8 px-3 rounded-full text-xs font-semibold border transition-all",
+                          stageOfLead(selectedLead) === p.id ? "bg-primary text-white border-primary" : "border-outline-variant/20 text-on-surface-variant hover:text-on-surface")}>{p.label}</button>
+                    ))}
+                  </div>
+                  {payForm && (
+                    <div className="rounded-2xl bg-surface-container-low p-4 space-y-3">
+                      <p className="text-sm font-semibold text-on-surface">Record the payment</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <select value={payForm.currency} onChange={e => setPayForm({ ...payForm, currency: e.target.value })} className="h-10 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-2 text-sm">
+                          {['NGN', 'USD', 'GBP', 'EUR', 'GHS', 'KES', 'ZAR'].map(c => <option key={c}>{c}</option>)}
+                        </select>
+                        <input value={payForm.amount} onChange={e => setPayForm({ ...payForm, amount: e.target.value })} placeholder="Amount" inputMode="decimal" className="col-span-2 h-10 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-3 text-sm" />
+                      </div>
+                      <input value={payForm.product} onChange={e => setPayForm({ ...payForm, product: e.target.value })} placeholder="What they bought (e.g. Leak Report, Retainer)" className="w-full h-10 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-3 text-sm" />
+                      <div className="flex gap-2">
+                        <button onClick={() => recordPayment(selectedLead)} disabled={saving} className="h-10 px-4 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-50">{saving ? 'Saving…' : 'Mark as paid'}</button>
+                        <button onClick={() => setPayForm(null)} className="h-10 px-3 text-sm font-semibold text-on-surface-variant">Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </motion.div>
           </div>
