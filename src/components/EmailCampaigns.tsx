@@ -296,29 +296,12 @@ export const EmailCampaigns: React.FC = () => {
                   </label>
                   <textarea 
                     rows={10}
-                    placeholder="Describe your email sequence, triggers, and segmentation strategy..."
+                    placeholder="e.g. A 7-day sequence for new leads: day 1 the free audit, day 3 a client result, day 5 a common mistake, day 7 the offer."
                     className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none text-on-surface"
-                    defaultValue="Implementing a 7-day 'Indoctrination Sequence' for new leads. Day 1: The Origin Story + Value. Day 3: Case Study. Day 5: The Contrarian Take. Day 7: Hard CTA for Growth Audit. Segmenting based on lead source (Ads vs Organic)."
                   />
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {[
-                    { label: 'Avg Open Rate', value: '42.8%', trend: '+4.2%', icon: Mail },
-                    { label: 'Avg CTR', value: '8.4%', trend: '+1.1%', icon: TrendingUp },
-                    { label: 'Total Subs', value: '12,450', trend: '+840', icon: Users },
-                  ].map((stat, i) => (
-                    <div key={i} className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/10 flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center text-on-surface-variant">
-                        <stat.icon size={18} />
-                      </div>
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/60">{stat.label}</p>
-                        <p className="text-sm font-black text-on-surface">{stat.value}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <p className="text-[13px] text-on-surface-variant/60">Open rate, clicks and subscribers show here once an email tool (e.g. Resend or Mailchimp) is connected.</p>
               </div>
             </div>
           </div>
@@ -422,26 +405,21 @@ export const EmailCampaigns: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      {/* Tabs */}
-      <div className="flex items-center justify-center">
-        <div className="bg-surface-container-low p-1.5 rounded-2xl border border-outline-variant/10 shadow-sm flex gap-1">
+      <div className="space-y-6">
+        <div className="space-y-1.5">
+          <h2 className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface">Emails</h2>
+          <p className="text-sm text-on-surface-variant/70">Sequences that follow up with every lead.</p>
+        </div>
+        <div role="tablist" aria-label="Email sections" className="inline-flex gap-1 p-1 rounded-[14px] bg-surface-container-high overflow-x-auto max-w-full">
           {[
-            { id: 'strategy', label: 'Strategy', icon: Target },
-            { id: 'scripts', label: 'Scripts', icon: FileText },
-            { id: 'design', label: 'Design', icon: Layout },
-            { id: 'audit', label: 'Email Audit', icon: ShieldCheck },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as EmailTab)}
-              className={cn(
-                "flex items-center gap-3 px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
-                activeTab === tab.id 
-                  ? "bg-surface-container-lowest text-primary shadow-md shadow-primary/5" 
-                  : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container"
-              )}
-            >
-              <tab.icon size={16} />
+            { id: 'strategy', label: 'Strategy' },
+            { id: 'scripts', label: 'Scripts' },
+            { id: 'design', label: 'Design' },
+            { id: 'audit', label: 'Email audit' },
+          ].map(tab => (
+            <button key={tab.id} role="tab" aria-selected={activeTab === tab.id} onClick={() => setActiveTab(tab.id as EmailTab)}
+              className={cn("h-[38px] px-5 rounded-[11px] text-sm transition-all whitespace-nowrap",
+                activeTab === tab.id ? "bg-surface-container-lowest text-on-surface font-semibold shadow-sm" : "text-on-surface-variant/70 font-medium hover:text-on-surface")}>
               {tab.label}
             </button>
           ))}
