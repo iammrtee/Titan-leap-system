@@ -94,7 +94,7 @@ export default function App() {
   const renderView = () => {
     switch (activeView) {
       case 'dashboard':
-        return <DashboardOverview />;
+        return <DashboardOverview onNavigate={(v) => setActiveView(v as ViewType)} />;
       case 'audit':
         return <AuditView onStartStrategy={handleStartStrategy} onViewStrategy={handleViewStrategy} />;
       case 'strategy':
@@ -129,7 +129,7 @@ export default function App() {
   const getViewConfig = (): { title: string; subtitle?: string; badge?: string } => {
     switch (activeView) {
       case 'dashboard':
-        return { title: 'Monolith Dash', subtitle: 'Dashboard Overview' };
+        return { title: '' }; // the Dashboard has its own header
       case 'audit':
         return { title: 'Audit', subtitle: 'Intake Assessment' };
       case 'strategy':

@@ -1,338 +1,268 @@
 import React from 'react';
-import { motion } from 'motion/react';
-import { TrendingUp, Users, DollarSign, Target, ArrowUpRight, MoreHorizontal, Rocket, Zap, CheckCircle2, AlertCircle, Mail, Instagram, Linkedin, Clock } from 'lucide-react';
+import { ChevronRight, Plus } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { supabase } from '@/src/services/supabase';
+import { getAuthHeader } from '@/src/lib/supabase';
+import { clientLabel, clientKey, setClientId } from '@/src/lib/clientProfile';
 
-const MetricCard = ({ title, value, trend, trendValue, icon: Icon, color }: any) => (
-  <motion.div 
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    className="bg-surface-container-lowest p-8 rounded-xl shadow-ambient flex flex-col justify-between min-h-[200px] border-none"
-  >
-    <div className="flex justify-between items-start">
-      <div className={cn("p-3 rounded-lg bg-opacity-10", color)}>
-        <Icon size={24} className={color.replace('bg-', 'text-').replace('/10', '')} />
-      </div>
-      {trend && (
-        <div className="bg-secondary-container px-2 py-1 rounded-md flex items-center gap-1">
-          <TrendingUp size={12} className="text-on-secondary-fixed-variant font-bold" />
-          <span className="text-[10px] font-bold text-on-secondary-fixed-variant">{trendValue}</span>
-        </div>
-      )}
-    </div>
-    <div className="mt-4">
-      <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-on-surface-variant/60">{title}</span>
-      <h4 className="text-4xl font-black text-on-surface tracking-tighter mt-1">{value}</h4>
-    </div>
-  </motion.div>
-);
+type View = 'audit' | 'strategy' | 'content' | 'sales' | 'funnel' | 'ads';
+const SHADOW = 'shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]';
+const DAY = 86_400_000;
+const periodDays = { '7D': 7, '30D': 30, '1Y': 365 } as const;
+type Period = keyof typeof periodDays;
 
-const CampaignCard = ({ title, description, conversion, spend, status, icon: Icon }: any) => (
-  <div className="bg-surface-container-lowest p-6 rounded-xl shadow-sm group hover:shadow-ambient transition-all border-none">
-    <div className="flex items-start justify-between mb-4">
-      <div className="w-10 h-10 bg-primary/5 rounded-lg flex items-center justify-center text-primary">
-        <Icon size={20} />
-      </div>
-      <span className={cn(
-        "text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider",
-        status === 'GROWTH' ? "bg-secondary-container/20 text-on-secondary-fixed-variant" : "bg-surface-container text-on-surface-variant"
-      )}>
-        {status}
-      </span>
-    </div>
-    <h6 className="font-bold text-on-surface group-hover:text-primary transition-colors">{title}</h6>
-    <p className="text-xs text-on-surface-variant mt-1 mb-6 line-clamp-1">{description}</p>
-    <div className="flex items-center justify-between text-[11px] font-bold">
-      <div className="flex flex-col">
-        <span className="text-on-surface-variant/60 uppercase">Conversion</span>
-        <span className="text-on-surface">{conversion}</span>
-      </div>
-      <div className="flex flex-col items-end">
-        <span className="text-on-surface-variant/60 uppercase">Spend</span>
-        <span className="text-on-surface">{spend}</span>
-      </div>
-    </div>
-  </div>
-);
+const money = (amount: number, currency: string) => {
+  try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 }).format(amount); }
+  catch { return `${currency} ${Math.round(amount).toLocaleString()}`; }
+};
+const ago = (iso: string) => {
+  const m = Math.round((Date.now() - +new Date(iso)) / 60000);
+  if (m < 60) return `${Math.max(1, m)} min ago`;
+  if (m < 1440) return `${Math.round(m / 60)} h ago`;
+  const d = Math.round(m / 1440);
+  return d === 1 ? 'Yesterday' : `${d} days ago`;
+};
 
-export const DashboardOverview: React.FC = () => {
-  const [totalLeads, setTotalLeads] = React.useState(0);
-  const [totalRevenue, setTotalRevenue] = React.useState(0);
+// Calendar posts live per browser (and in Supabase when set up); read the local copy here.
+const readCalendar = (): any[] => { try { const v = JSON.parse(localStorage.getItem('titanleap_calendar_items') || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
+
+export const DashboardOverview: React.FC<{ onNavigate?: (view: View) => void }> = ({ onNavigate }) => {
+  const go = (v: View) => onNavigate?.(v);
+  const [leads, setLeads] = React.useState<any[]>([]);
+  const [sales, setSales] = React.useState<any[]>([]);
+  const [clients, setClients] = React.useState<string[]>(['default']);
+  const [budget, setBudget] = React.useState<{ spent: number; budget: number } | null>(null);
+  const [period, setPeriod] = React.useState<Period>('30D');
+  const calendar = React.useMemo(readCalendar, []);
 
   React.useEffect(() => {
     const fetchData = async () => {
-      // 1. Leads Count
-      const { count: leadsCount } = await supabase
-        .from('leads')
-        .select('*', { count: 'exact', head: true });
-      
-      setTotalLeads(leadsCount || 0);
-
-      // 2. Revenue Sum
-      const { data: salesData } = await supabase
-        .from('sales_transactions')
-        .select('amount')
-        .eq('status', 'COMPLETED');
-      
-      const revenue = (salesData || []).reduce((acc, curr) => acc + Number(curr.amount), 0);
-      setTotalRevenue(revenue);
+      const [{ data: l }, { data: s }] = await Promise.all([
+        supabase.from('leads').select('id,name,company,source,status,created_at').order('created_at', { ascending: false }).limit(1000),
+        supabase.from('sales_transactions').select('amount,currency,product_name,status,created_at').eq('status', 'COMPLETED').order('created_at', { ascending: false }).limit(1000),
+      ]);
+      setLeads(l || []);
+      setSales(s || []);
     };
-
     fetchData();
-
-    // Subscribe to realtime
-    const leadsChannel = supabase
-      .channel('dash-leads')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchData())
-      .subscribe();
-    
-    const salesChannel = supabase
-      .channel('dash-sales')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_transactions' }, () => fetchData())
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(leadsChannel);
-      supabase.removeChannel(salesChannel);
-    };
+    (async () => {
+      try {
+        const h = await getAuthHeader();
+        const [c, b] = await Promise.all([fetch('/api/clients', { headers: h }), fetch('/api/ai/budget', { headers: h })]);
+        if (c.ok) { const d = await c.json(); if (d.clients?.length) setClients(d.clients); }
+        if (b.ok) setBudget(await b.json());
+      } catch {}
+    })();
+    const ch1 = supabase.channel('dash-leads').on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, fetchData).subscribe();
+    const ch2 = supabase.channel('dash-sales').on('postgres_changes', { event: '*', schema: 'public', table: 'sales_transactions' }, fetchData).subscribe();
+    return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2); };
   }, []);
 
+  // ── Numbers ──
+  const now = Date.now();
+  const days = periodDays[period];
+  const inPeriod = sales.filter(s => now - +new Date(s.created_at) <= days * DAY);
+  const byCurrency = inPeriod.reduce<Record<string, number>>((m, s) => { const c = s.currency || 'USD'; m[c] = (m[c] || 0) + Number(s.amount || 0); return m; }, {});
+  const currencies = Object.entries(byCurrency).sort((a, b) => b[1] - a[1]);
+  const mainCurrency = currencies[0]?.[0] || 'USD';
+  const buckets = period === '7D' ? 7 : period === '30D' ? 4 : 12;
+  const bucketMs = (days * DAY) / buckets;
+  const bars = Array.from({ length: buckets }, (_, i) => {
+    const start = now - days * DAY + i * bucketMs;
+    return inPeriod.filter(s => (s.currency || 'USD') === mainCurrency && +new Date(s.created_at) >= start && +new Date(s.created_at) < start + bucketMs)
+      .reduce((a, s) => a + Number(s.amount || 0), 0);
+  });
+  const maxBar = Math.max(1, ...bars);
+  const barLabel = (i: number) => period === '7D'
+    ? new Date(now - (6 - i) * DAY).toLocaleDateString(undefined, { weekday: 'short' })
+    : period === '30D' ? `Week ${i + 1}` : new Date(new Date().getFullYear(), new Date().getMonth() - (11 - i), 1).toLocaleDateString(undefined, { month: 'short' });
+
+  const leadsThisWeek = leads.filter(l => now - +new Date(l.created_at) <= 7 * DAY).length;
+  const hot = leads.filter(l => String(l.status).toUpperCase() === 'HOT');
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const auditsThisMonth = leads.filter(l => /audit/i.test(l.source || '') && /inbound/i.test(l.source || '') && +new Date(l.created_at) >= +monthStart).length;
+
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+  const in7 = new Date(today0); in7.setDate(in7.getDate() + 7);
+  const dateOf = (p: any) => new Date(p.year, p.month, p.day);
+  const weekPosts = calendar.filter(p => dateOf(p) >= today0 && dateOf(p) < in7);
+  const needDesign = weekPosts.filter(p => (p.status || 'draft') === 'draft');
+  const upcoming = calendar.filter(p => dateOf(p) >= today0).sort((a, b) => +dateOf(a) - +dateOf(b) || String(a.time).localeCompare(String(b.time))).slice(0, 5);
+  const clientPosts = (c: string) => weekPosts.filter(p => (p.client || 'default') === c);
+  const hasPlan = (c: string) => { try { return !!localStorage.getItem(clientKey('titanleap_strategy_plan', c)); } catch { return false; } };
+
+  const todo: { tone: string; text: string; where: string; action: string; onClick: () => void }[] = [];
+  if (needDesign.length) todo.push({ tone: 'bg-amber-500', text: `${needDesign.length} post${needDesign.length > 1 ? 's' : ''} this week still need a design`, where: 'Calendar', action: 'Open', onClick: () => go('strategy') });
+  if (hot.length) todo.push({ tone: 'bg-emerald-600', text: `${hot.length} hot lead${hot.length > 1 ? 's are' : ' is'} waiting for a reply`, where: 'Sales', action: 'Reply', onClick: () => go('sales') });
+  clients.filter(c => c !== 'default' && !hasPlan(c)).forEach(c => todo.push({ tone: 'bg-sky-600', text: `${clientLabel(c)} has no 30-day plan yet`, where: clientLabel(c), action: 'Set up', onClick: () => { setClientId(c); go('strategy'); } }));
+
+  const activity = [
+    ...leads.slice(0, 8).map(l => ({ at: l.created_at, title: String(l.status).toUpperCase() === 'HOT' ? 'New hot lead' : 'New lead', desc: `${l.name || l.company || 'Someone'} · ${l.source || 'Unknown source'}`, dot: String(l.status).toUpperCase() === 'HOT' ? 'bg-red-500' : 'bg-slate-400' })),
+    ...sales.slice(0, 8).map(s => ({ at: s.created_at, title: 'Payment received', desc: `${money(Number(s.amount), s.currency || 'USD')}${s.product_name ? ` · ${s.product_name}` : ''}`, dot: 'bg-emerald-600' })),
+  ].sort((a, b) => +new Date(b.at) - +new Date(a.at)).slice(0, 6);
+
+  const tile = `bg-surface-container-lowest rounded-[18px] p-5 ${SHADOW} flex flex-col gap-1 min-w-0`;
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <section className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 md:gap-0">
+    <div className="space-y-7">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <h2 className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface">{new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}</h2>
+          <p className="text-sm text-on-surface-variant/70">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} · {clients.length} client{clients.length > 1 ? 's' : ''}</p>
+        </div>
+        <button onClick={() => go('audit')} className="h-10 px-4 rounded-xl bg-primary text-white text-sm font-semibold flex items-center gap-1.5 hover:brightness-110"><Plus size={16} /> New audit</button>
+      </header>
+
+      {todo.length > 0 && (
+        <section className={`bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-2`}>
+          <h3 className="text-xl font-semibold tracking-tight text-on-surface">Needs you today</h3>
+          <div className="divide-y divide-outline-variant/10">
+            {todo.map((t, i) => (
+              <div key={i} className="flex items-center gap-3.5 py-3">
+                <span className={cn("w-2 h-2 rounded-full shrink-0", t.tone)} />
+                <span className="flex-1 text-[15px] text-on-surface">{t.text}</span>
+                <span className="text-[13px] text-on-surface-variant/60 hidden sm:inline">{t.where}</span>
+                <button onClick={t.onClick} className="text-sm font-semibold text-primary hover:underline">{t.action}</button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="flex flex-wrap gap-4 items-stretch">
+        <section className={`flex-[999_1_520px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} flex flex-col gap-4`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1 min-w-0">
+              <p className="text-[13px] text-on-surface-variant/70">Revenue</p>
+              <p className="text-4xl md:text-[44px] font-bold tracking-tight text-primary tabular-nums">{money(byCurrency[mainCurrency] || 0, mainCurrency)}</p>
+              <p className="text-[13px] text-on-surface-variant/70">
+                {inPeriod.length ? `${inPeriod.length} payment${inPeriod.length > 1 ? 's' : ''} in the last ${period === '1Y' ? 'year' : `${days} days`}` : 'No payments recorded yet. Mark a lead as Paid in Sales.'}
+                {currencies.length > 1 && ` · plus ${currencies.slice(1).map(([c, a]) => money(a, c)).join(', ')}`}
+              </p>
+            </div>
+            <div role="group" aria-label="Period" className="flex gap-0.5 p-[3px] rounded-[10px] bg-surface-container-high shrink-0">
+              {(Object.keys(periodDays) as Period[]).map(p => (
+                <button key={p} onClick={() => setPeriod(p)} className={cn("h-[30px] px-3 rounded-lg text-[13px] transition-all", period === p ? "bg-surface-container-lowest text-primary font-semibold shadow-sm" : "text-on-surface-variant/70 font-medium")}>{p}</button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1.5 mt-auto">
+            <div className="flex items-end gap-2 h-24">
+              {bars.map((v, i) => (
+                <div key={i} title={money(v, mainCurrency)} className={cn("flex-1 rounded-md", v ? "bg-primary" : "bg-primary/10")} style={{ height: `${v ? Math.max(8, (v / maxBar) * 100) : 6}%` }} />
+              ))}
+            </div>
+            <div className="flex gap-2 text-[11px] text-on-surface-variant/60">{bars.map((_, i) => <span key={i} className="flex-1 truncate">{barLabel(i)}</span>)}</div>
+          </div>
+        </section>
+
+        <div className="flex-[1_1_300px] min-w-0 flex flex-col gap-4">
+          <div className={cn(tile, "flex-1")}>
+            <span className="text-[13px] text-on-surface-variant/70">Active clients</span>
+            <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface tabular-nums">{clients.length}</span>
+            <span className="text-[13px] text-on-surface-variant/70 truncate">{clients.map(clientLabel).join(' · ')}</span>
+          </div>
+          <div className={cn(tile, "flex-1")}>
+            <span className="text-[13px] text-on-surface-variant/70">Leads generated</span>
+            <div className="flex items-baseline gap-2.5">
+              <span className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface tabular-nums">{leads.length}</span>
+              {leadsThisWeek > 0 && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">+{leadsThisWeek} this week</span>}
+            </div>
+            <span className="text-[13px] text-on-surface-variant/70">{hot.length} hot · {leads.length - hot.length} others</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className={tile}>
+          <span className="text-[13px] text-on-surface-variant/70">Audits this month</span>
+          <span className="text-[28px] font-bold text-on-surface tabular-nums">{auditsThisMonth}<span className="text-base font-medium text-on-surface-variant/50"> / 100</span></span>
+          <div className="h-1.5 rounded-full bg-surface-container-high mt-1"><div className="h-1.5 rounded-full bg-primary" style={{ width: `${Math.min(100, auditsThisMonth)}%` }} /></div>
+        </div>
+        <div className={tile}>
+          <span className="text-[13px] text-on-surface-variant/70">Posts going out this week</span>
+          <span className="text-[28px] font-bold text-on-surface tabular-nums">{weekPosts.length}</span>
+          <span className={cn("text-[13px] font-medium", needDesign.length ? "text-amber-600" : "text-emerald-600")}>{needDesign.length ? `${needDesign.length} need design` : weekPosts.length ? 'All have designs' : 'Nothing scheduled'}</span>
+        </div>
+        <div className={tile}>
+          <span className="text-[13px] text-on-surface-variant/70">AI spend this month</span>
+          <span className="text-[28px] font-bold text-on-surface tabular-nums">{budget ? `$${budget.spent.toFixed(2)}` : '—'}<span className="text-base font-medium text-on-surface-variant/50">{budget ? ` / $${budget.budget}` : ''}</span></span>
+          <span className="text-[13px] text-on-surface-variant/70">Audits not counted</span>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-4 items-start">
+        <section className={`flex-[999_1_480px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-2`}>
+          <div className="flex items-center justify-between"><h3 className="text-xl font-semibold tracking-tight text-on-surface">Upcoming content</h3><button onClick={() => go('strategy')} className="text-sm font-semibold text-primary hover:underline flex items-center gap-0.5">Calendar <ChevronRight size={14} /></button></div>
+          {upcoming.length ? (
+            <div className="divide-y divide-outline-variant/10">
+              {upcoming.map((p, i) => (
+                <div key={p.id || i} className="grid grid-cols-[70px_80px_minmax(0,1fr)] gap-3 items-center py-3">
+                  <span className="text-[13px] text-on-surface-variant/70">{+dateOf(p) === +today0 ? 'Today' : dateOf(p).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                  <span className="text-[13px] font-semibold text-primary truncate">{p.platform === 'Twitter' ? 'X' : p.platform} · {String(p.time || '').replace(/^0/, '')}</span>
+                  <span className="text-sm text-on-surface truncate">{p.title}{(p.client || 'default') !== 'default' ? <span className="text-on-surface-variant/60"> · {clientLabel(p.client)}</span> : null}</span>
+                </div>
+              ))}
+            </div>
+          ) : <p className="text-sm text-on-surface-variant/60 py-3">No posts scheduled. Generate a plan or import content in Strategy.</p>}
+        </section>
+
+        <section className={`flex-[1_1_320px] min-w-0 bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-2`}>
+          <h3 className="text-xl font-semibold tracking-tight text-on-surface">Activity</h3>
+          {activity.length ? activity.map((a, i) => (
+            <div key={i} className="flex gap-3 py-2">
+              <span className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0", a.dot)} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-on-surface">{a.title}</p>
+                <p className="text-[13px] text-on-surface-variant/70 truncate">{a.desc}</p>
+              </div>
+              <span className="text-xs text-on-surface-variant/50 shrink-0">{ago(a.at)}</span>
+            </div>
+          )) : <p className="text-sm text-on-surface-variant/60 py-3">New leads and payments show up here.</p>}
+        </section>
+      </div>
+
+      <section className="space-y-3">
+        <h3 className="text-xl font-semibold tracking-tight text-on-surface">Clients</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {clients.map(c => {
+            const posts = clientPosts(c);
+            const ready = posts.filter(p => (p.status || 'draft') !== 'draft').length;
+            const planned = hasPlan(c);
+            return (
+              <div key={c} className={`bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} space-y-4`}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-lg font-semibold text-on-surface">{clientLabel(c)}</span>
+                  <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full", planned ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>{planned ? 'Plan active' : 'Set up'}</span>
+                </div>
+                {planned ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><p className="text-xs text-on-surface-variant/70">This week</p><p className="text-xl font-semibold text-on-surface">{posts.length} posts</p></div>
+                    <div><p className="text-xs text-on-surface-variant/70">Ready</p><p className="text-xl font-semibold text-on-surface">{ready}</p></div>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 text-sm">
+                    <p className="text-on-surface">✓ Client created</p>
+                    <p className="text-on-surface-variant/70">○ Connect accounts (Creatives)</p>
+                    <p className="text-on-surface-variant/70">○ Audit or quick brief</p>
+                    <p className="text-on-surface-variant/70">○ 30-day plan</p>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <button onClick={() => { setClientId(c); go('strategy'); }} className={cn("h-9 px-3.5 rounded-[10px] text-[13px] font-semibold", planned ? "bg-surface-container-low text-on-surface" : "bg-primary text-white")}>{planned ? 'Strategy' : 'Make a plan'}</button>
+                  <button onClick={() => { setClientId(c); go('content'); }} className="h-9 px-3.5 rounded-[10px] text-[13px] font-semibold bg-surface-container-low text-on-surface">Creatives</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className={`bg-surface-container-lowest rounded-[18px] p-6 ${SHADOW} flex flex-wrap items-center justify-between gap-3`}>
         <div className="space-y-1">
-          <h3 className="text-3xl md:text-4xl font-extrabold text-on-surface tracking-tight">Overview</h3>
-          <p className="text-sm md:text-base text-on-surface-variant font-medium">Real-time performance metrics for your enterprise ecosystem.</p>
+          <h3 className="text-lg font-semibold tracking-tight text-on-surface">Ad campaigns</h3>
+          <p className="text-sm text-on-surface-variant/70">Spend, cost per click, conversions and ROAS appear here once an ad account is connected.</p>
         </div>
-        <div className="flex flex-wrap gap-3 w-full md:w-auto">
-          <button className="flex-1 md:flex-none justify-center bg-surface-container-high text-primary px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-surface-container-highest transition-colors active:scale-95">
-            <ArrowUpRight size={16} />
-            Export Report
-          </button>
-          <button className="flex-1 md:flex-none justify-center bg-primary-container text-on-primary px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-primary/20">
-            <Zap size={16} fill="currentColor" />
-            New Campaign
-          </button>
-        </div>
-      </section>
-
-      {/* Hero Metrics */}
-      <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="md:col-span-2 relative overflow-hidden bg-surface-container-lowest rounded-xl p-6 md:p-8 shadow-ambient flex flex-col justify-between min-h-[240px]"
-        >
-          <div className="absolute top-0 right-0 p-4 md:p-8">
-            <div className="flex bg-surface-container-low p-1 rounded-lg">
-              <button className="px-2 md:px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/40 hover:text-on-surface transition-colors">7d</button>
-              <button className="px-2 md:px-3 py-1 text-[10px] font-bold uppercase tracking-wider bg-surface-container-lowest shadow-sm rounded-md text-primary">30d</button>
-              <button className="px-2 md:px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/40 hover:text-on-surface transition-colors">1yr</button>
-            </div>
-          </div>
-          <div className="space-y-1 mt-12 md:mt-0">
-            <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-on-surface-variant/60">Total Revenue</span>
-            <div className="flex flex-wrap items-baseline gap-2">
-              <h4 className="text-4xl md:text-6xl font-black text-primary tracking-tighter">
-                ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-              </h4>
-              <div className="bg-secondary-container px-2 py-1 rounded-md flex items-center gap-1">
-                <TrendingUp size={14} className="font-bold text-on-secondary-fixed-variant" />
-                <span className="text-[10px] font-bold text-on-secondary-fixed-variant">+12.4%</span>
-              </div>
-            </div>
-          </div>
-          <div className="w-full h-16 mt-4 flex items-end gap-1">
-            {[40, 55, 45, 70, 60, 85, 95].map((h, i) => (
-              <div 
-                key={i} 
-                className={cn(
-                  "flex-1 rounded-t-sm transition-all duration-500",
-                  i === 6 ? "bg-primary-container" : "bg-primary/10"
-                )} 
-                style={{ height: `${h}%` }} 
-              />
-            ))}
-          </div>
-        </motion.div>
-
-        <MetricCard 
-          title="Active Clients" 
-          value="1,284" 
-          trend={true} 
-          trendValue="+42 this week" 
-          icon={Users} 
-          color="bg-primary/10" 
-        />
-        <MetricCard 
-          title="Leads Generated" 
-          value={totalLeads.toLocaleString()} 
-          trend={false} 
-          icon={Target} 
-          color="bg-primary/10" 
-        />
-      </section>
-
-      {/* Detailed Grid */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between">
-            <h5 className="text-lg font-bold text-on-surface">Campaign Performance</h5>
-            <button className="text-primary text-xs font-bold uppercase tracking-wider hover:underline">View All</button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <CampaignCard 
-              title="Q4 Retail Expansion" 
-              description="Multi-channel targeted outreach for electronics division."
-              conversion="4.8%"
-              spend="$12.4k"
-              status="GROWTH"
-              icon={Rocket}
-            />
-            <CampaignCard 
-              title="Brand Affinity Survey" 
-              description="Customer satisfaction monitoring across regions."
-              conversion="32%"
-              spend="45k"
-              status="STABLE"
-              icon={TrendingUp}
-            />
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: 'Avg CPC', value: '$0.84' },
-              { label: 'Conversions', value: '2,105', active: true },
-              { label: 'ROAS', value: '4.2x' }
-            ].map((stat, i) => (
-              <div key={i} className={cn(
-                "bg-surface-container-lowest p-4 rounded-xl text-center space-y-1 shadow-sm",
-                stat.active && "border-b-2 border-secondary-container"
-              )}>
-                <span className="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-widest">{stat.label}</span>
-                <p className="text-xl font-bold text-on-surface">{stat.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Activity Log */}
-        <div className="glass-panel rounded-2xl p-8 shadow-ambient flex flex-col h-full">
-          <div className="flex items-center justify-between mb-8">
-            <h5 className="text-lg font-bold text-on-surface">Activity Log</h5>
-            <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant/40">
-              <MoreHorizontal size={16} />
-            </button>
-          </div>
-          <div className="space-y-8 relative flex-1 overflow-y-auto pr-2 custom-scrollbar max-h-[300px]">
-            <div className="absolute left-2.5 top-2 bottom-2 w-[1px] bg-outline-variant/30" />
-            {[
-              { title: 'New high-value lead', desc: "Enterprise contact 'Oracle' added to pipeline.", time: '2 mins ago', icon: Zap, color: 'bg-secondary-container' },
-              { title: "Campaign 'Q4 Retail' Live", desc: "Status changed to active. Delivery started.", time: '1 hour ago', icon: Mail, color: 'bg-primary/10' },
-              { title: 'Weekly Audit Completed', desc: "System healthy. 4 optimizations suggested.", time: '4 hours ago', icon: CheckCircle2, color: 'bg-surface-container' },
-              { title: 'API Latency Spike', desc: "Resolved: Database indexing performance issue.", time: 'Yesterday', icon: AlertCircle, color: 'bg-error-container/20' },
-              { title: 'New team member added', desc: "Sarah Jenkins joined as Creative Designer.", time: '2 days ago', icon: Users, color: 'bg-tertiary/10' },
-            ].map((item, i) => (
-              <div key={i} className="relative flex gap-4 pl-8">
-                <div className={cn(
-                  "absolute left-0 top-1 w-5 h-5 rounded-full ring-4 ring-surface-container-lowest flex items-center justify-center z-10",
-                  item.color
-                )}>
-                  <item.icon size={10} className={cn(item.color.includes('primary') ? 'text-primary' : item.color.includes('error') ? 'text-error' : 'text-on-surface-variant')} />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-on-surface">{item.title}</p>
-                  <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">{item.desc}</p>
-                  <span className="text-[10px] text-on-surface-variant/40 mt-2 block font-medium">{item.time}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <button className="w-full mt-8 py-3 border border-outline-variant/20 rounded-xl text-xs font-bold text-on-surface-variant/60 hover:bg-surface-container transition-colors shrink-0">
-            Full Activity History
-          </button>
-        </div>
-      </section>
-
-      {/* Active Campaigns & Content */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Active Campaigns */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between">
-            <h5 className="text-lg font-bold text-on-surface">Active Campaigns</h5>
-            <button className="text-primary text-xs font-bold uppercase tracking-wider hover:underline">View All</button>
-          </div>
-          <div className="space-y-4">
-            {[
-              { name: 'SaaS Growth VSL', platform: 'Instagram', status: 'Scaling', spend: '$4,200', roas: '5.8x' },
-              { name: 'Bootstrap Manifesto', platform: 'LinkedIn', status: 'Active', spend: '$2,800', roas: '3.2x' },
-              { name: 'Growth OS Demo', platform: 'Instagram', status: 'Scaling', spend: '$3,450', roas: '4.1x' },
-            ].map((campaign, i) => (
-              <div key={i} className="bg-surface-container-lowest p-6 rounded-xl shadow-sm group hover:shadow-ambient transition-all border-none flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-primary/5 flex items-center justify-center text-primary group-hover:bg-primary/10 transition-all">
-                    {campaign.platform === 'Instagram' ? <Instagram size={20} /> : <Linkedin size={20} />}
-                  </div>
-                  <div>
-                    <h6 className="font-bold text-on-surface group-hover:text-primary transition-colors">{campaign.name}</h6>
-                    <p className="text-[10px] uppercase tracking-widest text-on-surface-variant/60 font-bold mt-1">{campaign.platform} Ads</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-8">
-                  <div className="text-right">
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant/60">ROAS</p>
-                    <p className="text-sm font-black text-secondary">{campaign.roas}</p>
-                  </div>
-                  <div className={cn(
-                    "text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider",
-                    campaign.status === 'Scaling' ? "bg-secondary-container/20 text-on-secondary-fixed-variant" : "bg-surface-container text-on-surface-variant"
-                  )}>
-                    {campaign.status}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Content Calendar Preview */}
-        <div className="glass-panel rounded-2xl p-8 shadow-ambient">
-          <div className="flex items-center justify-between mb-8">
-            <h5 className="text-lg font-bold text-on-surface">Upcoming Content</h5>
-            <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant/40">
-              <MoreHorizontal size={16} />
-            </button>
-          </div>
-          <div className="space-y-8 relative">
-            <div className="absolute left-2.5 top-2 bottom-2 w-[1px] bg-outline-variant/30" />
-            {[
-              { day: 'Today', title: 'The Hidden Growth Hack for SaaS Founders', platform: 'TikTok', time: '18:00', color: 'bg-primary/10' },
-              { day: 'Tomorrow', title: 'Why we raised $0 and scaled to $1M ARR', platform: 'LinkedIn', time: '09:00', color: 'bg-secondary-container' },
-              { day: 'Mar 24', title: 'Day in the life of a Growth Engineer', platform: 'Instagram', time: '20:00', color: 'bg-surface-container' },
-            ].map((item, i) => (
-              <div key={i} className="relative flex gap-4 pl-8">
-                <div className={cn(
-                  "absolute left-0 top-1 w-5 h-5 rounded-full ring-4 ring-surface-container-lowest flex items-center justify-center z-10",
-                  item.color
-                )}>
-                  <Clock size={10} className={cn(item.color.includes('primary') ? 'text-primary' : item.color.includes('secondary') ? 'text-secondary' : 'text-on-surface-variant')} />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary">{item.platform}</span>
-                    <span className="text-[10px] font-bold text-on-surface-variant">{item.time}</span>
-                  </div>
-                  <p className="text-sm font-bold text-on-surface leading-tight">{item.title}</p>
-                  <span className="text-[10px] text-on-surface-variant/40 mt-2 block font-medium">{item.day}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <button className="w-full mt-12 py-3 border border-outline-variant/20 rounded-xl text-xs font-bold text-on-surface-variant/60 hover:bg-surface-container transition-colors">
-            Full Calendar
-          </button>
-        </div>
+        <button onClick={() => go('ads')} className="h-9 px-3.5 rounded-[10px] text-[13px] font-semibold bg-surface-container-low text-on-surface">Open Ads</button>
       </section>
     </div>
   );
