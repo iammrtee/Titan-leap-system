@@ -68,7 +68,8 @@ import {
 import { cn } from '@/src/lib/utils';
 import { auditMarketingFunnel, analyzeCompetitorFunnel } from '@/src/services/ai';
 import { toast } from 'sonner';
-import { clientKey } from '@/src/lib/clientProfile';
+import { clientKey, clientLabel, getClientId } from '@/src/lib/clientProfile';
+import { ClientSwitcher } from './ClientSwitcher';
 
 type FunnelTab = 'current' | 'editor' | 'audit' | 'competitor';
 
@@ -189,72 +190,32 @@ export const FunnelHub: React.FC = () => {
         "flex flex-col gap-6 pt-4 md:pt-8 shrink-0",
         activeTab === 'editor' ? "px-4 md:px-8 lg:px-12 xl:px-16" : "px-4 md:px-8 lg:px-12 xl:px-16 w-full"
       )}>
-        <div className="flex flex-col md:flex-row justify-between items-start gap-6 md:gap-0">
-          <div className="space-y-4">
-            <h1 className="text-4xl md:text-6xl font-black text-on-surface tracking-tight">Funnels</h1>
-            <p className="text-lg md:text-xl font-medium text-on-surface-variant/80">Build, analyse, and optimise your client conversion systems.</p>
-            <div className="flex flex-wrap items-center gap-3 md:gap-4 pt-2">
-              <div className="flex items-center gap-2 bg-emerald-500 text-white px-4 py-1.5 rounded-full">
-                <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest">3 Funnels Active</span>
-              </div>
-              <div className="bg-surface-container-low text-on-surface-variant/60 px-4 py-1.5 rounded-full border border-outline-variant/10">
-                <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest">Last Updated: Today</span>
-              </div>
-            </div>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <h2 className="text-3xl md:text-[34px] font-bold tracking-tight text-on-surface">Funnels</h2>
+            <p className="text-sm text-on-surface-variant/70">{clientLabel(getClientId())} · from post to paying client</p>
           </div>
-          <div className="flex flex-wrap items-center gap-3 md:gap-4 w-full md:w-auto">
-            <button 
-              onClick={() => toast.info("AI Funnel Import is coming soon!")}
-              className="flex-1 md:flex-none px-4 md:px-6 py-3 bg-white border border-outline-variant/20 rounded-xl text-sm font-bold text-on-surface hover:bg-surface-container-low transition-colors flex items-center justify-center gap-2"
-            >
-              <Sparkles size={18} className="text-[#6200EA]" />
-              Import funnel
-            </button>
-            <button 
-              onClick={() => {
-                setActiveTab('current');
-                setShowIntake(true);
-              }}
-              className="flex-1 md:flex-none px-4 md:px-6 py-3 bg-[#6200EA] hover:bg-[#5000C0] text-white rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[#6200EA]/20"
-            >
-              <Plus size={18} />
-              Map your funnel
+          <div className="flex flex-wrap items-center gap-2.5">
+            <ClientSwitcher />
+            <button onClick={() => { setActiveTab('current'); setShowIntake(true); }}
+              className="h-10 px-4 rounded-xl bg-primary text-white text-sm font-semibold flex items-center gap-1.5 hover:brightness-110">
+              <Plus size={16} /> Map your funnel
             </button>
           </div>
         </div>
       </div>
 
       {/* Sub-navigation */}
-      <div className={cn(
-        "flex items-center gap-6 md:gap-8 border-b border-outline-variant/10 pb-0 mt-6 md:mt-8 shrink-0 overflow-x-auto no-scrollbar",
-        activeTab === 'editor' ? "px-4 md:px-8 lg:px-12 xl:px-16 mb-0" : "px-4 md:px-8 lg:px-12 xl:px-16 w-full"
-      )}>
-        {(['current', 'editor', 'audit', 'competitor'] as FunnelTab[]).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={cn(
-              "text-sm md:text-base font-bold transition-all relative py-4 flex items-center gap-2 whitespace-nowrap shrink-0",
-              activeTab === tab ? "text-[#6200EA]" : "text-on-surface-variant/50 hover:text-on-surface"
-            )}
-          >
-            {tab === 'current' ? 'Current Funnel' : 
-             tab === 'editor' ? 'Funnel Editor' : 
-             tab === 'audit' ? 'Audit' : 'Benchmarks'}
-            
-            {tab === 'audit' && (
-              <span className="bg-[#FFB300] text-black text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">PRO</span>
-            )}
-
-            {activeTab === tab && (
-              <motion.div 
-                layoutId="activeTab"
-                className="absolute bottom-0 left-0 right-0 h-1 bg-[#6200EA] rounded-t-full"
-              />
-            )}
-          </button>
-        ))}
+      <div className={cn("shrink-0 mt-6", activeTab === 'editor' ? "px-4 md:px-8 lg:px-12 xl:px-16 mb-4" : "px-4 md:px-8 lg:px-12 xl:px-16 w-full")}>
+        <div role="tablist" aria-label="Funnel sections" className="inline-flex gap-1 p-1 rounded-[14px] bg-surface-container-high overflow-x-auto max-w-full">
+          {(['current', 'editor', 'audit', 'competitor'] as FunnelTab[]).map(tab => (
+            <button key={tab} role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)}
+              className={cn("h-[38px] px-5 rounded-[11px] text-sm transition-all whitespace-nowrap",
+                activeTab === tab ? "bg-surface-container-lowest text-on-surface font-semibold shadow-sm" : "text-on-surface-variant/70 font-medium hover:text-on-surface")}>
+              {tab === 'current' ? 'Your funnel' : tab === 'editor' ? 'Editor' : tab === 'audit' ? 'Funnel audit' : 'Benchmarks'}
+            </button>
+          ))}
+        </div>
       </div>
 
       <AnimatePresence mode="wait">
@@ -508,92 +469,22 @@ const CurrentFunnelView = ({
 
   return (
     <div className="relative min-h-screen pb-24 space-y-8">
-      {/* Top Row: Health & Forecast */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Health Score */}
-        <div className="lg:col-span-4 bg-surface-container-lowest p-8 rounded-[40px] border border-outline-variant/10 shadow-xl flex flex-col items-center justify-center relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-primary/10 transition-colors" />
-          <p className="text-[10px] uppercase tracking-[0.2em] font-black text-on-surface-variant/40 mb-8 z-10">Overall Funnel Health</p>
-          
-          <div className="relative flex items-center justify-center mb-6 z-10">
-            <svg className="w-48 h-48 -rotate-90">
-              <circle className="text-surface-container-high/30" cx="96" cy="96" fill="transparent" r="80" stroke="currentColor" strokeWidth="16"></circle>
-              <motion.circle 
-                initial={{ strokeDashoffset: 502.65 }}
-                animate={{ strokeDashoffset: 502.65 * (1 - (healthScore / 100)) }}
-                transition={{ duration: 1.5, ease: "easeOut" }}
-                cx="96" 
-                cy="96" 
-                fill="transparent" 
-                r="80" 
-                stroke="currentColor" 
-                strokeDasharray="502.65" 
-                strokeLinecap="round" 
-                strokeWidth="16"
-                className="text-primary"
-                style={{ stroke: 'url(#healthGradientSmall)' }}
-              ></motion.circle>
-              <defs>
-                <linearGradient id="healthGradientSmall" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#6366f1" />
-                  <stop offset="100%" stopColor="#8b5cf6" />
-                </linearGradient>
-              </defs>
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-6xl font-black text-on-surface tracking-tighter leading-none">{healthScore}</span>
-              <span className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-[0.2em] mt-1">Score</span>
-            </div>
-          </div>
-
-          <div className="flex gap-6 z-10">
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span className="text-[8px] font-black text-on-surface-variant/60 uppercase tracking-widest">Stable</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              <span className="text-[8px] font-black text-on-surface-variant/60 uppercase tracking-widest">-4.2% MoM</span>
-            </div>
-          </div>
+      {/* Top row: what we actually know about this funnel */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-surface-container-lowest rounded-[18px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]">
+          <p className="text-[13px] text-on-surface-variant/70">Steps</p>
+          <p className="text-3xl font-bold text-on-surface tabular-nums">{layers.length}</p>
+          <p className="text-[13px] text-on-surface-variant/70">{planFunnel.length ? 'From your 30-day plan' : 'Example funnel'}</p>
         </div>
-
-        {/* Revenue Forecast - Large Purple Card */}
-        <div className="lg:col-span-8 bg-indigo-600 p-10 rounded-[40px] shadow-2xl shadow-indigo-500/20 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-white/15 transition-colors" />
-          <div className="relative z-10 h-full flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-8">
-              <div className="space-y-1">
-                <h5 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50">Revenue Forecast</h5>
-                <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Projected Next 30 Days</p>
-              </div>
-              <div className="bg-white/10 px-4 py-2 rounded-2xl backdrop-blur-md border border-white/10">
-                <span className="text-xs font-black text-white">+12.4%</span>
-              </div>
-            </div>
-            
-            <div className="flex items-end justify-between gap-12">
-              <div>
-                <p className="text-7xl font-black text-white tracking-tighter">$142,850</p>
-                <p className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mt-2">Based on current conversion velocity</p>
-              </div>
-              
-              <div className="flex items-end gap-3 h-24 flex-1 max-w-md">
-                {[30, 45, 35, 60, 85, 40, 70, 55, 90, 65].map((h, i) => (
-                  <motion.div 
-                    key={i} 
-                    initial={{ height: 0 }}
-                    animate={{ height: `${h}%` }}
-                    transition={{ delay: i * 0.05, duration: 0.8 }}
-                    className={cn(
-                      "flex-1 rounded-t-xl transition-all",
-                      i === 8 ? "bg-white shadow-[0_0_20px_rgba(255,255,255,0.3)]" : "bg-white/20"
-                    )} 
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
+        <div className="bg-surface-container-lowest rounded-[18px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]">
+          <p className="text-[13px] text-on-surface-variant/70">Leaks found</p>
+          <p className={cn("text-3xl font-bold tabular-nums", auditLeaks.length ? "text-red-600" : "text-on-surface")}>{auditLeaks.length}</p>
+          <p className="text-[13px] text-on-surface-variant/70">{auditLeaks.length ? 'From the latest audit' : 'Run an audit to find them'}</p>
+        </div>
+        <div className="bg-surface-container-lowest rounded-[18px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]">
+          <p className="text-[13px] text-on-surface-variant/70">Funnel health</p>
+          <p className="text-3xl font-bold text-on-surface tabular-nums">{intakeData || auditResult ? healthScore : '—'}</p>
+          <p className="text-[13px] text-on-surface-variant/70">{intakeData || auditResult ? 'From your funnel map and audit' : 'Map your funnel to score it'}</p>
         </div>
       </div>
 
@@ -764,7 +655,7 @@ const CurrentFunnelView = ({
       {/* Bottom Row: Leak, Traffic, Logs */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Potential Leak Detected */}
-        <div className="bg-surface-container-lowest p-8 rounded-[40px] border border-outline-variant/10 shadow-lg group">
+        <div className="bg-surface-container-lowest p-6 rounded-[18px] shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)] group">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-500 group-hover:scale-110 transition-transform">
               <AlertCircle size={24} />
@@ -785,60 +676,20 @@ const CurrentFunnelView = ({
           </div>
         </div>
 
-        {/* Traffic Distribution */}
-        <div className="bg-surface-container-lowest p-8 rounded-[40px] border border-outline-variant/10 shadow-lg">
-          <div className="flex items-center justify-between mb-8">
-            <h4 className="text-xs font-black text-on-surface uppercase tracking-widest">Traffic Distribution</h4>
-            <BarChart2 size={18} className="text-on-surface-variant/30" />
-          </div>
-          <div className="space-y-5">
-            {[
-              { label: 'Direct & Search', value: 42, color: 'bg-indigo-500' },
-              { label: 'Social Media', value: 38, color: 'bg-purple-500' },
-              { label: 'Paid Ads', value: 20, color: 'bg-emerald-500' },
-            ].map((origin, i) => (
-              <div key={i} className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-[9px] font-black text-on-surface-variant/60 uppercase tracking-widest">{origin.label}</span>
-                  <span className="text-[10px] font-black text-on-surface">{origin.value}%</span>
-                </div>
-                <div className="h-2 bg-surface-container-high rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${origin.value}%` }}
-                    className={cn("h-full rounded-full", origin.color)}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+        {/* Where traffic comes from (their own answer) */}
+        <div className="bg-surface-container-lowest p-6 rounded-[18px] shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)] space-y-3">
+          <h4 className="text-base font-semibold text-on-surface">Where traffic comes from</h4>
+          {intakeData?.trafficSources
+            ? <p className="text-sm text-on-surface-variant leading-relaxed">{intakeData.trafficSources}</p>
+            : <p className="text-sm text-on-surface-variant/60">Not mapped yet. “Map your funnel” asks for it, and tracking links will measure it.</p>}
         </div>
 
-        {/* Performance Logs */}
-        <div className="bg-surface-container-lowest p-8 rounded-[40px] border border-outline-variant/10 shadow-lg">
-          <div className="flex items-center justify-between mb-8">
-            <h4 className="text-xs font-black text-on-surface uppercase tracking-widest">Performance Logs</h4>
-            <HistoryIcon size={18} className="text-on-surface-variant/30" />
-          </div>
-          <div className="space-y-4">
-            {[
-              { time: '2m ago', event: 'New Lead: "Sarah J."', status: 'success' },
-              { time: '15m ago', event: 'Ad CTR Spike: +1.2%', status: 'info' },
-              { time: '1h ago', event: 'Checkout Abandoned', status: 'warning' },
-            ].map((log, i) => (
-              <div key={i} className="flex items-center gap-4 p-3 hover:bg-surface-container-low rounded-2xl transition-colors cursor-pointer group">
-                <div className={cn(
-                  "w-2 h-2 rounded-full",
-                  log.status === 'success' ? "bg-emerald-500" : log.status === 'warning' ? "bg-amber-500" : "bg-blue-500"
-                )} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-black text-on-surface truncate group-hover:text-primary transition-colors">{log.event}</p>
-                  <p className="text-[9px] font-bold text-on-surface-variant/30 uppercase tracking-widest">{log.time}</p>
-                </div>
-                <ChevronRight size={14} className="text-on-surface-variant/20 group-hover:text-primary transition-colors" />
-              </div>
-            ))}
-          </div>
+        {/* Next step */}
+        <div className="bg-surface-container-lowest p-6 rounded-[18px] shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)] space-y-3">
+          <h4 className="text-base font-semibold text-on-surface">Next step</h4>
+          <p className="text-sm text-on-surface-variant leading-relaxed">
+            {!planFunnel.length ? 'Generate a 30-day plan in Strategy; its funnel appears here.' : !auditLeaks.length ? 'Run an audit on this business so its leaks show on the funnel.' : 'Fix the biggest leak first, then check Sales to see if more leads move to the next step.'}
+          </p>
         </div>
       </div>
 
